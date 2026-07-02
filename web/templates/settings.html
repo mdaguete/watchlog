@@ -1,0 +1,38 @@
+{{define "settings.html"}}
+{{template "head" .}}
+<div class="space-y-12">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "settings.title"}}</h1>
+    </div>
+
+    <form method="POST" action="/settings" class="max-w-sm space-y-8">
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "settings.language"}}</label>
+            <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="lang" value="es" {{if eq .Lang "es"}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">Español</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="lang" value="en" {{if eq .Lang "en"}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">English</span>
+                </label>
+            </div>
+        </div>
+
+        <button type="submit"
+            class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+            {{T .Lang "settings.save"}}
+        </button>
+    </form>
+
+    <div class="border-t border-wl-border pt-8 mt-12">
+        <a href="/import" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+            {{T .Lang "import.link"}} →
+        </a>
+    </div>
+</div>
+{{template "foot" .}}
+{{end}}

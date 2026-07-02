@@ -1,0 +1,29 @@
+{{define "tmdb_show_results.html"}}
+{{if .Results}}
+<div class="space-y-px border border-wl-border">
+    {{range .Results}}
+    <div class="tmdb-item flex gap-5 p-5 bg-white items-center">
+        {{if .PosterPath}}
+        <img src="https://image.tmdb.org/t/p/w92{{.PosterPath}}" alt="{{.Name}}" class="w-12 h-18 object-cover shrink-0">
+        {{else}}
+        <div class="w-12 h-18 bg-wl-light shrink-0"></div>
+        {{end}}
+        <div class="flex-1 min-w-0">
+            <h3 class="text-sm">{{.Name}}</h3>
+            {{if .FirstAirDate}}<p class="text-xs text-wl-gray mt-0.5">{{.FirstAirDate}}</p>{{end}}
+            {{if .Overview}}<p class="text-xs text-wl-gray mt-1 line-clamp-1">{{.Overview}}</p>{{end}}
+        </div>
+        <div class="shrink-0 text-right">
+            <button onclick="addShow({{.ID}}, this)"
+                class="px-4 py-2 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
+                {{T $.Lang "add.add"}}
+            </button>
+            <div class="add-result mt-1 text-xs text-wl-gray"></div>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<p class="text-sm text-wl-gray py-8">{{T .Lang "add.no_results"}}</p>
+{{end}}
+{{end}}

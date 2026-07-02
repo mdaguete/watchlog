@@ -1,0 +1,41 @@
+{{define "dashboard.html"}}
+{{template "head" .}}
+<div class="space-y-16">
+    <div class="text-center py-12">
+        <h1 class="font-serif text-5xl tracking-wide">{{T .Lang "dashboard.title"}}</h1>
+        <p class="mt-4 text-sm text-wl-gray tracking-wide uppercase">{{T .Lang "dashboard.subtitle"}}</p>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-wl-border">
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Stats.FollowedShows}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.shows"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Stats.TotalEpisodes}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.episodes"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Stats.TotalMovies}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.movies"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Runtime}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.total_time"}}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-wl-border border border-wl-border">
+        <a href="/shows" class="bg-white p-10 group">
+            <span class="text-xs uppercase tracking-widest text-wl-gray group-hover:text-black transition-colors">{{T .Lang "dashboard.shows_link"}}</span>
+        </a>
+        <a href="/movies" class="bg-white p-10 group">
+            <span class="text-xs uppercase tracking-widest text-wl-gray group-hover:text-black transition-colors">{{T .Lang "dashboard.movies_link"}}</span>
+        </a>
+        <a href="/upcoming" class="bg-white p-10 group">
+            <span class="text-xs uppercase tracking-widest text-wl-gray group-hover:text-black transition-colors">{{T .Lang "dashboard.upcoming_link"}}</span>
+        </a>
+    </div>
+</div>
+{{template "foot" .}}
+{{end}}

@@ -1,0 +1,37 @@
+{{define "upcoming.html"}}
+{{template "head" .}}
+<div class="space-y-12">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "upcoming.title"}}</h1>
+        <p class="text-xs text-wl-gray mt-2">{{T .Lang "upcoming.subtitle"}}</p>
+    </div>
+
+    {{if .Upcoming}}
+    <div class="space-y-px border border-wl-border">
+        {{range .Upcoming}}
+        <div class="flex gap-5 p-6 bg-white items-start">
+            {{if .PosterURL}}
+            <img src="{{.PosterURL}}" alt="{{.ShowName}}" class="w-12 h-18 object-cover shrink-0">
+            {{end}}
+            <div class="flex-1 min-w-0">
+                <div class="flex items-baseline justify-between">
+                    <h3 class="text-sm font-normal">{{.ShowName}}</h3>
+                    {{if .AirDate}}<span class="text-xs text-wl-gray">{{.AirDate}}</span>{{end}}
+                </div>
+                <p class="text-xs text-wl-gray mt-1">
+                    S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}{{if .EpisodeName}} — {{.EpisodeName}}{{end}}
+                </p>
+                {{if .Overview}}<p class="text-xs text-wl-gray mt-2 line-clamp-2">{{.Overview}}</p>{{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="text-center py-16">
+        <p class="text-sm text-wl-gray">{{T .Lang "upcoming.empty"}}</p>
+        <p class="text-xs text-wl-gray mt-2">{{T .Lang "upcoming.cache"}}</p>
+    </div>
+    {{end}}
+</div>
+{{template "foot" .}}
+{{end}}

@@ -1,0 +1,34 @@
+{{define "shows.html"}}
+{{template "head" .}}
+<div class="space-y-12">
+    <div class="flex items-baseline justify-between border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "shows.title"}}</h1>
+        <span class="text-xs uppercase tracking-widest text-wl-gray">{{len .Shows}} {{T .Lang "shows.titles_count"}}</span>
+    </div>
+
+    <div class="flex items-center gap-6">
+        <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "shows.sort"}}</span>
+        <a href="/shows?sort=recent" class="text-xs uppercase tracking-widest {{if eq .Sort "recent"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.recent"}}</a>
+        <a href="/shows?sort=name" class="text-xs uppercase tracking-widest {{if eq .Sort "name"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.name"}}</a>
+        <a href="/shows?sort=episodes" class="text-xs uppercase tracking-widest {{if eq .Sort "episodes"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.episodes"}}</a>
+        <a href="/shows?sort=followed" class="text-xs uppercase tracking-widest {{if eq .Sort "followed"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.followed"}}</a>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        {{range .Shows}}
+        <a href="/shows/{{.ID}}" class="group">
+            <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
+                {{if .PosterURL}}
+                <img src="{{.PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                {{else}}
+                <div class="w-full h-full flex items-center justify-center text-wl-gray text-xs uppercase tracking-widest">{{T $.Lang "shows.no_image"}}</div>
+                {{end}}
+            </div>
+            <h3 class="text-sm font-normal leading-tight">{{.Name}}</h3>
+            <p class="text-xs text-wl-gray mt-1">{{.EpisodesSeen}} {{T $.Lang "shows.episodes"}}{{if .IsFavorited}} · ★{{end}}</p>
+        </a>
+        {{end}}
+    </div>
+</div>
+{{template "foot" .}}
+{{end}}

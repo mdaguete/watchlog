@@ -1,0 +1,19 @@
+{{define "search.html"}}
+{{template "head" .}}
+<div class="space-y-12">
+    <div class="max-w-2xl mx-auto pt-8">
+        <input type="text" name="q" value=""
+            placeholder="{{T .Lang "search.placeholder"}}"
+            class="w-full border-b border-black bg-transparent px-0 py-4 text-2xl font-light placeholder-wl-gray focus:outline-none"
+            hx-get="/search/results"
+            hx-trigger="input changed delay:300ms, search"
+            hx-target="#search-results"
+            hx-indicator="#search-spinner"
+            autofocus>
+        <span id="search-spinner" class="htmx-indicator text-xs text-wl-gray mt-2 block">{{T .Lang "search.searching"}}</span>
+    </div>
+
+    <div id="search-results"></div>
+</div>
+{{template "foot" .}}
+{{end}}

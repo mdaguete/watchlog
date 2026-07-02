@@ -1,0 +1,53 @@
+{{define "search_results.html"}}
+{{template "search_content" .}}
+{{end}}
+
+{{define "search_content"}}
+{{if .}}
+{{if or .Shows .Movies}}
+    {{if .Shows}}
+    <div class="mb-12">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "search.shows"}} ({{len .Shows}})</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {{range .Shows}}
+            <a href="/shows/{{.ID}}" class="group">
+                <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
+                    {{if .PosterURL}}
+                    <img src="{{.PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    {{else}}
+                    <div class="w-full h-full flex items-center justify-center text-wl-gray text-xs">{{T $.Lang "shows.no_image"}}</div>
+                    {{end}}
+                </div>
+                <h3 class="text-sm">{{.Name}}</h3>
+                <p class="text-xs text-wl-gray mt-1">{{.EpisodesSeen}} {{T $.Lang "shows.episodes"}}</p>
+            </a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Movies}}
+    <div>
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "search.movies"}} ({{len .Movies}})</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {{range .Movies}}
+            <div class="group">
+                <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
+                    {{if .PosterURL}}
+                    <img src="{{.PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    {{else}}
+                    <div class="w-full h-full flex items-center justify-center text-wl-gray text-xs">{{T $.Lang "shows.no_image"}}</div>
+                    {{end}}
+                </div>
+                <h3 class="text-sm">{{.Name}}</h3>
+                {{if .Genres}}<p class="text-xs text-wl-gray mt-1">{{.Genres}}</p>{{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+{{else}}
+    <p class="text-sm text-wl-gray text-center py-12">{{T .Lang "search.no_results"}} "{{.Query}}"</p>
+{{end}}
+{{end}}
+{{end}}

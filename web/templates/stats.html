@@ -1,0 +1,121 @@
+{{define "stats.html"}}
+{{template "head" .}}
+<div class="space-y-16">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "stats.title"}}</h1>
+    </div>
+
+    <!-- Summary -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-wl-border border border-wl-border">
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Dashboard.FollowedShows}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "stats.shows"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Dashboard.TotalEpisodes}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "stats.episodes"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Dashboard.TotalMovies}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "stats.movies"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Runtime}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "stats.time"}}</div>
+        </div>
+    </div>
+
+    <!-- Calendar Heatmap -->
+    <div>
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "stats.calendar"}}</h2>
+        <div id="calendar-heatmap"></div>
+        <div class="flex items-center justify-end gap-2 mt-4">
+            <span class="text-xs text-wl-gray">{{T .Lang "stats.less"}}</span>
+            <div class="w-3 h-3 bg-wl-light border border-wl-border"></div>
+            <div class="w-3 h-3 bg-gray-300"></div>
+            <div class="w-3 h-3 bg-gray-500"></div>
+            <div class="w-3 h-3 bg-gray-700"></div>
+            <div class="w-3 h-3 bg-black"></div>
+            <span class="text-xs text-wl-gray">{{T .Lang "stats.more"}}</span>
+        </div>
+    </div>
+</div>
+
+<script>
+// Parse watch stats data
+const stats = [
+    {{range .WatchStats}}
+    {period: "{{.Period}}", count: {{.Count}}, runtime: {{.Runtime}}},
+    {{end}}
+];
+
+// Parse periods like "month-2023-10" into {year, month, count}
+const months = stats
+    .filter(s => s.period.startsWith('month-'))
+    .map(s => {
+        const parts = s.period.split('-');
+        return {year: parseInt(parts[1]), month: parseInt(parts[2]), count: s.count, runtime: s.runtime};
+    })
+    .sort((a, b) => a.year === b.year ? a.month - b.month : a.year - b.year);
+
+// Group by year
+const years = {};
+months.forEach(m => {
+    if (!years[m.year]) years[m.year] = [];
+    years[m.year].push(m);
+});
+
+// Find max for color intensity
+const maxCount = Math.max(...months.map(m => m.count), 1);
+
+function getIntensity(count) {
+    if (count === 0) return 'bg-wl-light border border-wl-border';
+    const ratio = count / maxCount;
+    if (ratio < 0.25) return 'bg-gray-300';
+    if (ratio < 0.5) return 'bg-gray-500';
+    if (ratio < 0.75) return 'bg-gray-700';
+    return 'bg-black';
+}
+
+const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+// Render calendar heatmap
+const calendarEl = document.getElementById('calendar-heatmap');
+const sortedYears = Object.keys(years).sort();
+
+let calHTML = '<div class="space-y-4 flex flex-col items-center">';
+
+// Month labels + Total header
+calHTML += '<div class="flex items-center gap-1 ml-12">';
+for (let m = 1; m <= 12; m++) {
+    calHTML += `<div class="w-8 text-center text-xs text-wl-gray">${monthNames[m]}</div>`;
+}
+calHTML += '<div class="w-14 text-center text-xs text-wl-gray ml-2">Total</div>';
+calHTML += '</div>';
+
+sortedYears.forEach(year => {
+    const yearData = years[year];
+    const totalEps = yearData.reduce((sum, m) => sum + m.count, 0);
+
+    calHTML += `<div class="flex items-center gap-1">`;
+    calHTML += `<span class="text-xs text-wl-gray w-10 shrink-0 text-right">${year}</span>`;
+    calHTML += `<div class="flex gap-1 ml-1">`;
+
+    for (let m = 1; m <= 12; m++) {
+        const data = years[year]?.find(d => d.month === m);
+        const count = data ? data.count : 0;
+        const intensity = getIntensity(count);
+        const title = `${monthNames[m]} ${year}: ${count} episodios`;
+        calHTML += `<div class="w-8 h-8 ${intensity} flex items-center justify-center cursor-default" title="${title}">`;
+        if (count > 0) calHTML += `<span class="text-xs ${count/maxCount > 0.5 ? 'text-white' : 'text-wl-dark'}">${count}</span>`;
+        calHTML += `</div>`;
+    }
+    calHTML += '</div>';
+    calHTML += `<span class="w-14 text-center text-xs font-medium ml-2">${totalEps}</span>`;
+    calHTML += '</div>';
+});
+calHTML += '</div>';
+calendarEl.innerHTML = calHTML;
+</script>
+{{template "foot" .}}
+{{end}}

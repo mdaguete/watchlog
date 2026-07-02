@@ -1,0 +1,12 @@
+.git
+.direnv
+.env
+bin/
+dist/
+data/
+vendor/
+watchlog.db
+watchlog.db-wal
+watchlog.db-shm
+*.test
+*.out

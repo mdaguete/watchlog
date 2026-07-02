@@ -1,0 +1,86 @@
+{{define "head"}}
+<!DOCTYPE html>
+<html lang="{{if .}}{{.Lang}}{{else}}es{{end}}" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WatchLog</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-M06VwgoUOHG3FN0UchwWKqh9jS4ejwpoL0yjF3EVljtsxFwFETEYMkyNL5lXbJ5/" crossorigin="anonymous"></script>
+    <!-- Tailwind CDN is a JIT compiler (no fixed hash possible for SRI) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        serif: ['"Times New Roman"', 'Times', 'serif'],
+                        sans: ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
+                    },
+                    colors: {
+                        wl: {
+                            black: '#000000',
+                            dark: '#1a1a1a',
+                            gray: '#767676',
+                            light: '#f5f5f5',
+                            border: '#e0e0e0',
+                            white: '#ffffff',
+                        }
+                    },
+                    letterSpacing: {
+                        'widest': '0.2em',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .nav-link { position: relative; }
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: #000;
+            transition: width 0.3s ease;
+        }
+        .nav-link:hover::after { width: 100%; }
+    </style>
+</head>
+<body class="h-full bg-white text-wl-black">
+    <div class="min-h-full">
+        <header class="border-b border-wl-border">
+            <div class="mx-auto max-w-7xl px-6 lg:px-8">
+                <div class="flex h-20 items-center justify-between">
+                    <a href="/" class="text-2xl font-serif tracking-widest uppercase">WatchLog</a>
+                    <nav class="flex items-center gap-8">
+                        <a href="/shows" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
+                        <a href="/movies" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
+                        <a href="/upcoming" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
+                        <a href="/lists" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.lists"}}{{else}}Listas{{end}}</a>
+                        <a href="/stats" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.stats"}}{{else}}Stats{{end}}</a>
+                        <a href="/search" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
+                        <a href="/add" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
+                        <a href="/settings" class="nav-link text-xs uppercase tracking-widest text-wl-dark">⚙</a>
+                    </nav>
+                </div>
+            </div>
+        </header>
+        <main class="mx-auto max-w-7xl px-6 py-12 lg:px-8">
+{{end}}
+
+{{define "foot"}}
+        </main>
+        <footer class="border-t border-wl-border mt-24">
+            <div class="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+                <p class="text-xs text-wl-gray tracking-wide">{{if .}}{{T .Lang "footer.tagline"}}{{else}}WatchLog — Tu seguimiento personal de series y películas{{end}}</p>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
+{{end}}

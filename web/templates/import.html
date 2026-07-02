@@ -1,0 +1,97 @@
+{{define "import.html"}}
+{{template "head" .}}
+<div class="space-y-12">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "import.title"}}</h1>
+        <p class="text-xs text-wl-gray mt-2">{{T .Lang "import.subtitle"}}</p>
+    </div>
+
+    <!-- Upload form -->
+    <div id="upload-section">
+        <form id="import-form" class="space-y-6 max-w-lg">
+            <div>
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "import.select_file"}}</label>
+                <input type="file" name="zipfile" accept=".zip" required id="zipfile"
+                    class="block w-full text-sm text-wl-gray file:mr-4 file:py-2 file:px-4 file:border file:border-black file:text-xs file:uppercase file:tracking-widest file:bg-white file:text-black hover:file:bg-black hover:file:text-white file:transition-colors file:cursor-pointer">
+            </div>
+            <button type="submit" id="import-btn"
+                class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                {{T .Lang "import.start"}}
+            </button>
+        </form>
+    </div>
+
+    <!-- Log output -->
+    <div id="log-section" class="hidden">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "import.log"}}</h2>
+        <div id="log-output" class="bg-wl-light border border-wl-border p-6 font-mono text-xs leading-relaxed max-h-96 overflow-y-auto">
+        </div>
+        <div id="import-done" class="hidden mt-6">
+            <a href="/"
+                class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors inline-block">
+                {{T .Lang "import.go_home"}}
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('import-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const fileInput = document.getElementById('zipfile');
+    if (!fileInput.files.length) return;
+
+    // Show log, hide form
+    document.getElementById('upload-section').classList.add('hidden');
+    document.getElementById('log-section').classList.remove('hidden');
+    const logOutput = document.getElementById('log-output');
+
+    const formData = new FormData();
+    formData.append('zipfile', fileInput.files[0]);
+
+    // Use fetch with streaming response
+    fetch('/import', {
+        method: 'POST',
+        body: formData
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function read() {
+            reader.read().then(({done, value}) => {
+                if (done) {
+                    document.getElementById('import-done').classList.remove('hidden');
+                    return;
+                }
+                buffer += decoder.decode(value, {stream: true});
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line in buffer
+
+                lines.forEach(line => {
+                    if (line.startsWith('data: ')) {
+                        const msg = line.substring(6);
+                        if (msg === '[DONE]') {
+                            document.getElementById('import-done').classList.remove('hidden');
+                            return;
+                        }
+                        const div = document.createElement('div');
+                        div.textContent = msg;
+                        if (msg.startsWith('ERROR')) div.className = 'text-red-600';
+                        if (msg.startsWith('✓')) div.className = 'font-bold';
+                        logOutput.appendChild(div);
+                        logOutput.scrollTop = logOutput.scrollHeight;
+                    }
+                });
+                read();
+            });
+        }
+        read();
+    }).catch(err => {
+        logOutput.innerHTML += '<div class="text-red-600">Connection error: ' + err.message + '</div>';
+    });
+});
+</script>
+{{template "foot" .}}
+{{end}}
