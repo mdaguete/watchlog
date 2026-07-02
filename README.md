@@ -72,9 +72,19 @@ Create a `.env` file in the project root:
 TMDB_API_KEY=your_api_key_here
 ```
 
-You can get a free API key at [TMDB](https://www.themoviedb.org/settings/api).
-
 The server automatically loads `.env` on startup (godotenv).
+
+### Getting a TMDB API Key
+
+> ⚠️ **TMDB integration is optional** but required for posters, synopses, genres, and upcoming episodes.
+
+1. Create a free account at [themoviedb.org](https://www.themoviedb.org/signup)
+2. Go to [Settings → API](https://www.themoviedb.org/settings/api) (use a desktop browser — the page is not mobile-optimized)
+3. Click "Create" → choose "Developer" → accept the [Terms of Use](https://www.themoviedb.org/documentation/api/terms-of-use)
+4. Fill in the application form (for personal/non-commercial use, a brief description is enough)
+5. Copy your **API Key (v3 auth)** and add it to your `.env` file
+
+More details: [TMDB Getting Started](https://developer.themoviedb.org/docs/getting-started)
 
 ## Importing TVTime Data
 
