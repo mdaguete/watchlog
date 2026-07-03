@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 		t.Fatalf("ParseGlob: %v", err)
 	}
 
-	sessions := auth.NewSessionStore()
+	sessions := auth.NewSessionStore(database)
 	h := New(database, tmpl, nil, sessions)
 
 	// Create test user
@@ -917,4 +918,394 @@ func TestPageShow_NotFound(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Errorf("status = %d, want 302", w.Code)
 	}
+}
+
+func TestPageForgotPassword(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/forgot-password", nil)
+	w := httptest.NewRecorder()
+	h.PageForgotPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleForgotPassword_NoUser(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("POST", "/forgot-password", bytes.NewBufferString("identifier=nonexistent"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleForgotPassword(w, req)
+	// Should still return 200 (don't reveal if user exists)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleForgotPassword_NoSMTP(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	// User exists but SMTP not configured
+	h.DB.UpdateUserEmail(1, "test@example.com")
+	req := httptest.NewRequest("POST", "/forgot-password", bytes.NewBufferString("identifier=testuser"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleForgotPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestPageMagicLogin(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/magic-login", nil)
+	w := httptest.NewRecorder()
+	h.PageMagicLogin(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleMagicLogin_NoEmail(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("POST", "/magic-login", bytes.NewBufferString("email=nobody@example.com"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleMagicLogin(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleMagicAuth_InvalidToken(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/auth/magic?token=invalidtoken", nil)
+	w := httptest.NewRecorder()
+	h.HandleMagicAuth(w, req)
+	// Shows error page on invalid token
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleMagicAuth_ValidToken(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "login", time.Now().Add(time.Hour))
+	req := httptest.NewRequest("GET", "/auth/magic?token="+token, nil)
+	w := httptest.NewRecorder()
+	h.HandleMagicAuth(w, req)
+	if w.Code != 302 { t.Errorf("expected 302 redirect, got %d", w.Code) }
+	if loc := w.Header().Get("Location"); loc != "/" {
+		t.Errorf("expected redirect to /, got %q", loc)
+	}
+}
+
+func TestPageResetPassword_InvalidToken(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/reset-password?token=badtoken", nil)
+	w := httptest.NewRecorder()
+	h.PageResetPassword(w, req)
+	// Shows error page on invalid token
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestPageResetPassword_ValidToken(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "reset", time.Now().Add(time.Hour))
+	req := httptest.NewRequest("GET", "/reset-password?token="+token, nil)
+	w := httptest.NewRecorder()
+	h.PageResetPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleResetPassword_Success(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "reset", time.Now().Add(time.Hour))
+	body := "token=" + token + "&password=newpassword123"
+	req := httptest.NewRequest("POST", "/reset-password", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleResetPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+	// Verify new password works
+	user, _ := h.DB.GetUserByID(userID)
+	if !auth.CheckPassword(user.PasswordHash, "newpassword123") {
+		t.Error("password was not updated")
+	}
+	// Verify token is consumed (single use)
+	_, _, ok := h.DB.GetMagicLink(token)
+	if ok {
+		t.Error("magic link should have been deleted after use")
+	}
+}
+
+func TestHandleResetPassword_ShortPassword(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "reset", time.Now().Add(time.Hour))
+	body := "token=" + token + "&password=short"
+	req := httptest.NewRequest("POST", "/reset-password", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleResetPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200 (show form again), got %d", w.Code) }
+}
+
+// --- Auth Improvements Tests ---
+
+func TestHandleLogin_RateLimited(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+
+	// Trigger 5 failed login attempts
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest("POST", "/login", nil)
+		req.Form = map[string][]string{
+			"username": {"testuser"},
+			"password": {"wrongpassword"},
+		}
+		req.RemoteAddr = "192.168.1.1:12345"
+		w := httptest.NewRecorder()
+		h.HandleLogin(w, req)
+	}
+
+	// 6th attempt should be rate limited
+	req := httptest.NewRequest("POST", "/login", nil)
+	req.Form = map[string][]string{
+		"username": {"testuser"},
+		"password": {"test123"},
+	}
+	req.RemoteAddr = "192.168.1.1:12345"
+	w := httptest.NewRecorder()
+	h.HandleLogin(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", w.Code)
+	}
+}
+
+func TestHandleLogin_PasswordDisabled(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("auth_password", "disabled")
+
+	req := httptest.NewRequest("POST", "/login", nil)
+	req.Form = map[string][]string{
+		"username": {"testuser"},
+		"password": {"test123"},
+	}
+	w := httptest.NewRecorder()
+	h.HandleLogin(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Errorf("status = %d, want 302 redirect", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/login" {
+		t.Errorf("Location = %q, want /login", loc)
+	}
+}
+
+func TestPageRegister_Disabled(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("auth_registration", "disabled")
+
+	req := httptest.NewRequest("GET", "/register", nil)
+	w := httptest.NewRecorder()
+	h.PageRegister(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Errorf("status = %d, want 302 redirect", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/login" {
+		t.Errorf("Location = %q, want /login", loc)
+	}
+}
+
+func TestHandleRegister_Disabled(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("auth_registration", "disabled")
+
+	req := httptest.NewRequest("POST", "/register", nil)
+	req.Form = map[string][]string{
+		"username": {"newuser"},
+		"password": {"pass1234"},
+	}
+	w := httptest.NewRecorder()
+	h.HandleRegister(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Errorf("status = %d, want 302 redirect", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/login" {
+		t.Errorf("Location = %q, want /login", loc)
+	}
+}
+
+func TestPageAdmin_NonAdmin(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+
+	// Create a second user (id=2, not admin)
+	hash, _ := auth.HashPassword("pass1234")
+	userID2, _ := h.DB.CreateUser("user2", hash)
+	token2 := h.Sessions.Create(userID2)
+
+	req := authedRequest("GET", "/admin", token2, nil)
+	w := httptest.NewRecorder()
+	h.PageAdmin(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Errorf("status = %d, want 302 redirect", w.Code)
+	}
+}
+
+func TestPageAdmin_Admin(t *testing.T) {
+	h, _, token := newTestHandler(t)
+
+	req := authedRequest("GET", "/admin", token, nil)
+	w := httptest.NewRecorder()
+	h.PageAdmin(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestSaveAdmin_Settings(t *testing.T) {
+	h, _, token := newTestHandler(t)
+
+	req := authedRequest("POST", "/admin", token, nil)
+	req.Form = map[string][]string{
+		"watchlog_url":       {"https://watch.example.com"},
+		"auth_registration":  {"on"},
+		"auth_password":      {"on"},
+		"auth_magic_link":    {"on"},
+		"auth_default_login": {"password"},
+	}
+	w := httptest.NewRecorder()
+	h.SaveAdmin(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Errorf("status = %d, want 302 redirect", w.Code)
+	}
+
+	// Verify settings persisted
+	if v := h.DB.GetSetting("watchlog_url"); v != "https://watch.example.com" {
+		t.Errorf("watchlog_url = %q, want %q", v, "https://watch.example.com")
+	}
+	if v := h.DB.GetSetting("auth_default_login"); v != "password" {
+		t.Errorf("auth_default_login = %q, want %q", v, "password")
+	}
+	if v := h.DB.GetSetting("auth_registration"); v != "enabled" {
+		t.Errorf("auth_registration = %q, want %q", v, "enabled")
+	}
+}
+
+func TestPageForgotPassword_SMTPConfigured(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("smtp_url", "smtp://user:pass@localhost:2525/test@example.com")
+
+	req := httptest.NewRequest("GET", "/forgot-password", nil)
+	w := httptest.NewRecorder()
+	h.PageForgotPassword(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	// Body should contain the form (SMTP is configured)
+	body := w.Body.String()
+	if !strings.Contains(body, "username_or_email") && !strings.Contains(body, "form") {
+		t.Error("expected form to be shown when SMTP is configured")
+	}
+}
+
+func TestHandleForgotPassword_UserWithEmail(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("smtp_url", "smtp://user:pass@localhost:2525/test@example.com")
+	h.DB.SetSetting("watchlog_url", "http://localhost:8080")
+	h.DB.UpdateUserEmail(1, "test@example.com")
+
+	req := httptest.NewRequest("POST", "/forgot-password", bytes.NewBufferString("username_or_email=testuser"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleForgotPassword(w, req)
+
+	// Should return 200 (success message shown regardless of email send result)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestHandleMagicLogin_UserWithEmail(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("smtp_url", "smtp://user:pass@localhost:2525/test@example.com")
+	h.DB.SetSetting("watchlog_url", "http://localhost:8080")
+	h.DB.UpdateUserEmail(1, "test@example.com")
+
+	req := httptest.NewRequest("POST", "/magic-login", bytes.NewBufferString("username=testuser"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleMagicLogin(w, req)
+
+	// Should return 200 with success message
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestHandleMagicLogin_UserNoEmail(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("smtp_url", "smtp://user:pass@localhost:2525/test@example.com")
+
+	// User exists but has no email set
+	req := httptest.NewRequest("POST", "/magic-login", bytes.NewBufferString("username=testuser"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleMagicLogin(w, req)
+
+	// Should still return 200 (success shown to prevent user enumeration)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestPageLogin_DefaultMagic(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	// Default is already "magic" when no setting is set
+
+	req := httptest.NewRequest("GET", "/login", nil)
+	w := httptest.NewRecorder()
+	h.PageLogin(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestPageLogin_DefaultPassword(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	h.DB.SetSetting("auth_default_login", "password")
+
+	req := httptest.NewRequest("GET", "/login", nil)
+	w := httptest.NewRecorder()
+	h.PageLogin(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestSaveAdmin_AuthOptions(t *testing.T) {
+	h, _, token := newTestHandler(t)
+	body := "auth_registration=on&auth_magic_link=on&auth_default_login=password"
+	req := httptest.NewRequest("POST", "/admin", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+	w := httptest.NewRecorder()
+	h.SaveAdmin(w, req)
+	if w.Code != 302 { t.Errorf("expected 302, got %d", w.Code) }
+	if h.DB.GetSetting("auth_registration") != "enabled" { t.Error("registration not enabled") }
+	if h.DB.GetSetting("auth_password") != "disabled" { t.Error("password should be disabled") }
+	if h.DB.GetSetting("auth_magic_link") != "enabled" { t.Error("magic link not enabled") }
+	if h.DB.GetSetting("auth_default_login") != "password" { t.Error("default login not saved") }
+}
+
+func TestSaveSettings_Email(t *testing.T) {
+	h, _, token := newTestHandler(t)
+	body := "lang=en&email=user@example.com"
+	req := httptest.NewRequest("POST", "/settings", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+	w := httptest.NewRecorder()
+	h.SaveSettings(w, req)
+	if w.Code != 302 { t.Errorf("expected 302, got %d", w.Code) }
+	user, _ := h.DB.GetUserByID(1)
+	if user.Email != "user@example.com" { t.Errorf("email not saved, got %q", user.Email) }
 }

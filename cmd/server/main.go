@@ -113,6 +113,28 @@ func main() {
 		log.Println("TMDB integration disabled (set TMDB_API_KEY to enable)")
 	}
 
+	// SMTP: env var SMTP_URL takes priority, then DB setting
+	// Format: smtps://user:password@host:port/from@example.com
+	if smtpURL := os.Getenv("SMTP_URL"); smtpURL != "" {
+		stored := database.GetSetting("smtp_url")
+		if stored != smtpURL {
+			database.SetSetting("smtp_url", smtpURL)
+			log.Println("SMTP: URL saved to database")
+		}
+	}
+	if database.GetSetting("smtp_url") != "" {
+		log.Println("SMTP: configured")
+	}
+
+	// Public URL for magic links
+	if watchlogURL := os.Getenv("WATCHLOG_URL"); watchlogURL != "" {
+		stored := database.GetSetting("watchlog_url")
+		if stored != watchlogURL {
+			database.SetSetting("watchlog_url", watchlogURL)
+			log.Println("WATCHLOG_URL saved to database")
+		}
+	}
+
 	// Start background worker for upcoming episodes cache
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -162,7 +184,7 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore())
+	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database))
 
 	mux := http.NewServeMux()
 
@@ -180,6 +202,13 @@ func main() {
 	mux.HandleFunc("GET /register", h.PageRegister)
 	mux.HandleFunc("POST /register", h.HandleRegister)
 	mux.HandleFunc("POST /logout", h.HandleLogout)
+	mux.HandleFunc("GET /forgot-password", h.PageForgotPassword)
+	mux.HandleFunc("POST /forgot-password", h.HandleForgotPassword)
+	mux.HandleFunc("GET /reset-password", h.PageResetPassword)
+	mux.HandleFunc("POST /reset-password", h.HandleResetPassword)
+	mux.HandleFunc("GET /magic-login", h.PageMagicLogin)
+	mux.HandleFunc("POST /magic-login", h.HandleMagicLogin)
+	mux.HandleFunc("GET /auth/magic", h.HandleMagicAuth)
 
 	// Web pages
 	mux.HandleFunc("GET /", h.PageDashboard)
@@ -196,6 +225,8 @@ func main() {
 	mux.HandleFunc("GET /upcoming", h.PageUpcoming)
 	mux.HandleFunc("GET /settings", h.PageSettings)
 	mux.HandleFunc("POST /settings", h.SaveSettings)
+	mux.HandleFunc("GET /admin", h.PageAdmin)
+	mux.HandleFunc("POST /admin", h.SaveAdmin)
 
 	// API: Shows
 	mux.HandleFunc("GET /api/shows", h.APIGetShows)

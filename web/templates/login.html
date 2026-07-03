@@ -7,6 +7,54 @@
     <p class="text-sm text-red-600 mb-6 text-center">{{.Error}}</p>
     {{end}}
 
+    {{if .Success}}
+    <p class="text-sm text-green-700 mb-6 text-center">{{.Success}}</p>
+    {{end}}
+
+    {{if and .MagicLinkEnabled (eq .DefaultLogin "magic")}}
+    <!-- Magic link (primary) -->
+    <form method="POST" action="/magic-login" class="space-y-6">
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
+            <input type="text" name="username" required autofocus
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+        </div>
+        <button type="submit"
+            class="w-full py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+            {{T .Lang "magic.submit"}}
+        </button>
+        <p class="text-xs text-wl-gray text-center">{{T .Lang "login.magic_hint"}}</p>
+    </form>
+
+    {{if .PasswordEnabled}}
+    <details class="mt-12 border-t border-wl-border pt-8">
+        <summary class="text-xs uppercase tracking-widest text-wl-gray cursor-pointer hover:text-black">
+            {{T .Lang "login.with_password"}}
+        </summary>
+        <form method="POST" action="/login" class="space-y-6 mt-6">
+            <div>
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
+                <input type="text" name="username" required
+                    class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            </div>
+            <div>
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.password"}}</label>
+                <input type="password" name="password" required
+                    class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            </div>
+            <button type="submit"
+                class="w-full py-3 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "login.submit"}}
+            </button>
+            <p class="text-xs text-wl-gray text-center">
+                <a href="/forgot-password" class="text-black underline">{{T .Lang "login.forgot_password"}}</a>
+            </p>
+        </form>
+    </details>
+    {{end}}
+
+    {{else if .PasswordEnabled}}
+    <!-- Password (primary) -->
     <form method="POST" action="/login" class="space-y-6">
         <div>
             <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
@@ -22,11 +70,51 @@
             class="w-full py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
             {{T .Lang "login.submit"}}
         </button>
+        <p class="text-xs text-wl-gray text-center">
+            <a href="/forgot-password" class="text-black underline">{{T .Lang "login.forgot_password"}}</a>
+        </p>
     </form>
 
+    {{if .MagicLinkEnabled}}
+    <details class="mt-12 border-t border-wl-border pt-8">
+        <summary class="text-xs uppercase tracking-widest text-wl-gray cursor-pointer hover:text-black">
+            {{T .Lang "login.with_magic"}}
+        </summary>
+        <form method="POST" action="/magic-login" class="space-y-6 mt-6">
+            <div>
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
+                <input type="text" name="username" required
+                    class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            </div>
+            <button type="submit"
+                class="w-full py-3 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "magic.submit"}}
+            </button>
+        </form>
+    </details>
+    {{end}}
+
+    {{else if .MagicLinkEnabled}}
+    <!-- Only magic link available -->
+    <form method="POST" action="/magic-login" class="space-y-6">
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
+            <input type="text" name="username" required autofocus
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+        </div>
+        <button type="submit"
+            class="w-full py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+            {{T .Lang "magic.submit"}}
+        </button>
+        <p class="text-xs text-wl-gray text-center">{{T .Lang "login.magic_hint"}}</p>
+    </form>
+    {{end}}
+
+    {{if .RegistrationEnabled}}
     <p class="text-xs text-wl-gray text-center mt-8">
         {{T .Lang "login.no_account"}} <a href="/register" class="text-black underline">{{T .Lang "login.register"}}</a>
     </p>
+    {{end}}
 </div>
 {{template "foot" .}}
 {{end}}

@@ -1,0 +1,114 @@
+{{define "admin.html"}}
+{{template "head" .}}
+<div class="space-y-12">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "admin.title"}}</h1>
+        <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.subtitle"}}</p>
+    </div>
+
+    <form method="POST" action="/admin" class="max-w-lg space-y-8">
+        <!-- TMDB -->
+        <div>
+            <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">TMDB</h2>
+            {{if .TMDBKeySet}}
+            <p class="text-xs text-wl-gray mb-2">{{T .Lang "settings.current_key"}}: {{.TMDBKeyHint}}</p>
+            {{end}}
+            <input type="text" name="tmdb_key" placeholder="{{T .Lang "settings.tmdb_placeholder"}}"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.tmdb_help"}}</p>
+        </div>
+
+        <!-- SMTP -->
+        <div class="border-t border-wl-border pt-8">
+            <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.smtp_section"}}</h2>
+            <p class="text-xs text-wl-gray mb-4">{{T .Lang "admin.smtp_help"}}</p>
+            {{if .SMTPConfigured}}
+            <p class="text-xs text-wl-gray mb-2 font-mono">{{.SMTPDisplay}}</p>
+            {{end}}
+            <input type="text" name="smtp_url" placeholder="smtps://user:password@smtp.example.com:465/from@example.com"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm font-mono focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.smtp_url_help"}}</p>
+        </div>
+
+        <!-- Public URL -->
+        <div class="border-t border-wl-border pt-8">
+            <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.server_section"}}</h2>
+            <div>
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.watchlog_url"}}</label>
+                <input type="url" name="watchlog_url" value="{{.WatchLogURL}}" placeholder="https://watchlog.example.com"
+                    class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.watchlog_url_help"}}</p>
+            </div>
+        </div>
+
+        <!-- Authentication options -->
+        <div class="border-t border-wl-border pt-8">
+            <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.auth_section"}}</h2>
+            <div class="space-y-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_registration" {{if .RegistrationEnabled}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_registration"}}</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_password" {{if .PasswordEnabled}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_password"}}</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_magic_link" {{if .MagicLinkEnabled}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_magic_link"}}</span>
+                </label>
+            </div>
+            <div class="mt-6">
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "admin.auth_default"}}</label>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_default_login" value="magic" {{if eq .DefaultLogin "magic"}}checked{{end}}
+                            class="accent-black">
+                        <span class="text-sm">Magic link</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_default_login" value="password" {{if eq .DefaultLogin "password"}}checked{{end}}
+                            class="accent-black">
+                        <span class="text-sm">{{T .Lang "login.password"}}</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit"
+            class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+            {{T .Lang "settings.save"}}
+        </button>
+    </form>
+
+    <!-- TMDB Actions -->
+    <div class="border-t border-wl-border pt-8">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "admin.tmdb_actions"}}</h2>
+        <div class="flex gap-4">
+            <button type="button" hx-post="/api/tmdb/refresh-all" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
+                hx-indicator="#tmdb-spinner"
+                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "settings.refresh_metadata"}}
+            </button>
+            <button type="button" hx-post="/api/tmdb/refresh-upcoming" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
+                hx-indicator="#tmdb-spinner"
+                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "settings.refresh_upcoming"}}
+            </button>
+            <span id="tmdb-spinner" class="htmx-indicator text-xs text-wl-gray self-center">...</span>
+        </div>
+        <div id="tmdb-refresh-result" class="mt-4 text-xs text-wl-gray"></div>
+    </div>
+
+    <!-- Import link -->
+    <div class="border-t border-wl-border pt-8">
+        <a href="/import" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+            {{T .Lang "import.link"}} →
+        </a>
+    </div>
+</div>
+{{template "foot" .}}
+{{end}}

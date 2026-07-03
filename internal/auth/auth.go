@@ -3,8 +3,8 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -15,24 +15,29 @@ const (
 	SessionDuration   = 30 * 24 * time.Hour // 30 days
 )
 
-type Session struct {
-	UserID    int64
-	ExpiresAt time.Time
+// SessionDB defines the persistence interface for session storage.
+// Implemented by *db.DB to avoid circular imports.
+type SessionDB interface {
+	CreateSession(token string, userID int64, expiresAt time.Time) error
+	GetSession(token string) (int64, bool)
+	DeleteSession(token string) error
+	CleanExpiredSessions() error
 }
 
 type SessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string]Session
+	db SessionDB
 }
 
-func NewSessionStore() *SessionStore {
-	store := &SessionStore{sessions: make(map[string]Session)}
-	// Periodically clean expired sessions to prevent memory leaks
+func NewSessionStore(db SessionDB) *SessionStore {
+	store := &SessionStore{db: db}
+	// Periodically clean expired sessions
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			store.CleanExpired()
+			if err := store.db.CleanExpiredSessions(); err != nil {
+				log.Printf("session cleanup error: %v", err)
+			}
 		}
 	}()
 	return store
@@ -49,44 +54,20 @@ func CheckPassword(hash, password string) bool {
 
 func (s *SessionStore) Create(userID int64) string {
 	token := generateToken()
-	s.mu.Lock()
-	s.sessions[token] = Session{
-		UserID:    userID,
-		ExpiresAt: time.Now().Add(SessionDuration),
+	expiresAt := time.Now().Add(SessionDuration)
+	if err := s.db.CreateSession(token, userID, expiresAt); err != nil {
+		log.Printf("session create error: %v", err)
+		return ""
 	}
-	s.mu.Unlock()
 	return token
 }
 
 func (s *SessionStore) Get(token string) (int64, bool) {
-	s.mu.RLock()
-	session, ok := s.sessions[token]
-	s.mu.RUnlock()
-	if !ok || time.Now().After(session.ExpiresAt) {
-		if ok {
-			s.Delete(token)
-		}
-		return 0, false
-	}
-	return session.UserID, true
+	return s.db.GetSession(token)
 }
 
 func (s *SessionStore) Delete(token string) {
-	s.mu.Lock()
-	delete(s.sessions, token)
-	s.mu.Unlock()
-}
-
-// CleanExpired removes all expired sessions from memory.
-func (s *SessionStore) CleanExpired() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	for token, session := range s.sessions {
-		if now.After(session.ExpiresAt) {
-			delete(s.sessions, token)
-		}
-	}
+	s.db.DeleteSession(token)
 }
 
 func SetSessionCookie(w http.ResponseWriter, token string) {
@@ -118,8 +99,12 @@ func GetSessionToken(r *http.Request) string {
 	return cookie.Value
 }
 
-func generateToken() string {
+func GenerateToken() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func generateToken() string {
+	return GenerateToken()
 }

@@ -47,8 +47,13 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 
 ### Security
 - bcrypt password hashing (DefaultCost)
-- Session tokens: 32 bytes from `crypto/rand`, stored in memory with periodic cleanup of expired sessions
+- Session tokens: 32 bytes from `crypto/rand`, stored in SQLite `sessions` table (persistent across restarts)
+- Periodic cleanup of expired sessions (goroutine)
 - Cookie flags: `HttpOnly`, `Secure`, `SameSite=Lax`
+- Rate limiting: max 5 failed login attempts per IP / 15-minute window (in-memory)
+- Magic link authentication: passwordless login via email (token valid 1 hour, single use)
+- Password reset via magic link email
+- Admin-configurable auth: enable/disable registration, password login, magic link login
 - All path parameters validated with `parsePathID` helper (returns 400 on invalid input)
 - All API endpoints require authentication (including `/api/tmdb/fetch-all`)
 - List item operations verify ownership (IDOR protection)
@@ -108,6 +113,8 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 | `internal/importer/importer.go` | CSV parsing logic for TVTime export |
 | `internal/tmdb/client.go` | HTTP client for TMDB API v3 |
 | `internal/auth/auth.go` | Password hashing, sessions, cookies |
+| `internal/ratelimit/ratelimit.go` | Login rate limiting (per-IP) |
+| `internal/mail/mail.go` | SMTP email sending, URL config parsing |
 | `internal/worker/upcoming.go` | Background worker for upcoming episode cache |
 | `web/templates/layout.html` | `head` and `foot` (nav + footer) |
 | `web/templates/*.html` | One template per page |
@@ -179,5 +186,4 @@ Download from GoReleaser releases or build with `make`. Run the `server` binary 
 - Push notifications for new episodes
 - Dark mode
 - PWA / improved mobile responsive
-- Rate limiting on login
 - CSRF tokens (mitigated by SameSite=Lax cookie)

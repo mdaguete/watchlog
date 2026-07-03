@@ -22,17 +22,12 @@
             </div>
         </div>
 
-        {{if .IsAdmin}}
-        <div class="border-t border-wl-border pt-8">
-            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">TMDB API Key</label>
-            {{if .TMDBKeySet}}
-            <p class="text-xs text-wl-gray mb-2">{{T .Lang "settings.current_key"}}: {{.TMDBKeyHint}}</p>
-            {{end}}
-            <input type="text" name="tmdb_key" placeholder="{{T .Lang "settings.tmdb_placeholder"}}"
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "settings.email"}}</label>
+            <input type="email" name="email" value="{{.Email}}" placeholder="{{T .Lang "settings.email_placeholder"}}"
                 class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-            <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.tmdb_help"}}</p>
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.email_help"}}</p>
         </div>
-        {{end}}
 
         <button type="submit"
             class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
@@ -41,29 +36,20 @@
     </form>
 
     {{if .IsAdmin}}
-    <div class="border-t border-wl-border pt-8">
-        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">TMDB</h2>
-        <div class="flex gap-4">
-            <button type="button" hx-post="/api/tmdb/refresh-all" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
-                hx-indicator="#tmdb-spinner"
-                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
-                {{T .Lang "settings.refresh_metadata"}}
-            </button>
-            <button type="button" hx-post="/api/tmdb/refresh-upcoming" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
-                hx-indicator="#tmdb-spinner"
-                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
-                {{T .Lang "settings.refresh_upcoming"}}
-            </button>
-            <span id="tmdb-spinner" class="htmx-indicator text-xs text-wl-gray self-center">...</span>
-        </div>
-        <div id="tmdb-refresh-result" class="mt-4 text-xs text-wl-gray"></div>
+    <div class="border-t border-wl-border pt-8 mt-12">
+        <a href="/admin" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+            {{T .Lang "settings.admin_link"}} →
+        </a>
     </div>
     {{end}}
 
     <div class="border-t border-wl-border pt-8 mt-12">
-        <a href="/import" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
-            {{T .Lang "import.link"}} →
-        </a>
+        <form method="POST" action="/logout">
+            <button type="submit"
+                class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                {{T .Lang "settings.logout"}}
+            </button>
+        </form>
     </div>
 </div>
 {{template "foot" .}}

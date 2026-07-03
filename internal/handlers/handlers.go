@@ -19,19 +19,28 @@ import (
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
+	"github.com/mdaguete/watchlog/internal/mail"
+	"github.com/mdaguete/watchlog/internal/ratelimit"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/mdaguete/watchlog/internal/worker"
 )
 
 type Handler struct {
-	DB       *db.DB
-	Templates *template.Template
-	TMDB     *tmdb.Client
-	Sessions *auth.SessionStore
+	DB           *db.DB
+	Templates    *template.Template
+	TMDB         *tmdb.Client
+	Sessions     *auth.SessionStore
+	LoginLimiter *ratelimit.Limiter
 }
 
 func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore) *Handler {
-	return &Handler{DB: database, Templates: tmpl, TMDB: tmdbClient, Sessions: sessions}
+	return &Handler{
+		DB:           database,
+		Templates:    tmpl,
+		TMDB:         tmdbClient,
+		Sessions:     sessions,
+		LoginLimiter: ratelimit.New(5, 15*time.Minute),
+	}
 }
 
 // --- Helpers ---
@@ -81,6 +90,22 @@ func (h *Handler) parsePathID(w http.ResponseWriter, r *http.Request, param stri
 	return id, true
 }
 
+// clientIP extracts the client IP from the request, checking X-Forwarded-For first.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Take the first IP in the chain
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	// Fall back to RemoteAddr (ip:port)
+	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
+		return r.RemoteAddr[:idx]
+	}
+	return r.RemoteAddr
+}
+
 // getLang returns the user's language preference, falling back to Accept-Language header.
 func (h *Handler) getLang(r *http.Request, userID int64) string {
 	if userID > 0 {
@@ -100,7 +125,13 @@ func (h *Handler) PageLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := h.getLang(r, 0)
-	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Lang": lang})
+	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{
+		"Lang":             lang,
+		"PasswordEnabled":  h.DB.GetSetting("auth_password") != "disabled",
+		"MagicLinkEnabled": h.DB.GetSetting("auth_magic_link") != "disabled",
+		"DefaultLogin":     h.getDefaultLogin(),
+		"RegistrationEnabled": h.DB.GetSetting("auth_registration") != "disabled",
+	})
 }
 
 func (h *Handler) PageRegister(w http.ResponseWriter, r *http.Request) {
@@ -108,21 +139,39 @@ func (h *Handler) PageRegister(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	if h.DB.GetSetting("auth_registration") == "disabled" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
 	lang := h.getLang(r, 0)
 	h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Lang": lang})
 }
 
 func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.DB.GetSetting("auth_password") == "disabled" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	ip := clientIP(r)
+	if !h.LoginLimiter.Allow(ip) {
+		lang := h.getLang(r, 0)
+		w.WriteHeader(http.StatusTooManyRequests)
+		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.rate_limited"), "Lang": lang})
+		return
+	}
+
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
 	user, err := h.DB.GetUserByUsername(username)
 	if err != nil || !auth.CheckPassword(user.PasswordHash, password) {
+		h.LoginLimiter.Record(ip)
 		lang := h.getLang(r, 0)
 		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.error"), "Lang": lang})
 		return
 	}
 
+	h.LoginLimiter.Reset(ip)
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)
 	log.Printf("ACTION: login user=%q", username)
@@ -130,8 +179,13 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	if h.DB.GetSetting("auth_registration") == "disabled" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+	email := strings.TrimSpace(r.FormValue("email"))
 
 	if username == "" || password == "" {
 		lang := h.getLang(r, 0)
@@ -158,6 +212,10 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if email != "" {
+		h.DB.UpdateUserEmail(userID, email)
+	}
+
 	token := h.Sessions.Create(userID)
 	auth.SetSessionCookie(w, token)
 	log.Printf("ACTION: register user=%q id=%d", username, userID)
@@ -171,6 +229,239 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.ClearSessionCookie(w)
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// --- SMTP Config Helper ---
+
+func (h *Handler) getSMTPConfig() mail.Config {
+	smtpURL := h.DB.GetSetting("smtp_url")
+	if smtpURL == "" {
+		return mail.Config{}
+	}
+	cfg, err := mail.ParseURL(smtpURL)
+	if err != nil {
+		log.Printf("SMTP: invalid URL: %v", err)
+		return mail.Config{}
+	}
+	return cfg
+}
+
+func (h *Handler) getWatchLogURL() string {
+	return h.DB.GetSetting("watchlog_url")
+}
+
+func (h *Handler) getDefaultLogin() string {
+	d := h.DB.GetSetting("auth_default_login")
+	if d == "" {
+		return "magic"
+	}
+	return d
+}
+
+// --- Forgot Password ---
+
+func (h *Handler) PageForgotPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+	h.Templates.ExecuteTemplate(w, "forgot_password.html", map[string]any{
+		"Lang":          lang,
+		"SMTPConfigured": smtpCfg.Configured(),
+	})
+}
+
+func (h *Handler) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+
+	if !smtpCfg.Configured() {
+		h.Templates.ExecuteTemplate(w, "forgot_password.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "forgot.smtp_disabled"),
+		})
+		return
+	}
+
+	input := strings.TrimSpace(r.FormValue("username_or_email"))
+	// Always show success to prevent user enumeration
+	successData := map[string]any{
+		"Lang":    lang,
+		"Success": i18n.T(lang, "forgot.success"),
+		"SMTPConfigured": true,
+	}
+
+	// Try to find user by username or email
+	user, err := h.DB.GetUserByUsername(input)
+	if err != nil {
+		user, err = h.DB.GetUserByEmail(input)
+	}
+	if err != nil || user.Email == "" {
+		h.Templates.ExecuteTemplate(w, "forgot_password.html", successData)
+		return
+	}
+
+	token := auth.GenerateToken()
+	expiresAt := time.Now().Add(1 * time.Hour)
+	if err := h.DB.CreateMagicLink(token, user.ID, "reset", expiresAt); err != nil {
+		log.Printf("failed to create magic link: %v", err)
+		h.Templates.ExecuteTemplate(w, "forgot_password.html", successData)
+		return
+	}
+
+	baseURL := h.getWatchLogURL()
+	resetURL := baseURL + "/reset-password?token=" + token
+	body := fmt.Sprintf(`<p>%s</p><p><a href="%s">%s</a></p>`,
+		html.EscapeString(i18n.T(lang, "forgot.title")),
+		html.EscapeString(resetURL),
+		html.EscapeString(resetURL))
+
+	if err := mail.Send(smtpCfg, user.Email, i18n.T(lang, "email.reset_subject"), body); err != nil {
+		log.Printf("failed to send reset email to %s: %v", user.Email, err)
+	} else {
+		log.Printf("ACTION: password reset email sent to user=%q", user.Username)
+	}
+
+	h.Templates.ExecuteTemplate(w, "forgot_password.html", successData)
+}
+
+// --- Reset Password ---
+
+func (h *Handler) PageResetPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.URL.Query().Get("token")
+	_, purpose, ok := h.DB.GetMagicLink(token)
+	if !ok || purpose != "reset" {
+		h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "reset.invalid_token"),
+		})
+		return
+	}
+	h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+		"Lang":  lang,
+		"Token": token,
+	})
+}
+
+func (h *Handler) HandleResetPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.FormValue("token")
+	password := r.FormValue("password")
+
+	userID, purpose, ok := h.DB.GetMagicLink(token)
+	if !ok || purpose != "reset" {
+		h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "reset.invalid_token"),
+		})
+		return
+	}
+
+	if len(password) < 8 {
+		h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+			"Lang":  lang,
+			"Token": token,
+			"Error": i18n.T(lang, "reset.password_min"),
+		})
+		return
+	}
+
+	hash, _ := auth.HashPassword(password)
+	h.DB.UpdateUserPassword(userID, hash)
+	h.DB.DeleteMagicLink(token)
+	log.Printf("ACTION: password reset for user_id=%d", userID)
+
+	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{
+		"Lang":    lang,
+		"Success": i18n.T(lang, "reset.success"),
+	})
+}
+
+// --- Magic Login ---
+
+func (h *Handler) PageMagicLogin(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+	h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
+		"Lang":          lang,
+		"SMTPConfigured": smtpCfg.Configured(),
+	})
+}
+
+func (h *Handler) HandleMagicLogin(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+
+	if !smtpCfg.Configured() {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "magic.smtp_disabled"),
+		})
+		return
+	}
+
+	username := strings.TrimSpace(r.FormValue("username"))
+	// Always show success to prevent user enumeration
+	successData := map[string]any{
+		"Lang":           lang,
+		"Success":        i18n.T(lang, "magic.success"),
+		"SMTPConfigured": true,
+	}
+
+	if username == "" {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+		return
+	}
+
+	user, err := h.DB.GetUserByUsername(username)
+	if err != nil || user.Email == "" {
+		// User not found or has no email — show success anyway (don't reveal)
+		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+		return
+	}
+
+	token := auth.GenerateToken()
+	expiresAt := time.Now().Add(1 * time.Hour)
+	if err := h.DB.CreateMagicLink(token, user.ID, "login", expiresAt); err != nil {
+		log.Printf("failed to create magic link: %v", err)
+		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+		return
+	}
+
+	baseURL := h.getWatchLogURL()
+	magicURL := baseURL + "/auth/magic?token=" + token
+	body := fmt.Sprintf(`<p>%s</p><p><a href="%s">%s</a></p>`,
+		html.EscapeString(i18n.T(lang, "magic.title")),
+		html.EscapeString(magicURL),
+		html.EscapeString(magicURL))
+
+	if err := mail.Send(smtpCfg, user.Email, i18n.T(lang, "email.magic_subject"), body); err != nil {
+		log.Printf("failed to send magic link email to %s: %v", user.Email, err)
+	} else {
+		log.Printf("ACTION: magic login email sent to user=%q", user.Username)
+	}
+
+	h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+}
+
+func (h *Handler) HandleMagicAuth(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.URL.Query().Get("token")
+
+	userID, purpose, ok := h.DB.GetMagicLink(token)
+	if !ok || purpose != "login" {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "magic.invalid_token"),
+			"SMTPConfigured": h.getSMTPConfig().Configured(),
+		})
+		return
+	}
+
+	h.DB.DeleteMagicLink(token)
+	sessionToken := h.Sessions.Create(userID)
+	auth.SetSessionCookie(w, sessionToken)
+	log.Printf("ACTION: magic login user_id=%d", userID)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 // --- Pages ---
@@ -819,19 +1110,12 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	data := map[string]any{
+	user, _ := h.DB.GetUserByID(userID)
+	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
 		"Lang":    lang,
 		"IsAdmin": userID == 1,
-	}
-	if userID == 1 {
-		tmdbKey := h.DB.GetSetting("tmdb_api_key")
-		if tmdbKey != "" {
-			// Mask the key, show only last 4 chars
-			data["TMDBKeySet"] = true
-			data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
-		}
-	}
-	h.Templates.ExecuteTemplate(w, "settings.html", data)
+		"Email":   user.Email,
+	})
 }
 
 func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -843,18 +1127,87 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		lang = "es"
 	}
 	h.DB.SetUserLang(userID, lang)
+	email := strings.TrimSpace(r.FormValue("email"))
+	h.DB.UpdateUserEmail(userID, email)
+	http.Redirect(w, r, "/settings", http.StatusFound)
+}
 
-	// Only admin (user id 1) can update TMDB key
-	if userID == 1 {
-		tmdbKey := r.FormValue("tmdb_key")
-		if tmdbKey != "" {
-			h.DB.SetSetting("tmdb_api_key", tmdbKey)
-			// Update the TMDB client in-place
-			h.TMDB = tmdb.NewClient(tmdbKey)
+func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
+	lang := h.getLang(r, userID)
+	data := map[string]any{
+		"Lang":        lang,
+		"WatchLogURL": h.DB.GetSetting("watchlog_url"),
+		// Auth options
+		"RegistrationEnabled": h.DB.GetSetting("auth_registration") != "disabled",
+		"PasswordEnabled":     h.DB.GetSetting("auth_password") != "disabled",
+		"MagicLinkEnabled":    h.DB.GetSetting("auth_magic_link") != "disabled",
+		"DefaultLogin":        h.DB.GetSetting("auth_default_login"),
+	}
+	if data["DefaultLogin"] == "" {
+		data["DefaultLogin"] = "magic"
+	}
+	tmdbKey := h.DB.GetSetting("tmdb_api_key")
+	if tmdbKey != "" {
+		data["TMDBKeySet"] = true
+		data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
+	}
+	smtpURL := h.DB.GetSetting("smtp_url")
+	if smtpURL != "" {
+		cfg, err := mail.ParseURL(smtpURL)
+		if err == nil {
+			data["SMTPConfigured"] = true
+			data["SMTPDisplay"] = mail.FormatURL(cfg)
 		}
 	}
+	h.Templates.ExecuteTemplate(w, "admin.html", data)
+}
 
-	http.Redirect(w, r, "/settings", http.StatusFound)
+func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
+	r.ParseForm()
+
+	// TMDB key
+	if tmdbKey := r.FormValue("tmdb_key"); tmdbKey != "" {
+		h.DB.SetSetting("tmdb_api_key", tmdbKey)
+		h.TMDB = tmdb.NewClient(tmdbKey)
+	}
+	// SMTP URL
+	if smtpURL := strings.TrimSpace(r.FormValue("smtp_url")); smtpURL != "" {
+		if _, err := mail.ParseURL(smtpURL); err == nil {
+			h.DB.SetSetting("smtp_url", smtpURL)
+		}
+	}
+	// Public URL
+	if v := strings.TrimSpace(r.FormValue("watchlog_url")); v != "" {
+		h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
+	}
+
+	// Auth options
+	if r.FormValue("auth_registration") == "on" {
+		h.DB.SetSetting("auth_registration", "enabled")
+	} else {
+		h.DB.SetSetting("auth_registration", "disabled")
+	}
+	if r.FormValue("auth_password") == "on" {
+		h.DB.SetSetting("auth_password", "enabled")
+	} else {
+		h.DB.SetSetting("auth_password", "disabled")
+	}
+	if r.FormValue("auth_magic_link") == "on" {
+		h.DB.SetSetting("auth_magic_link", "enabled")
+	} else {
+		h.DB.SetSetting("auth_magic_link", "disabled")
+	}
+	if defaultLogin := r.FormValue("auth_default_login"); defaultLogin == "password" || defaultLogin == "magic" {
+		h.DB.SetSetting("auth_default_login", defaultLogin)
+	}
+
+	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
 // --- Setup (first run) ---

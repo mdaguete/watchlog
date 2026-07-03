@@ -70,9 +70,17 @@ Create a `.env` file in the project root:
 
 ```env
 TMDB_API_KEY=your_api_key_here
+SMTP_URL=smtps://user:password@smtp.example.com:465/noreply@example.com
+WATCHLOG_URL=https://watchlog.example.com
 ```
 
-The server automatically loads `.env` on startup (godotenv).
+The server automatically loads `.env` on startup (godotenv). All settings are persisted to the database and can also be configured via the `/admin` page.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TMDB_API_KEY` | Optional | TMDB API key for metadata |
+| `SMTP_URL` | Optional | SMTP connection for magic links and password recovery |
+| `WATCHLOG_URL` | Optional | Public URL for email links |
 
 ### Getting a TMDB API Key
 
