@@ -20,7 +20,7 @@ func StartUpcomingRefresher(ctx context.Context, database *db.DB, client *tmdb.C
 
 	go func() {
 		log.Println("Worker: initial upcoming cache refresh starting...")
-		refreshUpcomingCache(database, client)
+		RefreshUpcomingCache(database, client)
 
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -31,13 +31,14 @@ func StartUpcomingRefresher(ctx context.Context, database *db.DB, client *tmdb.C
 				return
 			case <-ticker.C:
 				log.Println("Worker: daily upcoming cache refresh starting...")
-				refreshUpcomingCache(database, client)
+				RefreshUpcomingCache(database, client)
 			}
 		}
 	}()
 }
 
-func refreshUpcomingCache(database *db.DB, client *tmdb.Client) {
+// RefreshUpcomingCache fetches upcoming episodes from TMDB for all active shows.
+func RefreshUpcomingCache(database *db.DB, client *tmdb.Client) {
 	shows, err := database.GetActiveShowsWithTMDB()
 	if err != nil {
 		log.Printf("Worker: error getting active shows: %v", err)

@@ -20,6 +20,7 @@ import (
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
 	"github.com/mdaguete/watchlog/internal/tmdb"
+	"github.com/mdaguete/watchlog/internal/worker"
 )
 
 type Handler struct {
@@ -896,6 +897,13 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 		}
 
 		sendSSE("✓ TMDB fetch complete!")
+	}
+
+	// Refresh upcoming episodes cache after import
+	if h.TMDB != nil && h.TMDB.Enabled() {
+		sendSSE("Refreshing upcoming episodes...")
+		worker.RefreshUpcomingCache(h.DB, h.TMDB)
+		sendSSE("✓ Upcoming episodes updated!")
 	}
 
 	sendSSE("[DONE]")
