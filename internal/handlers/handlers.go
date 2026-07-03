@@ -180,6 +180,11 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)
 	log.Printf("ACTION: login user=%q", username)
+	// If setup incomplete, redirect to continue setup
+	if h.DB.GetSetting("setup_complete") != "true" {
+		http.Redirect(w, r, "/setup?step=2", http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -1242,7 +1247,8 @@ func (h *Handler) PageSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	// Step 1 needs no users, steps 2-3 need admin logged in
 	if h.DB.HasUsers() && h.currentUser(r) != 1 {
-		http.Redirect(w, r, "/", http.StatusFound)
+		// Setup incomplete: admin needs to log in to continue
+		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
 	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
