@@ -182,10 +182,9 @@ var translations = map[string]map[string]string{
 
 	// Magic login
 	"magic.title":          {"es": "Acceso con enlace mágico", "en": "Magic link login"},
-	"magic.description":    {"es": "Introduce tu email para recibir un enlace de acceso.", "en": "Enter your email to receive a login link."},
-	"magic.email":          {"es": "Email", "en": "Email"},
+	"magic.description":    {"es": "Introduce tu usuario para recibir un enlace de acceso en tu email.", "en": "Enter your username to receive a login link via email."},
 	"magic.submit":         {"es": "Enviar enlace", "en": "Send magic link"},
-	"magic.success":        {"es": "Si hay una cuenta con ese email, recibirás un enlace de acceso.", "en": "If there's an account with that email, you'll receive a login link."},
+	"magic.success":        {"es": "Si la cuenta existe y tiene email configurado, recibirás un enlace de acceso.", "en": "If the account exists and has an email configured, you'll receive a login link."},
 	"magic.smtp_disabled":  {"es": "El envío de emails no está configurado. Contacta al administrador.", "en": "Email sending is not configured. Contact the administrator."},
 	"magic.invalid_token":  {"es": "El enlace ha expirado o no es válido.", "en": "This link has expired or is invalid."},
 

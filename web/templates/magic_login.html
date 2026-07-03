@@ -14,8 +14,8 @@
     {{if .SMTPConfigured}}
     <form method="POST" action="/magic-login" class="space-y-6">
         <div>
-            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "magic.email"}}</label>
-            <input type="email" name="email" required autofocus
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
+            <input type="text" name="username" required autofocus
                 class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
         </div>
         <button type="submit"

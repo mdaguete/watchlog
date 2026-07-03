@@ -373,16 +373,22 @@ func (h *Handler) HandleMagicLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
+	username := strings.TrimSpace(r.FormValue("username"))
 	// Always show success to prevent user enumeration
 	successData := map[string]any{
-		"Lang":    lang,
-		"Success": i18n.T(lang, "magic.success"),
+		"Lang":           lang,
+		"Success":        i18n.T(lang, "magic.success"),
 		"SMTPConfigured": true,
 	}
 
-	user, err := h.DB.GetUserByEmail(email)
+	if username == "" {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+		return
+	}
+
+	user, err := h.DB.GetUserByUsername(username)
 	if err != nil || user.Email == "" {
+		// User not found or has no email — show success anyway (don't reveal)
 		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
 		return
 	}
