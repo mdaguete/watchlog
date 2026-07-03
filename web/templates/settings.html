@@ -44,12 +44,12 @@
     <div class="border-t border-wl-border pt-8">
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">TMDB</h2>
         <div class="flex gap-4">
-            <button hx-post="/api/tmdb/fetch-all" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
+            <button type="button" hx-post="/api/tmdb/fetch-all" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
                 hx-indicator="#tmdb-spinner"
                 class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
                 {{T .Lang "settings.refresh_metadata"}}
             </button>
-            <button hx-post="/api/tmdb/refresh-upcoming" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
+            <button type="button" hx-post="/api/tmdb/refresh-upcoming" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
                 hx-indicator="#tmdb-spinner"
                 class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
                 {{T .Lang "settings.refresh_upcoming"}}
