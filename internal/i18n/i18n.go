@@ -34,6 +34,10 @@ var translations = map[string]map[string]string{
 	"shows.sort.name":     {"es": "A–Z", "en": "A–Z"},
 	"shows.sort.episodes": {"es": "Más vistos", "en": "Most watched"},
 	"shows.sort.followed": {"es": "Fecha seguimiento", "en": "Follow date"},
+	"shows.filter":          {"es": "Filtrar:", "en": "Filter:"},
+	"shows.filter.all":      {"es": "Todas", "en": "All"},
+	"shows.filter.favorites": {"es": "Favoritas", "en": "Favorites"},
+	"shows.filter.archived": {"es": "Archivadas", "en": "Archived"},
 	"shows.no_image":      {"es": "Sin imagen", "en": "No image"},
 	"shows.episodes":      {"es": "episodios", "en": "episodes"},
 
@@ -180,6 +184,7 @@ var translations = map[string]map[string]string{
 	"admin.watchlog_url":   {"es": "URL pública", "en": "Public URL"},
 	"admin.watchlog_url_help": {"es": "URL base para magic links (ej: https://watchlog.example.com)", "en": "Base URL for magic links (e.g. https://watchlog.example.com)"},
 	"admin.tmdb_actions":   {"es": "Acciones TMDB", "en": "TMDB Actions"},
+	"admin.loading":        {"es": "Procesando...", "en": "Processing..."},
 	"admin.auth_section":    {"es": "Autenticación", "en": "Authentication"},
 	"admin.auth_registration": {"es": "Permitir registro de nuevos usuarios", "en": "Allow new user registration"},
 	"admin.auth_password":   {"es": "Permitir login con contraseña", "en": "Allow password login"},

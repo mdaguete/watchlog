@@ -189,6 +189,10 @@ func (db *DB) UpsertUserShow(userID, showID int64, isFollowed, isFavorited, isAr
 }
 
 func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, error) {
+	return db.GetUserShowsFiltered(userID, sort, "")
+}
+
+func (db *DB) GetUserShowsFiltered(userID int64, sort, filter string) ([]models.UserShow, error) {
 	var orderClause string
 	var joinClause string
 	switch sort {
@@ -203,13 +207,23 @@ func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, 
 		orderClause = `ORDER BY COALESCE(ew.last_watched, sp.updated_at, us.followed_at) DESC, s.name ASC`
 	}
 
+	var filterClause string
+	switch filter {
+	case "favorites":
+		filterClause = "AND us.is_favorited = 1"
+	case "archived":
+		filterClause = "AND us.is_archived = 1"
+	default:
+		filterClause = "AND us.is_archived = 0" // hide archived by default
+	}
+
 	query := `SELECT s.id, s.external_id, s.name, s.name_es, s.name_en, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
 		us.is_followed, us.is_favorited, us.is_archived, us.episodes_seen, us.followed_at, us.updated_at
 		FROM user_shows us
 		JOIN shows s ON s.id = us.show_id
 		LEFT JOIN show_progress sp ON sp.show_id = s.id AND sp.user_id = us.user_id
 		` + joinClause + `
-		WHERE us.user_id = ? AND us.is_followed = 1 ` + orderClause
+		WHERE us.user_id = ? AND us.is_followed = 1 ` + filterClause + ` ` + orderClause
 
 	var rows *sql.Rows
 	var err error

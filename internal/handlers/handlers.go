@@ -498,11 +498,13 @@ func (h *Handler) PageShows(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, userID)
 	sort := r.URL.Query().Get("sort")
 	if sort == "" { sort = "recent" }
-	shows, _ := h.DB.GetUserShowsSorted(userID, sort)
+	filter := r.URL.Query().Get("filter")
+	shows, _ := h.DB.GetUserShowsFiltered(userID, sort, filter)
 	h.Templates.ExecuteTemplate(w, "shows.html", map[string]any{
-		"Lang":  lang,
-		"Shows": shows,
-		"Sort":  sort,
+		"Lang":   lang,
+		"Shows":  shows,
+		"Sort":   sort,
+		"Filter": filter,
 	})
 }
 
