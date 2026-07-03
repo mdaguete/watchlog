@@ -86,8 +86,26 @@ func main() {
 	}
 	defer database.Close()
 
-	// TMDB client (optional, set TMDB_API_KEY env var)
+	// TMDB client: env var takes priority, then DB setting
 	tmdbKey := os.Getenv("TMDB_API_KEY")
+	if tmdbKey != "" {
+		// Persist to DB (or update if different)
+		stored := database.GetSetting("tmdb_api_key")
+		if stored != tmdbKey {
+			database.SetSetting("tmdb_api_key", tmdbKey)
+			if stored == "" {
+				log.Println("TMDB: API key saved to database")
+			} else {
+				log.Println("TMDB: API key updated in database")
+			}
+		}
+	} else {
+		// Try to read from DB
+		tmdbKey = database.GetSetting("tmdb_api_key")
+		if tmdbKey != "" {
+			log.Println("TMDB: using API key from database")
+		}
+	}
 	tmdbClient := tmdb.NewClient(tmdbKey)
 	if tmdbKey != "" {
 		log.Println("TMDB integration enabled")

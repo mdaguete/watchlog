@@ -715,9 +715,19 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
-		"Lang": lang,
-	})
+	data := map[string]any{
+		"Lang":    lang,
+		"IsAdmin": userID == 1,
+	}
+	if userID == 1 {
+		tmdbKey := h.DB.GetSetting("tmdb_api_key")
+		if tmdbKey != "" {
+			// Mask the key, show only last 4 chars
+			data["TMDBKeySet"] = true
+			data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
+		}
+	}
+	h.Templates.ExecuteTemplate(w, "settings.html", data)
 }
 
 func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -729,6 +739,17 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		lang = "es"
 	}
 	h.DB.SetUserLang(userID, lang)
+
+	// Only admin (user id 1) can update TMDB key
+	if userID == 1 {
+		tmdbKey := r.FormValue("tmdb_key")
+		if tmdbKey != "" {
+			h.DB.SetSetting("tmdb_api_key", tmdbKey)
+			// Update the TMDB client in-place
+			h.TMDB = tmdb.NewClient(tmdbKey)
+		}
+	}
+
 	http.Redirect(w, r, "/settings", http.StatusFound)
 }
 

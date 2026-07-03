@@ -120,7 +120,10 @@ var translations = map[string]map[string]string{
 	"settings.title":    {"es": "Ajustes", "en": "Settings"},
 	"settings.language": {"es": "Idioma", "en": "Language"},
 	"settings.save":     {"es": "Guardar", "en": "Save"},
-	"settings.saved":    {"es": "Guardado", "en": "Saved"},
+	"settings.saved":           {"es": "Guardado", "en": "Saved"},
+	"settings.current_key":     {"es": "Clave actual", "en": "Current key"},
+	"settings.tmdb_placeholder": {"es": "Introduce nueva clave para actualizar", "en": "Enter new key to update"},
+	"settings.tmdb_help":       {"es": "Déjalo vacío para mantener la clave actual. Obtén una en themoviedb.org/settings/api", "en": "Leave empty to keep current key. Get one at themoviedb.org/settings/api"},
 
 	// Import
 	"import.title":       {"es": "Importar datos", "en": "Import data"},

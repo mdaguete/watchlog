@@ -22,6 +22,18 @@
             </div>
         </div>
 
+        {{if .IsAdmin}}
+        <div class="border-t border-wl-border pt-8">
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">TMDB API Key</label>
+            {{if .TMDBKeySet}}
+            <p class="text-xs text-wl-gray mb-2">{{T .Lang "settings.current_key"}}: {{.TMDBKeyHint}}</p>
+            {{end}}
+            <input type="text" name="tmdb_key" placeholder="{{T .Lang "settings.tmdb_placeholder"}}"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.tmdb_help"}}</p>
+        </div>
+        {{end}}
+
         <button type="submit"
             class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
             {{T .Lang "settings.save"}}

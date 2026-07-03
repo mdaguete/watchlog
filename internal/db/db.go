@@ -165,6 +165,11 @@ CREATE TABLE IF NOT EXISTS upcoming_cache (
 	overview TEXT NOT NULL DEFAULT '',
 	fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+	key TEXT PRIMARY KEY NOT NULL,
+	value TEXT NOT NULL DEFAULT ''
+);
 `
 
 // --- Users ---
@@ -208,6 +213,19 @@ func (db *DB) GetUserLang(userID int64) string {
 
 func (db *DB) SetUserLang(userID int64, lang string) error {
 	_, err := db.conn.Exec("UPDATE users SET lang = ? WHERE id = ?", lang, userID)
+	return err
+}
+
+// --- Settings (key-value store) ---
+
+func (db *DB) GetSetting(key string) string {
+	var value string
+	db.conn.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	return value
+}
+
+func (db *DB) SetSetting(key, value string) error {
+	_, err := db.conn.Exec(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }
 
