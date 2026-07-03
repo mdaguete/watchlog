@@ -107,7 +107,6 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 | File | Responsibility |
 |------|---------------|
 | `cmd/server/main.go` | Entrypoint, routes, middleware, template loading, FuncMap |
-| `cmd/importer/main.go` | CLI to import TVTime data |
 | `internal/db/db.go` | Schema, migrations, all queries |
 | `internal/models/models.go` | Domain structs |
 | `internal/handlers/handlers.go` | HTTP handlers (API JSON + HTML pages) |
@@ -147,7 +146,6 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 # Development
 nix develop                              # Shell with go, sqlite, goreleaser
 make run                                 # Build and start server
-go run ./cmd/importer/ -data ./data      # Import data
 
 # Testing
 go test ./internal/...                   # Run all tests

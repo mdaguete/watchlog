@@ -34,3 +34,5 @@ bin/
 data/
 dist/
 .direnv/
+cache/
+.kiro/
