@@ -19,19 +19,27 @@ import (
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
+	"github.com/mdaguete/watchlog/internal/ratelimit"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/mdaguete/watchlog/internal/worker"
 )
 
 type Handler struct {
-	DB       *db.DB
-	Templates *template.Template
-	TMDB     *tmdb.Client
-	Sessions *auth.SessionStore
+	DB           *db.DB
+	Templates    *template.Template
+	TMDB         *tmdb.Client
+	Sessions     *auth.SessionStore
+	LoginLimiter *ratelimit.Limiter
 }
 
 func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore) *Handler {
-	return &Handler{DB: database, Templates: tmpl, TMDB: tmdbClient, Sessions: sessions}
+	return &Handler{
+		DB:           database,
+		Templates:    tmpl,
+		TMDB:         tmdbClient,
+		Sessions:     sessions,
+		LoginLimiter: ratelimit.New(5, 15*time.Minute),
+	}
 }
 
 // --- Helpers ---
@@ -81,6 +89,22 @@ func (h *Handler) parsePathID(w http.ResponseWriter, r *http.Request, param stri
 	return id, true
 }
 
+// clientIP extracts the client IP from the request, checking X-Forwarded-For first.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Take the first IP in the chain
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	// Fall back to RemoteAddr (ip:port)
+	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
+		return r.RemoteAddr[:idx]
+	}
+	return r.RemoteAddr
+}
+
 // getLang returns the user's language preference, falling back to Accept-Language header.
 func (h *Handler) getLang(r *http.Request, userID int64) string {
 	if userID > 0 {
@@ -113,16 +137,26 @@ func (h *Handler) PageRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if !h.LoginLimiter.Allow(ip) {
+		lang := h.getLang(r, 0)
+		w.WriteHeader(http.StatusTooManyRequests)
+		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.rate_limited"), "Lang": lang})
+		return
+	}
+
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
 	user, err := h.DB.GetUserByUsername(username)
 	if err != nil || !auth.CheckPassword(user.PasswordHash, password) {
+		h.LoginLimiter.Record(ip)
 		lang := h.getLang(r, 0)
 		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.error"), "Lang": lang})
 		return
 	}
 
+	h.LoginLimiter.Reset(ip)
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)
 	log.Printf("ACTION: login user=%q", username)

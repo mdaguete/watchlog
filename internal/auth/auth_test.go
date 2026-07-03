@@ -3,9 +3,61 @@ package auth
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
+
+// mockSessionDB is an in-memory implementation of SessionDB for testing.
+type mockSessionDB struct {
+	mu       sync.Mutex
+	sessions map[string]mockSession
+}
+
+type mockSession struct {
+	userID    int64
+	expiresAt time.Time
+}
+
+func newMockDB() *mockSessionDB {
+	return &mockSessionDB{sessions: make(map[string]mockSession)}
+}
+
+func (m *mockSessionDB) CreateSession(token string, userID int64, expiresAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sessions[token] = mockSession{userID: userID, expiresAt: expiresAt}
+	return nil
+}
+
+func (m *mockSessionDB) GetSession(token string) (int64, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[token]
+	if !ok || time.Now().After(s.expiresAt) {
+		return 0, false
+	}
+	return s.userID, true
+}
+
+func (m *mockSessionDB) DeleteSession(token string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.sessions, token)
+	return nil
+}
+
+func (m *mockSessionDB) CleanExpiredSessions() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now()
+	for token, s := range m.sessions {
+		if now.After(s.expiresAt) {
+			delete(m.sessions, token)
+		}
+	}
+	return nil
+}
 
 func TestHashPassword(t *testing.T) {
 	hash, err := HashPassword("mypassword")
@@ -32,7 +84,7 @@ func TestCheckPassword(t *testing.T) {
 }
 
 func TestSessionStore_CreateAndGet(t *testing.T) {
-	store := NewSessionStore()
+	store := NewSessionStore(newMockDB())
 
 	token := store.Create(42)
 	if token == "" {
@@ -49,7 +101,7 @@ func TestSessionStore_CreateAndGet(t *testing.T) {
 }
 
 func TestSessionStore_GetInvalidToken(t *testing.T) {
-	store := NewSessionStore()
+	store := NewSessionStore(newMockDB())
 
 	_, ok := store.Get("nonexistent")
 	if ok {
@@ -58,7 +110,7 @@ func TestSessionStore_GetInvalidToken(t *testing.T) {
 }
 
 func TestSessionStore_Delete(t *testing.T) {
-	store := NewSessionStore()
+	store := NewSessionStore(newMockDB())
 
 	token := store.Create(1)
 	store.Delete(token)
@@ -70,27 +122,21 @@ func TestSessionStore_Delete(t *testing.T) {
 }
 
 func TestSessionStore_ExpiredSession(t *testing.T) {
-	store := NewSessionStore()
+	mdb := newMockDB()
+	store := NewSessionStore(mdb)
 
+	// Insert an already-expired session directly into the mock
 	token := "expired-token"
-	store.mu.Lock()
-	store.sessions[token] = Session{
-		UserID:    99,
-		ExpiresAt: time.Now().Add(-1 * time.Hour),
+	mdb.mu.Lock()
+	mdb.sessions[token] = mockSession{
+		userID:    99,
+		expiresAt: time.Now().Add(-1 * time.Hour),
 	}
-	store.mu.Unlock()
+	mdb.mu.Unlock()
 
 	_, ok := store.Get(token)
 	if ok {
 		t.Error("Get should return false for expired session")
-	}
-
-	// Should also delete the expired session
-	store.mu.RLock()
-	_, exists := store.sessions[token]
-	store.mu.RUnlock()
-	if exists {
-		t.Error("Expired session should be deleted after Get")
 	}
 }
 

@@ -162,7 +162,7 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore())
+	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database))
 
 	mux := http.NewServeMux()
 

@@ -842,3 +842,87 @@ func TestRecalcWatchStats_WithMovies(t *testing.T) {
 		t.Fatal("expected at least 1 stat after recalc with movies")
 	}
 }
+
+// --- Sessions ---
+
+func TestCreateAndGetSession(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateUser("u", "h")
+
+	err := db.CreateSession("tok123", 1, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	userID, ok := db.GetSession("tok123")
+	if !ok {
+		t.Fatal("GetSession returned not ok for valid token")
+	}
+	if userID != 1 {
+		t.Errorf("userID = %d, want 1", userID)
+	}
+}
+
+func TestGetSession_NotFound(t *testing.T) {
+	db := newTestDB(t)
+
+	_, ok := db.GetSession("nonexistent")
+	if ok {
+		t.Error("GetSession should return false for nonexistent token")
+	}
+}
+
+func TestGetSession_Expired(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateUser("u", "h")
+
+	db.CreateSession("expired", 1, time.Now().Add(-time.Hour))
+
+	_, ok := db.GetSession("expired")
+	if ok {
+		t.Error("GetSession should return false for expired session")
+	}
+}
+
+func TestDeleteSession(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateUser("u", "h")
+
+	db.CreateSession("todelete", 1, time.Now().Add(time.Hour))
+	err := db.DeleteSession("todelete")
+	if err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+
+	_, ok := db.GetSession("todelete")
+	if ok {
+		t.Error("GetSession should return false after delete")
+	}
+}
+
+func TestCleanExpiredSessions(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateUser("u", "h")
+
+	db.CreateSession("valid", 1, time.Now().Add(time.Hour))
+	db.CreateSession("expired1", 1, time.Now().Add(-time.Hour))
+	db.CreateSession("expired2", 1, time.Now().Add(-2*time.Hour))
+
+	err := db.CleanExpiredSessions()
+	if err != nil {
+		t.Fatalf("CleanExpiredSessions: %v", err)
+	}
+
+	_, ok := db.GetSession("valid")
+	if !ok {
+		t.Error("valid session should still exist")
+	}
+	_, ok = db.GetSession("expired1")
+	if ok {
+		t.Error("expired1 should be cleaned")
+	}
+	_, ok = db.GetSession("expired2")
+	if ok {
+		t.Error("expired2 should be cleaned")
+	}
+}

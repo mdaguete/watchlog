@@ -180,6 +180,12 @@ CREATE TABLE IF NOT EXISTS settings (
 	key TEXT PRIMARY KEY NOT NULL,
 	value TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+	token TEXT PRIMARY KEY NOT NULL,
+	user_id INTEGER NOT NULL REFERENCES users(id),
+	expires_at DATETIME NOT NULL
+);
 `
 
 // --- Users ---
@@ -1005,4 +1011,30 @@ func (db *DB) GetActiveShowsWithTMDB() ([]models.Show, error) {
 		shows = append(shows, s)
 	}
 	return shows, nil
+}
+
+// --- Sessions ---
+
+func (db *DB) CreateSession(token string, userID int64, expiresAt time.Time) error {
+	_, err := db.conn.Exec(`INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`, token, userID, expiresAt)
+	return err
+}
+
+func (db *DB) GetSession(token string) (int64, bool) {
+	var userID int64
+	err := db.conn.QueryRow(`SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?`, token, time.Now()).Scan(&userID)
+	if err != nil {
+		return 0, false
+	}
+	return userID, true
+}
+
+func (db *DB) DeleteSession(token string) error {
+	_, err := db.conn.Exec(`DELETE FROM sessions WHERE token = ?`, token)
+	return err
+}
+
+func (db *DB) CleanExpiredSessions() error {
+	_, err := db.conn.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, time.Now())
+	return err
 }

@@ -45,7 +45,7 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 		t.Fatalf("ParseGlob: %v", err)
 	}
 
-	sessions := auth.NewSessionStore()
+	sessions := auth.NewSessionStore(database)
 	h := New(database, tmpl, nil, sessions)
 
 	// Create test user

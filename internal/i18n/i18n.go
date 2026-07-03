@@ -112,6 +112,7 @@ var translations = map[string]map[string]string{
 	"login.no_account":  {"es": "¿No tienes cuenta?", "en": "Don't have an account?"},
 	"login.register":    {"es": "Registrarse", "en": "Sign up"},
 	"login.error":       {"es": "Usuario o contraseña incorrectos", "en": "Invalid username or password"},
+	"login.rate_limited": {"es": "Demasiados intentos. Espera unos minutos.", "en": "Too many attempts. Please wait a few minutes."},
 	"register.title":    {"es": "Crear cuenta", "en": "Create account"},
 	"register.submit":   {"es": "Crear cuenta", "en": "Create account"},
 	"register.has_account": {"es": "¿Ya tienes cuenta?", "en": "Already have an account?"},
