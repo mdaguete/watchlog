@@ -127,8 +127,25 @@ var translations = map[string]map[string]string{
 	"register.error.username_taken":    {"es": "El nombre de usuario ya existe", "en": "Username already exists"},
 
 	// Setup
+	"setup.subtitle":           {"es": "Configuración inicial", "en": "Initial setup"},
+	"setup.step1_title":        {"es": "Paso 1: Crear cuenta de administrador", "en": "Step 1: Create admin account"},
+	"setup.step2_title":        {"es": "Paso 2: Configuración del servidor", "en": "Step 2: Server configuration"},
+	"setup.step3_title":        {"es": "Paso 3: Importar datos", "en": "Step 3: Import data"},
+	"setup.step3_description":  {"es": "Si tienes un archivo ZIP de exportación de TVTime, puedes importarlo ahora.", "en": "If you have a TVTime export ZIP file, you can import it now."},
+	"setup.confirm_password":   {"es": "Confirmar contraseña", "en": "Confirm password"},
+	"setup.next":               {"es": "Siguiente", "en": "Next"},
+	"setup.back":               {"es": "Anterior", "en": "Back"},
+	"setup.skip":               {"es": "Saltar", "en": "Skip"},
+	"setup.import":             {"es": "Importar", "en": "Import"},
+	"setup.go_dashboard":       {"es": "Ir al inicio", "en": "Go to dashboard"},
+	"setup.tmdb_help":          {"es": "Opcional. Necesario para posters y metadatos. Obtén una en themoviedb.org/settings/api", "en": "Optional. Required for posters and metadata. Get one at themoviedb.org/settings/api"},
+	"setup.smtp_help":          {"es": "Opcional. Necesario para magic links y recuperación de contraseña.", "en": "Optional. Required for magic links and password recovery."},
+	"setup.url_help":           {"es": "Opcional. URL pública para los enlaces en emails.", "en": "Optional. Public URL for email links."},
+	"setup.auth_options":       {"es": "Opciones de autenticación", "en": "Authentication options"},
 	"setup.error.username_required": {"es": "El nombre de usuario es obligatorio", "en": "Username is required"},
+	"setup.error.email_required":    {"es": "El email es obligatorio", "en": "Email is required"},
 	"setup.error.password_min":      {"es": "La contraseña debe tener al menos 8 caracteres", "en": "Password must be at least 8 characters"},
+	"setup.error.password_mismatch": {"es": "Las contraseñas no coinciden", "en": "Passwords do not match"},
 	"setup.error.create_failed":     {"es": "No se pudo crear el usuario", "en": "Could not create user"},
 
 	// TMDB inline messages

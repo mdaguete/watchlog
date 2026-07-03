@@ -43,10 +43,11 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// setupMiddleware redirects to /setup if no users exist yet.
+// setupMiddleware redirects to /setup if setup is not complete.
 func setupMiddleware(next http.Handler, database *db.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !database.HasUsers() && r.URL.Path != "/setup" && !strings.HasPrefix(r.URL.Path, "/static/") {
+		setupDone := database.HasUsers() && database.GetSetting("setup_complete") == "true"
+		if !setupDone && r.URL.Path != "/setup" && r.URL.Path != "/import" && !strings.HasPrefix(r.URL.Path, "/static/") {
 			http.Redirect(w, r, "/setup", http.StatusFound)
 			return
 		}
