@@ -222,6 +222,8 @@ func main() {
 	mux.HandleFunc("GET /upcoming", h.PageUpcoming)
 	mux.HandleFunc("GET /settings", h.PageSettings)
 	mux.HandleFunc("POST /settings", h.SaveSettings)
+	mux.HandleFunc("GET /admin", h.PageAdmin)
+	mux.HandleFunc("POST /admin", h.SaveAdmin)
 
 	// API: Shows
 	mux.HandleFunc("GET /api/shows", h.APIGetShows)

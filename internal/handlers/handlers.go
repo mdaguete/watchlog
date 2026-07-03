@@ -1076,29 +1076,11 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
 	user, _ := h.DB.GetUserByID(userID)
-	data := map[string]any{
+	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
 		"Lang":    lang,
 		"IsAdmin": userID == 1,
 		"Email":   user.Email,
-	}
-	if userID == 1 {
-		tmdbKey := h.DB.GetSetting("tmdb_api_key")
-		if tmdbKey != "" {
-			// Mask the key, show only last 4 chars
-			data["TMDBKeySet"] = true
-			data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
-		}
-		data["SMTPHost"] = h.DB.GetSetting("smtp_host")
-		data["SMTPPort"] = h.DB.GetSetting("smtp_port")
-		data["SMTPUser"] = h.DB.GetSetting("smtp_user")
-		data["SMTPFrom"] = h.DB.GetSetting("smtp_from")
-		data["WatchLogURL"] = h.DB.GetSetting("watchlog_url")
-		// Don't show password, just indicate if set
-		if h.DB.GetSetting("smtp_password") != "" {
-			data["SMTPPassSet"] = true
-		}
-	}
-	h.Templates.ExecuteTemplate(w, "settings.html", data)
+	})
 }
 
 func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -1110,42 +1092,55 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		lang = "es"
 	}
 	h.DB.SetUserLang(userID, lang)
-
-	// Save user email
 	email := strings.TrimSpace(r.FormValue("email"))
 	h.DB.UpdateUserEmail(userID, email)
-
-	// Only admin (user id 1) can update TMDB key and SMTP settings
-	if userID == 1 {
-		tmdbKey := r.FormValue("tmdb_key")
-		if tmdbKey != "" {
-			h.DB.SetSetting("tmdb_api_key", tmdbKey)
-			// Update the TMDB client in-place
-			h.TMDB = tmdb.NewClient(tmdbKey)
-		}
-
-		// SMTP settings
-		if v := r.FormValue("smtp_host"); v != "" {
-			h.DB.SetSetting("smtp_host", v)
-		}
-		if v := r.FormValue("smtp_port"); v != "" {
-			h.DB.SetSetting("smtp_port", v)
-		}
-		if v := r.FormValue("smtp_user"); v != "" {
-			h.DB.SetSetting("smtp_user", v)
-		}
-		if v := r.FormValue("smtp_password"); v != "" {
-			h.DB.SetSetting("smtp_password", v)
-		}
-		if v := r.FormValue("smtp_from"); v != "" {
-			h.DB.SetSetting("smtp_from", v)
-		}
-		if v := r.FormValue("watchlog_url"); v != "" {
-			h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
-		}
-	}
-
 	http.Redirect(w, r, "/settings", http.StatusFound)
+}
+
+func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
+	lang := h.getLang(r, userID)
+	data := map[string]any{
+		"Lang":       lang,
+		"SMTPHost":   h.DB.GetSetting("smtp_host"),
+		"SMTPPort":   h.DB.GetSetting("smtp_port"),
+		"SMTPUser":   h.DB.GetSetting("smtp_user"),
+		"SMTPFrom":   h.DB.GetSetting("smtp_from"),
+		"WatchLogURL": h.DB.GetSetting("watchlog_url"),
+	}
+	tmdbKey := h.DB.GetSetting("tmdb_api_key")
+	if tmdbKey != "" {
+		data["TMDBKeySet"] = true
+		data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
+	}
+	if h.DB.GetSetting("smtp_password") != "" {
+		data["SMTPPassSet"] = true
+	}
+	h.Templates.ExecuteTemplate(w, "admin.html", data)
+}
+
+func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
+	r.ParseForm()
+
+	// TMDB key
+	if tmdbKey := r.FormValue("tmdb_key"); tmdbKey != "" {
+		h.DB.SetSetting("tmdb_api_key", tmdbKey)
+		h.TMDB = tmdb.NewClient(tmdbKey)
+	}
+	// SMTP settings
+	if v := r.FormValue("smtp_host"); v != "" { h.DB.SetSetting("smtp_host", v) }
+	if v := r.FormValue("smtp_port"); v != "" { h.DB.SetSetting("smtp_port", v) }
+	if v := r.FormValue("smtp_user"); v != "" { h.DB.SetSetting("smtp_user", v) }
+	if v := r.FormValue("smtp_password"); v != "" { h.DB.SetSetting("smtp_password", v) }
+	if v := r.FormValue("smtp_from"); v != "" { h.DB.SetSetting("smtp_from", v) }
+	if v := r.FormValue("watchlog_url"); v != "" { h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/")) }
+
+	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
 // --- Setup (first run) ---
