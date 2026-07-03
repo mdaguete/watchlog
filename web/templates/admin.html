@@ -41,6 +41,43 @@
             </div>
         </div>
 
+        <!-- Authentication options -->
+        <div class="border-t border-wl-border pt-8">
+            <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.auth_section"}}</h2>
+            <div class="space-y-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_registration" {{if .RegistrationEnabled}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_registration"}}</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_password" {{if .PasswordEnabled}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_password"}}</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_magic_link" {{if .MagicLinkEnabled}}checked{{end}}
+                        class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_magic_link"}}</span>
+                </label>
+            </div>
+            <div class="mt-6">
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "admin.auth_default"}}</label>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_default_login" value="magic" {{if eq .DefaultLogin "magic"}}checked{{end}}
+                            class="accent-black">
+                        <span class="text-sm">Magic link</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_default_login" value="password" {{if eq .DefaultLogin "password"}}checked{{end}}
+                            class="accent-black">
+                        <span class="text-sm">{{T .Lang "login.password"}}</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
         <button type="submit"
             class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
             {{T .Lang "settings.save"}}

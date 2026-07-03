@@ -125,7 +125,13 @@ func (h *Handler) PageLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := h.getLang(r, 0)
-	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Lang": lang})
+	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{
+		"Lang":             lang,
+		"PasswordEnabled":  h.DB.GetSetting("auth_password") != "disabled",
+		"MagicLinkEnabled": h.DB.GetSetting("auth_magic_link") != "disabled",
+		"DefaultLogin":     h.getDefaultLogin(),
+		"RegistrationEnabled": h.DB.GetSetting("auth_registration") != "disabled",
+	})
 }
 
 func (h *Handler) PageRegister(w http.ResponseWriter, r *http.Request) {
@@ -133,11 +139,19 @@ func (h *Handler) PageRegister(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	if h.DB.GetSetting("auth_registration") == "disabled" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
 	lang := h.getLang(r, 0)
 	h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Lang": lang})
 }
 
 func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.DB.GetSetting("auth_password") == "disabled" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
 	ip := clientIP(r)
 	if !h.LoginLimiter.Allow(ip) {
 		lang := h.getLang(r, 0)
@@ -165,6 +179,10 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	if h.DB.GetSetting("auth_registration") == "disabled" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	email := strings.TrimSpace(r.FormValue("email"))
@@ -230,6 +248,14 @@ func (h *Handler) getSMTPConfig() mail.Config {
 
 func (h *Handler) getWatchLogURL() string {
 	return h.DB.GetSetting("watchlog_url")
+}
+
+func (h *Handler) getDefaultLogin() string {
+	d := h.DB.GetSetting("auth_default_login")
+	if d == "" {
+		return "magic"
+	}
+	return d
 }
 
 // --- Forgot Password ---
@@ -1114,6 +1140,14 @@ func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Lang":        lang,
 		"WatchLogURL": h.DB.GetSetting("watchlog_url"),
+		// Auth options
+		"RegistrationEnabled": h.DB.GetSetting("auth_registration") != "disabled",
+		"PasswordEnabled":     h.DB.GetSetting("auth_password") != "disabled",
+		"MagicLinkEnabled":    h.DB.GetSetting("auth_magic_link") != "disabled",
+		"DefaultLogin":        h.DB.GetSetting("auth_default_login"),
+	}
+	if data["DefaultLogin"] == "" {
+		data["DefaultLogin"] = "magic"
 	}
 	tmdbKey := h.DB.GetSetting("tmdb_api_key")
 	if tmdbKey != "" {
@@ -1151,6 +1185,26 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 	// Public URL
 	if v := strings.TrimSpace(r.FormValue("watchlog_url")); v != "" {
 		h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
+	}
+
+	// Auth options
+	if r.FormValue("auth_registration") == "on" {
+		h.DB.SetSetting("auth_registration", "enabled")
+	} else {
+		h.DB.SetSetting("auth_registration", "disabled")
+	}
+	if r.FormValue("auth_password") == "on" {
+		h.DB.SetSetting("auth_password", "enabled")
+	} else {
+		h.DB.SetSetting("auth_password", "disabled")
+	}
+	if r.FormValue("auth_magic_link") == "on" {
+		h.DB.SetSetting("auth_magic_link", "enabled")
+	} else {
+		h.DB.SetSetting("auth_magic_link", "disabled")
+	}
+	if defaultLogin := r.FormValue("auth_default_login"); defaultLogin == "password" || defaultLogin == "magic" {
+		h.DB.SetSetting("auth_default_login", defaultLogin)
 	}
 
 	http.Redirect(w, r, "/admin", http.StatusFound)
