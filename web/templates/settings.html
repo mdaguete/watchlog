@@ -42,6 +42,15 @@
         </a>
     </div>
     {{end}}
+
+    <div class="border-t border-wl-border pt-8 mt-12">
+        <form method="POST" action="/logout">
+            <button type="submit"
+                class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                {{T .Lang "settings.logout"}}
+            </button>
+        </form>
+    </div>
 </div>
 {{template "foot" .}}
 {{end}}

@@ -147,6 +147,7 @@ var translations = map[string]map[string]string{
 	"settings.refresh_metadata": {"es": "Refrescar metadatos", "en": "Refresh metadata"},
 	"settings.refresh_upcoming": {"es": "Refrescar próximos", "en": "Refresh upcoming"},
 	"settings.admin_link":       {"es": "Administración del servidor", "en": "Server administration"},
+	"settings.logout":           {"es": "Cerrar sesión", "en": "Log out"},
 
 	// Admin
 	"admin.title":          {"es": "Administración", "en": "Administration"},
