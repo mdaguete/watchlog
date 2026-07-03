@@ -7,6 +7,10 @@
     <p class="text-sm text-red-600 mb-6 text-center">{{.Error}}</p>
     {{end}}
 
+    {{if .Success}}
+    <p class="text-sm text-green-700 mb-6 text-center">{{.Success}}</p>
+    {{end}}
+
     <form method="POST" action="/login" class="space-y-6">
         <div>
             <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
@@ -23,6 +27,11 @@
             {{T .Lang "login.submit"}}
         </button>
     </form>
+
+    <div class="text-xs text-wl-gray text-center mt-6 space-y-2">
+        <p><a href="/forgot-password" class="text-black underline">{{T .Lang "login.forgot_password"}}</a></p>
+        <p><a href="/magic-login" class="text-black underline">{{T .Lang "login.magic_link"}}</a></p>
+    </div>
 
     <p class="text-xs text-wl-gray text-center mt-8">
         {{T .Lang "login.no_account"}} <a href="/register" class="text-black underline">{{T .Lang "login.register"}}</a>

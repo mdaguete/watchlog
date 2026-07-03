@@ -22,6 +22,13 @@
             </div>
         </div>
 
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "settings.email"}}</label>
+            <input type="email" name="email" value="{{.Email}}" placeholder="{{T .Lang "settings.email_placeholder"}}"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.email_help"}}</p>
+        </div>
+
         {{if .IsAdmin}}
         <div class="border-t border-wl-border pt-8">
             <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">TMDB API Key</label>
@@ -31,6 +38,43 @@
             <input type="text" name="tmdb_key" placeholder="{{T .Lang "settings.tmdb_placeholder"}}"
                 class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
             <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.tmdb_help"}}</p>
+        </div>
+
+        <div class="border-t border-wl-border pt-8">
+            <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "settings.smtp_section"}}</h2>
+            <p class="text-xs text-wl-gray mb-4">{{T .Lang "settings.smtp_help"}}</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.smtp_host"}}</label>
+                    <input type="text" name="smtp_host" value="{{.SMTPHost}}" placeholder="smtp.example.com"
+                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                </div>
+                <div>
+                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.smtp_port"}}</label>
+                    <input type="text" name="smtp_port" value="{{.SMTPPort}}" placeholder="587"
+                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                </div>
+                <div>
+                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.smtp_user"}}</label>
+                    <input type="text" name="smtp_user" value="{{.SMTPUser}}" placeholder="user@example.com"
+                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                </div>
+                <div>
+                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.smtp_password"}}</label>
+                    <input type="password" name="smtp_password" placeholder="{{if .SMTPPassSet}}••••••••{{end}}"
+                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                </div>
+                <div>
+                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.smtp_from"}}</label>
+                    <input type="email" name="smtp_from" value="{{.SMTPFrom}}" placeholder="noreply@example.com"
+                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                </div>
+                <div>
+                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.watchlog_url"}}</label>
+                    <input type="url" name="watchlog_url" value="{{.WatchLogURL}}" placeholder="https://watchlog.example.com"
+                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                </div>
+            </div>
         </div>
         {{end}}
 

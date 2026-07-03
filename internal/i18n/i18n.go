@@ -146,6 +146,54 @@ var translations = map[string]map[string]string{
 	"settings.tmdb_help":       {"es": "Déjalo vacío para mantener la clave actual. Obtén una en themoviedb.org/settings/api", "en": "Leave empty to keep current key. Get one at themoviedb.org/settings/api"},
 	"settings.refresh_metadata": {"es": "Refrescar metadatos", "en": "Refresh metadata"},
 	"settings.refresh_upcoming": {"es": "Refrescar próximos", "en": "Refresh upcoming"},
+	"settings.email":           {"es": "Email", "en": "Email"},
+	"settings.email_placeholder": {"es": "tu@email.com", "en": "you@email.com"},
+	"settings.email_help":      {"es": "Usado para recuperación de contraseña e inicio con enlace mágico", "en": "Used for password recovery and magic link login"},
+	"settings.smtp_host":       {"es": "Servidor SMTP", "en": "SMTP Host"},
+	"settings.smtp_port":       {"es": "Puerto SMTP", "en": "SMTP Port"},
+	"settings.smtp_user":       {"es": "Usuario SMTP", "en": "SMTP User"},
+	"settings.smtp_password":   {"es": "Contraseña SMTP", "en": "SMTP Password"},
+	"settings.smtp_from":       {"es": "Remitente (From)", "en": "From address"},
+	"settings.watchlog_url":    {"es": "URL de WatchLog", "en": "WatchLog URL"},
+	"settings.smtp_section":    {"es": "Configuración de email", "en": "Email configuration"},
+	"settings.smtp_help":       {"es": "Necesario para recuperar contraseña y enlace mágico", "en": "Required for password recovery and magic link login"},
+
+	// Forgot password
+	"forgot.title":         {"es": "Recuperar contraseña", "en": "Forgot password"},
+	"forgot.description":   {"es": "Introduce tu usuario o email para recibir un enlace de restablecimiento.", "en": "Enter your username or email to receive a reset link."},
+	"forgot.username_or_email": {"es": "Usuario o email", "en": "Username or email"},
+	"forgot.submit":        {"es": "Enviar enlace", "en": "Send reset link"},
+	"forgot.success":       {"es": "Si la cuenta existe y tiene email configurado, recibirás un enlace.", "en": "If the account exists and has an email configured, you will receive a link."},
+	"forgot.smtp_disabled": {"es": "El envío de emails no está configurado. Contacta al administrador.", "en": "Email sending is not configured. Contact the administrator."},
+	"forgot.back_login":    {"es": "← Volver al login", "en": "← Back to login"},
+
+	// Reset password
+	"reset.title":          {"es": "Nueva contraseña", "en": "New password"},
+	"reset.new_password":   {"es": "Nueva contraseña", "en": "New password"},
+	"reset.submit":         {"es": "Cambiar contraseña", "en": "Change password"},
+	"reset.success":        {"es": "Contraseña actualizada. Ya puedes iniciar sesión.", "en": "Password updated. You can now log in."},
+	"reset.invalid_token":  {"es": "El enlace ha expirado o no es válido.", "en": "This link has expired or is invalid."},
+	"reset.password_min":   {"es": "La contraseña debe tener al menos 8 caracteres", "en": "Password must be at least 8 characters"},
+
+	// Magic login
+	"magic.title":          {"es": "Acceso con enlace mágico", "en": "Magic link login"},
+	"magic.description":    {"es": "Introduce tu email para recibir un enlace de acceso.", "en": "Enter your email to receive a login link."},
+	"magic.email":          {"es": "Email", "en": "Email"},
+	"magic.submit":         {"es": "Enviar enlace", "en": "Send magic link"},
+	"magic.success":        {"es": "Si hay una cuenta con ese email, recibirás un enlace de acceso.", "en": "If there's an account with that email, you'll receive a login link."},
+	"magic.smtp_disabled":  {"es": "El envío de emails no está configurado. Contacta al administrador.", "en": "Email sending is not configured. Contact the administrator."},
+	"magic.invalid_token":  {"es": "El enlace ha expirado o no es válido.", "en": "This link has expired or is invalid."},
+
+	// Email subjects
+	"email.reset_subject":  {"es": "WatchLog — Restablecer contraseña", "en": "WatchLog — Reset your password"},
+	"email.magic_subject":  {"es": "WatchLog — Tu enlace de acceso", "en": "WatchLog — Your login link"},
+
+	// Login page extra links
+	"login.forgot_password": {"es": "¿Olvidaste tu contraseña?", "en": "Forgot your password?"},
+	"login.magic_link":      {"es": "Acceder con enlace mágico", "en": "Log in with magic link"},
+
+	// Register email field
+	"register.email":       {"es": "Email (opcional)", "en": "Email (optional)"},
 
 	// Import
 	"import.title":       {"es": "Importar datos", "en": "Import data"},

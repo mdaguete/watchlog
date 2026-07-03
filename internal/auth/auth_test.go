@@ -202,3 +202,16 @@ func TestGetSessionToken_NoCookie(t *testing.T) {
 		t.Errorf("GetSessionToken = %q, want empty", got)
 	}
 }
+
+func TestGenerateToken(t *testing.T) {
+	token := GenerateToken()
+	if len(token) != 64 { // 32 bytes hex encoded = 64 chars
+		t.Errorf("GenerateToken length = %d, want 64", len(token))
+	}
+
+	// Tokens should be unique
+	token2 := GenerateToken()
+	if token == token2 {
+		t.Error("GenerateToken produced duplicate tokens")
+	}
+}

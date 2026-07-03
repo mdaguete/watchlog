@@ -918,3 +918,124 @@ func TestPageShow_NotFound(t *testing.T) {
 		t.Errorf("status = %d, want 302", w.Code)
 	}
 }
+
+func TestPageForgotPassword(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/forgot-password", nil)
+	w := httptest.NewRecorder()
+	h.PageForgotPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleForgotPassword_NoUser(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("POST", "/forgot-password", bytes.NewBufferString("identifier=nonexistent"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleForgotPassword(w, req)
+	// Should still return 200 (don't reveal if user exists)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleForgotPassword_NoSMTP(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	// User exists but SMTP not configured
+	h.DB.UpdateUserEmail(1, "test@example.com")
+	req := httptest.NewRequest("POST", "/forgot-password", bytes.NewBufferString("identifier=testuser"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleForgotPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestPageMagicLogin(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/magic-login", nil)
+	w := httptest.NewRecorder()
+	h.PageMagicLogin(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleMagicLogin_NoEmail(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("POST", "/magic-login", bytes.NewBufferString("email=nobody@example.com"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleMagicLogin(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleMagicAuth_InvalidToken(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/auth/magic?token=invalidtoken", nil)
+	w := httptest.NewRecorder()
+	h.HandleMagicAuth(w, req)
+	// Shows error page on invalid token
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleMagicAuth_ValidToken(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "login", time.Now().Add(time.Hour))
+	req := httptest.NewRequest("GET", "/auth/magic?token="+token, nil)
+	w := httptest.NewRecorder()
+	h.HandleMagicAuth(w, req)
+	if w.Code != 302 { t.Errorf("expected 302 redirect, got %d", w.Code) }
+	if loc := w.Header().Get("Location"); loc != "/" {
+		t.Errorf("expected redirect to /, got %q", loc)
+	}
+}
+
+func TestPageResetPassword_InvalidToken(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	req := httptest.NewRequest("GET", "/reset-password?token=badtoken", nil)
+	w := httptest.NewRecorder()
+	h.PageResetPassword(w, req)
+	// Shows error page on invalid token
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestPageResetPassword_ValidToken(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "reset", time.Now().Add(time.Hour))
+	req := httptest.NewRequest("GET", "/reset-password?token="+token, nil)
+	w := httptest.NewRecorder()
+	h.PageResetPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestHandleResetPassword_Success(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "reset", time.Now().Add(time.Hour))
+	body := "token=" + token + "&password=newpassword123"
+	req := httptest.NewRequest("POST", "/reset-password", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleResetPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+	// Verify new password works
+	user, _ := h.DB.GetUserByID(userID)
+	if !auth.CheckPassword(user.PasswordHash, "newpassword123") {
+		t.Error("password was not updated")
+	}
+	// Verify token is consumed (single use)
+	_, _, ok := h.DB.GetMagicLink(token)
+	if ok {
+		t.Error("magic link should have been deleted after use")
+	}
+}
+
+func TestHandleResetPassword_ShortPassword(t *testing.T) {
+	h, userID, _ := newTestHandler(t)
+	token := auth.GenerateToken()
+	h.DB.CreateMagicLink(token, userID, "reset", time.Now().Add(time.Hour))
+	body := "token=" + token + "&password=short"
+	req := httptest.NewRequest("POST", "/reset-password", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleResetPassword(w, req)
+	if w.Code != 200 { t.Errorf("expected 200 (show form again), got %d", w.Code) }
+}

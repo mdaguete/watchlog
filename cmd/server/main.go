@@ -113,6 +113,25 @@ func main() {
 		log.Println("TMDB integration disabled (set TMDB_API_KEY to enable)")
 	}
 
+	// SMTP settings: env vars take priority, then DB settings
+	smtpSettings := map[string]string{
+		"smtp_host":     "SMTP_HOST",
+		"smtp_port":     "SMTP_PORT",
+		"smtp_user":     "SMTP_USER",
+		"smtp_password":  "SMTP_PASSWORD",
+		"smtp_from":     "SMTP_FROM",
+		"watchlog_url":  "WATCHLOG_URL",
+	}
+	for dbKey, envKey := range smtpSettings {
+		if val := os.Getenv(envKey); val != "" {
+			stored := database.GetSetting(dbKey)
+			if stored != val {
+				database.SetSetting(dbKey, val)
+				log.Printf("SMTP: %s saved to database", dbKey)
+			}
+		}
+	}
+
 	// Start background worker for upcoming episodes cache
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -180,6 +199,13 @@ func main() {
 	mux.HandleFunc("GET /register", h.PageRegister)
 	mux.HandleFunc("POST /register", h.HandleRegister)
 	mux.HandleFunc("POST /logout", h.HandleLogout)
+	mux.HandleFunc("GET /forgot-password", h.PageForgotPassword)
+	mux.HandleFunc("POST /forgot-password", h.HandleForgotPassword)
+	mux.HandleFunc("GET /reset-password", h.PageResetPassword)
+	mux.HandleFunc("POST /reset-password", h.HandleResetPassword)
+	mux.HandleFunc("GET /magic-login", h.PageMagicLogin)
+	mux.HandleFunc("POST /magic-login", h.HandleMagicLogin)
+	mux.HandleFunc("GET /auth/magic", h.HandleMagicAuth)
 
 	// Web pages
 	mux.HandleFunc("GET /", h.PageDashboard)

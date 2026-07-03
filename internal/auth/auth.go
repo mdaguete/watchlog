@@ -99,8 +99,12 @@ func GetSessionToken(r *http.Request) string {
 	return cookie.Value
 }
 
-func generateToken() string {
+func GenerateToken() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func generateToken() string {
+	return GenerateToken()
 }

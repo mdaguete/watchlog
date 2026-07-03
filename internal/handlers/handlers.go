@@ -19,6 +19,7 @@ import (
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
+	"github.com/mdaguete/watchlog/internal/mail"
 	"github.com/mdaguete/watchlog/internal/ratelimit"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/mdaguete/watchlog/internal/worker"
@@ -166,6 +167,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+	email := strings.TrimSpace(r.FormValue("email"))
 
 	if username == "" || password == "" {
 		lang := h.getLang(r, 0)
@@ -192,6 +194,10 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if email != "" {
+		h.DB.UpdateUserEmail(userID, email)
+	}
+
 	token := h.Sessions.Create(userID)
 	auth.SetSessionCookie(w, token)
 	log.Printf("ACTION: register user=%q id=%d", username, userID)
@@ -205,6 +211,222 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.ClearSessionCookie(w)
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// --- SMTP Config Helper ---
+
+func (h *Handler) getSMTPConfig() mail.Config {
+	return mail.Config{
+		Host:     h.DB.GetSetting("smtp_host"),
+		Port:     h.DB.GetSetting("smtp_port"),
+		User:     h.DB.GetSetting("smtp_user"),
+		Password: h.DB.GetSetting("smtp_password"),
+		From:     h.DB.GetSetting("smtp_from"),
+	}
+}
+
+func (h *Handler) getWatchLogURL() string {
+	return h.DB.GetSetting("watchlog_url")
+}
+
+// --- Forgot Password ---
+
+func (h *Handler) PageForgotPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+	h.Templates.ExecuteTemplate(w, "forgot_password.html", map[string]any{
+		"Lang":          lang,
+		"SMTPConfigured": smtpCfg.Configured(),
+	})
+}
+
+func (h *Handler) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+
+	if !smtpCfg.Configured() {
+		h.Templates.ExecuteTemplate(w, "forgot_password.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "forgot.smtp_disabled"),
+		})
+		return
+	}
+
+	input := strings.TrimSpace(r.FormValue("username_or_email"))
+	// Always show success to prevent user enumeration
+	successData := map[string]any{
+		"Lang":    lang,
+		"Success": i18n.T(lang, "forgot.success"),
+		"SMTPConfigured": true,
+	}
+
+	// Try to find user by username or email
+	user, err := h.DB.GetUserByUsername(input)
+	if err != nil {
+		user, err = h.DB.GetUserByEmail(input)
+	}
+	if err != nil || user.Email == "" {
+		h.Templates.ExecuteTemplate(w, "forgot_password.html", successData)
+		return
+	}
+
+	token := auth.GenerateToken()
+	expiresAt := time.Now().Add(1 * time.Hour)
+	if err := h.DB.CreateMagicLink(token, user.ID, "reset", expiresAt); err != nil {
+		log.Printf("failed to create magic link: %v", err)
+		h.Templates.ExecuteTemplate(w, "forgot_password.html", successData)
+		return
+	}
+
+	baseURL := h.getWatchLogURL()
+	resetURL := baseURL + "/reset-password?token=" + token
+	body := fmt.Sprintf(`<p>%s</p><p><a href="%s">%s</a></p>`,
+		html.EscapeString(i18n.T(lang, "forgot.title")),
+		html.EscapeString(resetURL),
+		html.EscapeString(resetURL))
+
+	if err := mail.Send(smtpCfg, user.Email, i18n.T(lang, "email.reset_subject"), body); err != nil {
+		log.Printf("failed to send reset email to %s: %v", user.Email, err)
+	} else {
+		log.Printf("ACTION: password reset email sent to user=%q", user.Username)
+	}
+
+	h.Templates.ExecuteTemplate(w, "forgot_password.html", successData)
+}
+
+// --- Reset Password ---
+
+func (h *Handler) PageResetPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.URL.Query().Get("token")
+	_, purpose, ok := h.DB.GetMagicLink(token)
+	if !ok || purpose != "reset" {
+		h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "reset.invalid_token"),
+		})
+		return
+	}
+	h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+		"Lang":  lang,
+		"Token": token,
+	})
+}
+
+func (h *Handler) HandleResetPassword(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.FormValue("token")
+	password := r.FormValue("password")
+
+	userID, purpose, ok := h.DB.GetMagicLink(token)
+	if !ok || purpose != "reset" {
+		h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "reset.invalid_token"),
+		})
+		return
+	}
+
+	if len(password) < 8 {
+		h.Templates.ExecuteTemplate(w, "reset_password.html", map[string]any{
+			"Lang":  lang,
+			"Token": token,
+			"Error": i18n.T(lang, "reset.password_min"),
+		})
+		return
+	}
+
+	hash, _ := auth.HashPassword(password)
+	h.DB.UpdateUserPassword(userID, hash)
+	h.DB.DeleteMagicLink(token)
+	log.Printf("ACTION: password reset for user_id=%d", userID)
+
+	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{
+		"Lang":    lang,
+		"Success": i18n.T(lang, "reset.success"),
+	})
+}
+
+// --- Magic Login ---
+
+func (h *Handler) PageMagicLogin(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+	h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
+		"Lang":          lang,
+		"SMTPConfigured": smtpCfg.Configured(),
+	})
+}
+
+func (h *Handler) HandleMagicLogin(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	smtpCfg := h.getSMTPConfig()
+
+	if !smtpCfg.Configured() {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "magic.smtp_disabled"),
+		})
+		return
+	}
+
+	email := strings.TrimSpace(r.FormValue("email"))
+	// Always show success to prevent user enumeration
+	successData := map[string]any{
+		"Lang":    lang,
+		"Success": i18n.T(lang, "magic.success"),
+		"SMTPConfigured": true,
+	}
+
+	user, err := h.DB.GetUserByEmail(email)
+	if err != nil || user.Email == "" {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+		return
+	}
+
+	token := auth.GenerateToken()
+	expiresAt := time.Now().Add(1 * time.Hour)
+	if err := h.DB.CreateMagicLink(token, user.ID, "login", expiresAt); err != nil {
+		log.Printf("failed to create magic link: %v", err)
+		h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+		return
+	}
+
+	baseURL := h.getWatchLogURL()
+	magicURL := baseURL + "/auth/magic?token=" + token
+	body := fmt.Sprintf(`<p>%s</p><p><a href="%s">%s</a></p>`,
+		html.EscapeString(i18n.T(lang, "magic.title")),
+		html.EscapeString(magicURL),
+		html.EscapeString(magicURL))
+
+	if err := mail.Send(smtpCfg, user.Email, i18n.T(lang, "email.magic_subject"), body); err != nil {
+		log.Printf("failed to send magic link email to %s: %v", user.Email, err)
+	} else {
+		log.Printf("ACTION: magic login email sent to user=%q", user.Username)
+	}
+
+	h.Templates.ExecuteTemplate(w, "magic_login.html", successData)
+}
+
+func (h *Handler) HandleMagicAuth(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.URL.Query().Get("token")
+
+	userID, purpose, ok := h.DB.GetMagicLink(token)
+	if !ok || purpose != "login" {
+		h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "magic.invalid_token"),
+			"SMTPConfigured": h.getSMTPConfig().Configured(),
+		})
+		return
+	}
+
+	h.DB.DeleteMagicLink(token)
+	sessionToken := h.Sessions.Create(userID)
+	auth.SetSessionCookie(w, sessionToken)
+	log.Printf("ACTION: magic login user_id=%d", userID)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 // --- Pages ---
@@ -853,9 +1075,11 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
+	user, _ := h.DB.GetUserByID(userID)
 	data := map[string]any{
 		"Lang":    lang,
 		"IsAdmin": userID == 1,
+		"Email":   user.Email,
 	}
 	if userID == 1 {
 		tmdbKey := h.DB.GetSetting("tmdb_api_key")
@@ -863,6 +1087,15 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 			// Mask the key, show only last 4 chars
 			data["TMDBKeySet"] = true
 			data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
+		}
+		data["SMTPHost"] = h.DB.GetSetting("smtp_host")
+		data["SMTPPort"] = h.DB.GetSetting("smtp_port")
+		data["SMTPUser"] = h.DB.GetSetting("smtp_user")
+		data["SMTPFrom"] = h.DB.GetSetting("smtp_from")
+		data["WatchLogURL"] = h.DB.GetSetting("watchlog_url")
+		// Don't show password, just indicate if set
+		if h.DB.GetSetting("smtp_password") != "" {
+			data["SMTPPassSet"] = true
 		}
 	}
 	h.Templates.ExecuteTemplate(w, "settings.html", data)
@@ -878,13 +1111,37 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	h.DB.SetUserLang(userID, lang)
 
-	// Only admin (user id 1) can update TMDB key
+	// Save user email
+	email := strings.TrimSpace(r.FormValue("email"))
+	h.DB.UpdateUserEmail(userID, email)
+
+	// Only admin (user id 1) can update TMDB key and SMTP settings
 	if userID == 1 {
 		tmdbKey := r.FormValue("tmdb_key")
 		if tmdbKey != "" {
 			h.DB.SetSetting("tmdb_api_key", tmdbKey)
 			// Update the TMDB client in-place
 			h.TMDB = tmdb.NewClient(tmdbKey)
+		}
+
+		// SMTP settings
+		if v := r.FormValue("smtp_host"); v != "" {
+			h.DB.SetSetting("smtp_host", v)
+		}
+		if v := r.FormValue("smtp_port"); v != "" {
+			h.DB.SetSetting("smtp_port", v)
+		}
+		if v := r.FormValue("smtp_user"); v != "" {
+			h.DB.SetSetting("smtp_user", v)
+		}
+		if v := r.FormValue("smtp_password"); v != "" {
+			h.DB.SetSetting("smtp_password", v)
+		}
+		if v := r.FormValue("smtp_from"); v != "" {
+			h.DB.SetSetting("smtp_from", v)
+		}
+		if v := r.FormValue("watchlog_url"); v != "" {
+			h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
 		}
 	}
 

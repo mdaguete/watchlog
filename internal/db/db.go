@@ -38,6 +38,8 @@ func (db *DB) migrate() error {
 	}
 	// Add lang column if missing (existing DBs)
 	db.conn.Exec("ALTER TABLE users ADD COLUMN lang TEXT NOT NULL DEFAULT 'es'")
+	// Add email column if missing
+	db.conn.Exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
 	// Add i18n columns for shows
 	db.conn.Exec("ALTER TABLE shows ADD COLUMN overview_en TEXT NOT NULL DEFAULT ''")
 	db.conn.Exec("ALTER TABLE shows ADD COLUMN genres_en TEXT NOT NULL DEFAULT ''")
@@ -186,6 +188,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 	user_id INTEGER NOT NULL REFERENCES users(id),
 	expires_at DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS magic_links (
+	token TEXT PRIMARY KEY NOT NULL,
+	user_id INTEGER NOT NULL REFERENCES users(id),
+	purpose TEXT NOT NULL,
+	expires_at DATETIME NOT NULL
+);
 `
 
 // --- Users ---
@@ -206,15 +215,15 @@ func (db *DB) CreateUser(username, passwordHash string) (int64, error) {
 
 func (db *DB) GetUserByUsername(username string) (models.User, error) {
 	var u models.User
-	err := db.conn.QueryRow("SELECT id, username, password_hash, created_at FROM users WHERE username = ?", username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	err := db.conn.QueryRow("SELECT id, username, email, password_hash, created_at FROM users WHERE username = ?", username).
+		Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt)
 	return u, err
 }
 
 func (db *DB) GetUserByID(id int64) (models.User, error) {
 	var u models.User
-	err := db.conn.QueryRow("SELECT id, username, password_hash, created_at FROM users WHERE id = ?", id).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	err := db.conn.QueryRow("SELECT id, username, email, password_hash, created_at FROM users WHERE id = ?", id).
+		Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt)
 	return u, err
 }
 
@@ -1036,5 +1045,51 @@ func (db *DB) DeleteSession(token string) error {
 
 func (db *DB) CleanExpiredSessions() error {
 	_, err := db.conn.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, time.Now())
+	return err
+}
+
+// --- Users: Email & Password ---
+
+func (db *DB) GetUserByEmail(email string) (models.User, error) {
+	var u models.User
+	err := db.conn.QueryRow("SELECT id, username, email, password_hash, created_at FROM users WHERE email = ?", email).
+		Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	return u, err
+}
+
+func (db *DB) UpdateUserEmail(userID int64, email string) error {
+	_, err := db.conn.Exec("UPDATE users SET email = ? WHERE id = ?", email, userID)
+	return err
+}
+
+func (db *DB) UpdateUserPassword(userID int64, passwordHash string) error {
+	_, err := db.conn.Exec("UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
+	return err
+}
+
+// --- Magic Links ---
+
+func (db *DB) CreateMagicLink(token string, userID int64, purpose string, expiresAt time.Time) error {
+	_, err := db.conn.Exec(`INSERT INTO magic_links (token, user_id, purpose, expires_at) VALUES (?, ?, ?, ?)`, token, userID, purpose, expiresAt)
+	return err
+}
+
+func (db *DB) GetMagicLink(token string) (int64, string, bool) {
+	var userID int64
+	var purpose string
+	err := db.conn.QueryRow(`SELECT user_id, purpose FROM magic_links WHERE token = ? AND expires_at > ?`, token, time.Now()).Scan(&userID, &purpose)
+	if err != nil {
+		return 0, "", false
+	}
+	return userID, purpose, true
+}
+
+func (db *DB) DeleteMagicLink(token string) error {
+	_, err := db.conn.Exec(`DELETE FROM magic_links WHERE token = ?`, token)
+	return err
+}
+
+func (db *DB) CleanExpiredMagicLinks() error {
+	_, err := db.conn.Exec(`DELETE FROM magic_links WHERE expires_at <= ?`, time.Now())
 	return err
 }
