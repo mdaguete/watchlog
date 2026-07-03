@@ -735,6 +735,49 @@ func (h *Handler) APIRefreshUpcoming(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<span class="text-xs text-red-600">TMDB not configured</span>`))
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
+	}
+
+	shows, _ := h.DB.GetAllShowsWithTMDB()
+	log.Printf("TMDB REFRESH: updating %d shows...", len(shows))
+	updated := 0
+	for i, show := range shows {
+		result, err := h.TMDB.GetTVShow(show.TMDBID)
+		if err != nil { log.Printf("TMDB REFRESH [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err); continue }
+		genres := extractGenreNames(result.Genres)
+		h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
+		updated++
+	}
+
+	movies, _ := h.DB.GetAllMoviesWithTMDB()
+	log.Printf("TMDB REFRESH: updating %d movies...", len(movies))
+	moviesUpdated := 0
+	for i, movie := range movies {
+		detail, err := h.TMDB.GetMovie(movie.TMDBID)
+		if err != nil { log.Printf("TMDB REFRESH [%d/%d] ✗ movie %q: %v", i+1, len(movies), movie.Name, err); continue }
+		genres := extractGenreNames(detail.Genres)
+		h.DB.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, genres, detail.Runtime)
+		moviesUpdated++
+	}
+
+	log.Printf("TMDB REFRESH: complete — shows %d/%d, movies %d/%d", updated, len(shows), moviesUpdated, len(movies))
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ Updated: %d shows, %d movies</span>`, updated, moviesUpdated)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"shows_updated": updated, "movies_updated": moviesUpdated})
+}
+
 func extractGenreNames(genres []tmdb.Genre) string {
 	names := make([]string, len(genres))
 	for i, g := range genres { names[i] = g.Name }

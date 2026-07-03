@@ -926,6 +926,40 @@ func (db *DB) GetUpcomingCacheForUser(userID int64) ([]CachedUpcoming, error) {
 	return results, nil
 }
 
+func (db *DB) GetAllShowsWithTMDB() ([]models.Show, error) {
+	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, backdrop_url, overview, genres, status, total_seasons FROM shows WHERE tmdb_id > 0 ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var shows []models.Show
+	for rows.Next() {
+		var s models.Show
+		if err := rows.Scan(&s.ID, &s.ExternalID, &s.Name, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.Genres, &s.Status, &s.TotalSeasons); err != nil {
+			return nil, err
+		}
+		shows = append(shows, s)
+	}
+	return shows, nil
+}
+
+func (db *DB) GetAllMoviesWithTMDB() ([]models.Movie, error) {
+	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime FROM movies WHERE tmdb_id > 0 ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var movies []models.Movie
+	for rows.Next() {
+		var m models.Movie
+		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime); err != nil {
+			return nil, err
+		}
+		movies = append(movies, m)
+	}
+	return movies, nil
+}
+
 func (db *DB) GetActiveShowsWithTMDB() ([]models.Show, error) {
 	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, backdrop_url, overview, genres, status, total_seasons FROM shows WHERE tmdb_id > 0 AND status != 'Ended' AND status != 'Canceled' ORDER BY name")
 	if err != nil {
