@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mdaguete/watchlog/internal/auth"
+	"github.com/mdaguete/watchlog/internal/cache"
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
@@ -31,15 +32,17 @@ type Handler struct {
 	TMDB         *tmdb.Client
 	Sessions     *auth.SessionStore
 	LoginLimiter *ratelimit.Limiter
+	ImageCache   *cache.ImageCache
 }
 
-func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore) *Handler {
+func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore, imgCache *cache.ImageCache) *Handler {
 	return &Handler{
 		DB:           database,
 		Templates:    tmpl,
 		TMDB:         tmdbClient,
 		Sessions:     sessions,
 		LoginLimiter: ratelimit.New(5, 15*time.Minute),
+		ImageCache:   imgCache,
 	}
 }
 
@@ -509,20 +512,21 @@ func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 	episodes, _ := h.DB.GetEpisodesByShow(userID, id)
 	progress, _ := h.DB.GetShowProgress(userID, id)
 
-	// Build seasons map with total episode count per season
-	// Try TMDB first for accurate totals, fall back to watched episode data
-	seasons := make(map[int]int)
-	if show.TMDBID > 0 && h.TMDB != nil && h.TMDB.Enabled() {
+	// Build seasons map: read from cached season_episodes table first
+	seasons, _ := h.DB.GetSeasonEpisodes(id)
+	if len(seasons) == 0 && show.TMDBID > 0 && h.TMDB != nil && h.TMDB.Enabled() {
+		// Fallback: fetch from TMDB and cache for next time
 		tvShow, err := h.TMDB.GetTVShow(show.TMDBID)
 		if err == nil {
 			for _, s := range tvShow.Seasons {
-				if s.SeasonNumber > 0 { // skip specials (season 0)
+				if s.SeasonNumber > 0 {
 					seasons[s.SeasonNumber] = s.EpisodeCount
+					h.DB.UpsertSeasonEpisodes(id, s.SeasonNumber, s.EpisodeCount)
 				}
 			}
 		}
 	}
-	// Fill in from watched data if TMDB didn't provide info
+	// Fill in from watched data if nothing else available
 	for _, ep := range episodes {
 		if _, ok := seasons[ep.SeasonNumber]; !ok {
 			seasons[ep.SeasonNumber] = ep.EpisodeNumber
@@ -948,6 +952,12 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
 			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
 		}
+		// Cache season episode counts
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
+			}
+		}
 		fetched++
 		log.Printf("TMDB [%d/%d] ✓ %q → tmdb_id=%d", i+1, len(shows), show.Name, result.ID)
 	}
@@ -1066,6 +1076,12 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
 			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
+		}
+		// Cache season episode counts
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
+			}
 		}
 		updated++
 	}

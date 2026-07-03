@@ -13,7 +13,7 @@
             <a href="/shows/{{.ID}}" class="group">
                 <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
                     {{if .PosterURL}}
-                    <img src="{{.PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                     {{else}}
                     <div class="w-full h-full flex items-center justify-center text-wl-gray text-xs">{{T $.Lang "shows.no_image"}}</div>
                     {{end}}
@@ -34,7 +34,7 @@
             <div class="group">
                 <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
                     {{if .PosterURL}}
-                    <img src="{{.PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                     {{else}}
                     <div class="w-full h-full flex items-center justify-center text-wl-gray text-xs">{{T $.Lang "shows.no_image"}}</div>
                     {{end}}

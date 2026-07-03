@@ -20,7 +20,7 @@
         <div class="flex items-center justify-between p-5 bg-white" id="item-{{.ID}}">
             <div class="flex items-center gap-4">
                 {{if .PosterURL}}
-                <img src="{{.PosterURL}}" alt="{{.Name}}" class="w-10 h-14 object-cover shrink-0">
+                <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-10 h-14 object-cover shrink-0">
                 {{else}}
                 <div class="w-10 h-14 bg-wl-light flex items-center justify-center shrink-0 text-xs text-wl-gray">{{if eq .EntityType "series"}}TV{{else}}Film{{end}}</div>
                 {{end}}

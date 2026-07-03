@@ -11,7 +11,7 @@
         {{range .Upcoming}}
         <div class="flex gap-5 p-6 bg-white items-start">
             {{if .PosterURL}}
-            <img src="{{.PosterURL}}" alt="{{.ShowName}}" class="w-12 h-18 object-cover shrink-0">
+            <img src="{{ImgURL .PosterURL}}" alt="{{.ShowName}}" class="w-12 h-18 object-cover shrink-0">
             {{end}}
             <div class="flex-1 min-w-0">
                 <div class="flex items-baseline justify-between">

@@ -20,6 +20,7 @@ var migrations = []Migration{
 	{Version: 1, Description: "initial schema", Up: migrateV1},
 	{Version: 2, Description: "i18n columns for shows and movies", Up: migrateV2},
 	{Version: 3, Description: "email column on users", Up: migrateV3},
+	{Version: 4, Description: "season episodes cache table", Up: migrateV4},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -299,5 +300,16 @@ func migrateV2(tx *sql.Tx) error {
 
 func migrateV3(tx *sql.Tx) error {
 	_, err := tx.Exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+func migrateV4(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS season_episodes (
+	show_id INTEGER NOT NULL REFERENCES shows(id),
+	season_number INTEGER NOT NULL,
+	episode_count INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (show_id, season_number)
+)`)
 	return err
 }

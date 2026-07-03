@@ -843,6 +843,32 @@ func (db *DB) GetAllMoviesWithTMDB() ([]models.Movie, error) {
 	return movies, nil
 }
 
+// --- Season Episodes Cache ---
+
+func (db *DB) UpsertSeasonEpisodes(showID int64, seasonNumber, episodeCount int) error {
+	_, err := db.conn.Exec(`INSERT INTO season_episodes (show_id, season_number, episode_count) VALUES (?, ?, ?)
+		ON CONFLICT(show_id, season_number) DO UPDATE SET episode_count = excluded.episode_count`,
+		showID, seasonNumber, episodeCount)
+	return err
+}
+
+func (db *DB) GetSeasonEpisodes(showID int64) (map[int]int, error) {
+	rows, err := db.conn.Query("SELECT season_number, episode_count FROM season_episodes WHERE show_id = ? ORDER BY season_number", showID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[int]int)
+	for rows.Next() {
+		var season, count int
+		if err := rows.Scan(&season, &count); err != nil {
+			return nil, err
+		}
+		result[season] = count
+	}
+	return result, nil
+}
+
 func (db *DB) GetActiveShowsWithTMDB() ([]models.Show, error) {
 	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, backdrop_url, overview, genres, status, total_seasons FROM shows WHERE tmdb_id > 0 AND status != 'Ended' AND status != 'Canceled' ORDER BY name")
 	if err != nil {

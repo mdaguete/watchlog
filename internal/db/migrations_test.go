@@ -149,7 +149,7 @@ func TestDetectVersion_PreExistingDB(t *testing.T) {
 	defer database.Close()
 
 	version := database.currentVersion()
-	if version != 3 {
-		t.Errorf("detected version = %d, want 3", version)
+	if version != len(migrations) {
+		t.Errorf("detected version = %d, want %d", version, len(migrations))
 	}
 }

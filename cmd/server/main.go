@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/mdaguete/watchlog/internal/auth"
+	"github.com/mdaguete/watchlog/internal/cache"
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/handlers"
 	"github.com/mdaguete/watchlog/internal/i18n"
@@ -141,6 +143,13 @@ func main() {
 	defer cancel()
 	worker.StartUpcomingRefresher(ctx, database, tmdbClient)
 
+	// Image cache directory (relative to DB path)
+	cacheDir := filepath.Join(filepath.Dir(*dbPath), "cache", "images")
+	imgCache, err := cache.NewImageCache(cacheDir)
+	if err != nil {
+		log.Printf("Warning: image cache disabled: %v", err)
+	}
+
 	// Parse templates
 	funcMap := template.FuncMap{
 		"T": i18n.T,
@@ -167,6 +176,12 @@ func main() {
 			if nameES != "" { return nameES }
 			return name
 		},
+		"ImgURL": func(url string) string {
+			if imgCache == nil || url == "" { return url }
+			local, err := imgCache.Ensure(url)
+			if err != nil { return url }
+			return local
+		},
 		"min": func(a, b int) int {
 			if a < b {
 				return a
@@ -185,7 +200,7 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database))
+	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database), imgCache)
 
 	mux := http.NewServeMux()
 
@@ -272,6 +287,8 @@ func main() {
 
 	// Static files
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	// Cached images
+	mux.Handle("GET /static/cache/images/", http.StripPrefix("/static/cache/images/", http.FileServer(http.Dir(cacheDir))))
 
 	log.Printf("Listening on http://localhost%s", *addr)
 
