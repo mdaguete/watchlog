@@ -635,7 +635,14 @@ func (h *Handler) APIFetchTMDB(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
-	if h.TMDB == nil || !h.TMDB.Enabled() { writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return }
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<span class="text-xs text-red-600">TMDB not configured</span>`))
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
+	}
 	shows, _ := h.DB.GetShowsWithoutTMDB()
 	log.Printf("TMDB FETCH: starting — %d shows", len(shows))
 	fetched := 0
@@ -711,7 +718,14 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) APIRefreshUpcoming(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
-	if h.TMDB == nil || !h.TMDB.Enabled() { writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return }
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<span class="text-xs text-red-600">TMDB not configured</span>`))
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
+	}
 	worker.RefreshUpcomingCache(h.DB, h.TMDB)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
