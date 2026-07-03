@@ -48,7 +48,7 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 	}
 
 	sessions := auth.NewSessionStore(database)
-	h := New(database, tmpl, nil, sessions, nil)
+	h := New(database, tmpl, nil, sessions, nil, os.TempDir())
 
 	// Create test user
 	hash, _ := auth.HashPassword("test123")
@@ -1327,7 +1327,7 @@ func TestSetupWizard_Step1_EmptyUsername(t *testing.T) {
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
 	sessions := auth.NewSessionStore(database)
-	h := New(database, tmpl, nil, sessions, nil)
+	h := New(database, tmpl, nil, sessions, nil, os.TempDir())
 
 	body := "step=1&username=&email=test@x.com&password=12345678&password_confirm=12345678"
 	req := httptest.NewRequest("POST", "/setup", bytes.NewBufferString(body))
@@ -1353,7 +1353,7 @@ func TestSetupWizard_Step1_PasswordMismatch(t *testing.T) {
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
 	sessions := auth.NewSessionStore(database)
-	h := New(database, tmpl, nil, sessions, nil)
+	h := New(database, tmpl, nil, sessions, nil, os.TempDir())
 
 	body := "step=1&username=admin&email=a@b.com&password=12345678&password_confirm=different"
 	req := httptest.NewRequest("POST", "/setup", bytes.NewBufferString(body))
@@ -1379,7 +1379,7 @@ func TestSetupWizard_Step1_Success(t *testing.T) {
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
 	sessions := auth.NewSessionStore(database)
-	h := New(database, tmpl, nil, sessions, nil)
+	h := New(database, tmpl, nil, sessions, nil, os.TempDir())
 
 	body := "step=1&username=admin&email=admin@example.com&password=securepass&password_confirm=securepass"
 	req := httptest.NewRequest("POST", "/setup", bytes.NewBufferString(body))

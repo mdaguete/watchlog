@@ -33,9 +33,10 @@ type Handler struct {
 	Sessions     *auth.SessionStore
 	LoginLimiter *ratelimit.Limiter
 	ImageCache   *cache.ImageCache
+	DataDir      string
 }
 
-func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore, imgCache *cache.ImageCache) *Handler {
+func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore, imgCache *cache.ImageCache, dataDir string) *Handler {
 	return &Handler{
 		DB:           database,
 		Templates:    tmpl,
@@ -43,6 +44,7 @@ func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sess
 		Sessions:     sessions,
 		LoginLimiter: ratelimit.New(5, 15*time.Minute),
 		ImageCache:   imgCache,
+		DataDir:      dataDir,
 	}
 }
 
@@ -1376,7 +1378,9 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	log.Printf("import: received file %q (%d bytes)", header.Filename, header.Size)
 
 	// Save to temp file
-	tmpFile, err := os.CreateTemp("", "watchlog-import-*.zip")
+	tmpBase := filepath.Join(h.DataDir, "tmp")
+	os.MkdirAll(tmpBase, 0755)
+	tmpFile, err := os.CreateTemp(tmpBase, "watchlog-import-*.zip")
 	if err != nil {
 		log.Printf("import: create temp file error: %v", err)
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -1388,7 +1392,7 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	log.Printf("import: saved to %s", tmpFile.Name())
 
 	// Extract zip to temp dir
-	tmpDir, err := os.MkdirTemp("", "watchlog-import-data-")
+	tmpDir, err := os.MkdirTemp(tmpBase, "watchlog-import-data-")
 	if err != nil {
 		log.Printf("import: create temp dir error: %v", err)
 		http.Error(w, "Server error", http.StatusInternalServerError)
