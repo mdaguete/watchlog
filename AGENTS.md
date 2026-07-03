@@ -33,7 +33,9 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - WAL mode for concurrent reads during writes
 - `MaxOpenConns(1)` because SQLite doesn't support concurrent writes
 - **Important**: never hold a `rows` cursor open while calling `Exec` — this deadlocks with `MaxOpenConns(1)`. Always read rows into a slice first, close the cursor, then execute writes.
-- Inline migrations in the schema const (CREATE IF NOT EXISTS) + ALTER TABLE for new columns
+- Automatic migrations on startup via `schema_migrations` table
+- Each migration is a Go function that runs in a transaction (rollback on failure)
+- Detects pre-existing databases and bootstraps version without re-running migrations
 - Episode UNIQUE constraint is `(user_id, show_id, season_number, episode_number)` — an episode is recorded once per user
 
 ### Frontend
