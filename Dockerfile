@@ -1,17 +1,20 @@
-# Go builder stage
-FROM docker.io/library/golang:1.26-alpine AS builder
+# Go builder stage - always runs on the build host's native platform
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
-# Cache dependencies layer
+# Cache dependencies layer (runs natively, no emulation)
 COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source
 COPY . .
 
-# Build with optimizations
-RUN CGO_ENABLED=0 go build \
+# Cross-compile natively using Go's built-in support (no QEMU needed)
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s" \
     -trimpath \
     -o watchlog ./cmd/server/
