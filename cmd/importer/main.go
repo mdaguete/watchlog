@@ -11,6 +11,7 @@ import (
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/importer"
 	"github.com/mdaguete/watchlog/internal/tmdb"
+	"github.com/mdaguete/watchlog/internal/worker"
 )
 
 func main() {
@@ -60,7 +61,12 @@ func main() {
 		if tmdbKey == "" {
 			log.Println("TMDB: skipped (no TMDB_API_KEY in .env or environment)")
 		} else {
+			client := tmdb.NewClient(tmdbKey)
 			fetchTMDB(database, tmdbKey)
+
+			// Refresh upcoming episodes cache
+			log.Println("Refreshing upcoming episodes cache...")
+			worker.RefreshUpcomingCache(database, client)
 		}
 	}
 
