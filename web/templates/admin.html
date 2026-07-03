@@ -22,33 +22,12 @@
         <div class="border-t border-wl-border pt-8">
             <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.smtp_section"}}</h2>
             <p class="text-xs text-wl-gray mb-4">{{T .Lang "admin.smtp_help"}}</p>
-            <div class="space-y-4">
-                <div>
-                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.smtp_host"}}</label>
-                    <input type="text" name="smtp_host" value="{{.SMTPHost}}" placeholder="smtp.example.com"
-                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-                <div>
-                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.smtp_port"}}</label>
-                    <input type="text" name="smtp_port" value="{{.SMTPPort}}" placeholder="587"
-                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-                <div>
-                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.smtp_user"}}</label>
-                    <input type="text" name="smtp_user" value="{{.SMTPUser}}" placeholder="user@example.com"
-                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-                <div>
-                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.smtp_password"}}</label>
-                    <input type="password" name="smtp_password" placeholder="{{if .SMTPPassSet}}••••••••{{end}}"
-                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-                <div>
-                    <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.smtp_from"}}</label>
-                    <input type="email" name="smtp_from" value="{{.SMTPFrom}}" placeholder="noreply@example.com"
-                        class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-            </div>
+            {{if .SMTPConfigured}}
+            <p class="text-xs text-wl-gray mb-2 font-mono">{{.SMTPDisplay}}</p>
+            {{end}}
+            <input type="text" name="smtp_url" placeholder="smtps://user:password@smtp.example.com:465/from@example.com"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm font-mono focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.smtp_url_help"}}</p>
         </div>
 
         <!-- Public URL -->

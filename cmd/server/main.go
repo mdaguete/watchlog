@@ -113,22 +113,25 @@ func main() {
 		log.Println("TMDB integration disabled (set TMDB_API_KEY to enable)")
 	}
 
-	// SMTP settings: env vars take priority, then DB settings
-	smtpSettings := map[string]string{
-		"smtp_host":     "SMTP_HOST",
-		"smtp_port":     "SMTP_PORT",
-		"smtp_user":     "SMTP_USER",
-		"smtp_password":  "SMTP_PASSWORD",
-		"smtp_from":     "SMTP_FROM",
-		"watchlog_url":  "WATCHLOG_URL",
+	// SMTP: env var SMTP_URL takes priority, then DB setting
+	// Format: smtps://user:password@host:port/from@example.com
+	if smtpURL := os.Getenv("SMTP_URL"); smtpURL != "" {
+		stored := database.GetSetting("smtp_url")
+		if stored != smtpURL {
+			database.SetSetting("smtp_url", smtpURL)
+			log.Println("SMTP: URL saved to database")
+		}
 	}
-	for dbKey, envKey := range smtpSettings {
-		if val := os.Getenv(envKey); val != "" {
-			stored := database.GetSetting(dbKey)
-			if stored != val {
-				database.SetSetting(dbKey, val)
-				log.Printf("SMTP: %s saved to database", dbKey)
-			}
+	if database.GetSetting("smtp_url") != "" {
+		log.Println("SMTP: configured")
+	}
+
+	// Public URL for magic links
+	if watchlogURL := os.Getenv("WATCHLOG_URL"); watchlogURL != "" {
+		stored := database.GetSetting("watchlog_url")
+		if stored != watchlogURL {
+			database.SetSetting("watchlog_url", watchlogURL)
+			log.Println("WATCHLOG_URL saved to database")
 		}
 	}
 

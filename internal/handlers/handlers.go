@@ -216,13 +216,16 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 // --- SMTP Config Helper ---
 
 func (h *Handler) getSMTPConfig() mail.Config {
-	return mail.Config{
-		Host:     h.DB.GetSetting("smtp_host"),
-		Port:     h.DB.GetSetting("smtp_port"),
-		User:     h.DB.GetSetting("smtp_user"),
-		Password: h.DB.GetSetting("smtp_password"),
-		From:     h.DB.GetSetting("smtp_from"),
+	smtpURL := h.DB.GetSetting("smtp_url")
+	if smtpURL == "" {
+		return mail.Config{}
 	}
+	cfg, err := mail.ParseURL(smtpURL)
+	if err != nil {
+		log.Printf("SMTP: invalid URL: %v", err)
+		return mail.Config{}
+	}
+	return cfg
 }
 
 func (h *Handler) getWatchLogURL() string {
@@ -1103,11 +1106,7 @@ func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
 	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
 	lang := h.getLang(r, userID)
 	data := map[string]any{
-		"Lang":       lang,
-		"SMTPHost":   h.DB.GetSetting("smtp_host"),
-		"SMTPPort":   h.DB.GetSetting("smtp_port"),
-		"SMTPUser":   h.DB.GetSetting("smtp_user"),
-		"SMTPFrom":   h.DB.GetSetting("smtp_from"),
+		"Lang":        lang,
 		"WatchLogURL": h.DB.GetSetting("watchlog_url"),
 	}
 	tmdbKey := h.DB.GetSetting("tmdb_api_key")
@@ -1115,8 +1114,13 @@ func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
 		data["TMDBKeySet"] = true
 		data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
 	}
-	if h.DB.GetSetting("smtp_password") != "" {
-		data["SMTPPassSet"] = true
+	smtpURL := h.DB.GetSetting("smtp_url")
+	if smtpURL != "" {
+		cfg, err := mail.ParseURL(smtpURL)
+		if err == nil {
+			data["SMTPConfigured"] = true
+			data["SMTPDisplay"] = mail.FormatURL(cfg)
+		}
 	}
 	h.Templates.ExecuteTemplate(w, "admin.html", data)
 }
@@ -1132,13 +1136,16 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 		h.DB.SetSetting("tmdb_api_key", tmdbKey)
 		h.TMDB = tmdb.NewClient(tmdbKey)
 	}
-	// SMTP settings
-	if v := r.FormValue("smtp_host"); v != "" { h.DB.SetSetting("smtp_host", v) }
-	if v := r.FormValue("smtp_port"); v != "" { h.DB.SetSetting("smtp_port", v) }
-	if v := r.FormValue("smtp_user"); v != "" { h.DB.SetSetting("smtp_user", v) }
-	if v := r.FormValue("smtp_password"); v != "" { h.DB.SetSetting("smtp_password", v) }
-	if v := r.FormValue("smtp_from"); v != "" { h.DB.SetSetting("smtp_from", v) }
-	if v := r.FormValue("watchlog_url"); v != "" { h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/")) }
+	// SMTP URL
+	if smtpURL := strings.TrimSpace(r.FormValue("smtp_url")); smtpURL != "" {
+		if _, err := mail.ParseURL(smtpURL); err == nil {
+			h.DB.SetSetting("smtp_url", smtpURL)
+		}
+	}
+	// Public URL
+	if v := strings.TrimSpace(r.FormValue("watchlog_url")); v != "" {
+		h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
+	}
 
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
