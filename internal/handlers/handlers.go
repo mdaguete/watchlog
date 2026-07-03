@@ -118,7 +118,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	user, err := h.DB.GetUserByUsername(username)
 	if err != nil || !auth.CheckPassword(user.PasswordHash, password) {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": "Usuario o contraseña incorrectos", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": "Invalid username or password", "Lang": lang})
 		return
 	}
 
@@ -134,12 +134,12 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if username == "" || password == "" {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Todos los campos son obligatorios", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Username is required", "Lang": lang})
 		return
 	}
 	if len(password) < 8 {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Contraseña mínimo 8 caracteres", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Password must be at least 8 characters", "Lang": lang})
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.DB.CreateUser(username, hash)
 	if err != nil {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "El usuario ya existe", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Username already exists", "Lang": lang})
 		return
 	}
 
@@ -748,8 +748,12 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	username := r.FormValue("username")
 	password := r.FormValue("password")
-	if username == "" || password == "" || len(password) < 8 {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es", "Error": "Username and password (min 8 chars) required"})
+	if username == "" {
+		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es", "Error": "Username is required"})
+		return
+	}
+	if len(password) < 8 {
+		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es", "Error": "Password must be at least 8 characters"})
 		return
 	}
 	hash, _ := auth.HashPassword(password)
