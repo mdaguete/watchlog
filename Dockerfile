@@ -19,12 +19,16 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -o watchlog ./cmd/server/
 
+# Create data directory for the final image
+RUN mkdir -p /data && chown 65532:65532 /data
+
 # Final stage - using distroless for minimal attack surface
 FROM gcr.io/distroless/static-debian12:nonroot
 
 # Copy binary and templates
 COPY --from=builder /app/watchlog /usr/local/bin/
 COPY --from=builder /app/web /usr/local/share/watchlog/web
+COPY --from=builder --chown=nonroot:nonroot /data /data
 
 # Container metadata following OCI standards
 LABEL org.opencontainers.image.title="WatchLog"
