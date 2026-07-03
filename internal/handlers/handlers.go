@@ -119,7 +119,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	user, err := h.DB.GetUserByUsername(username)
 	if err != nil || !auth.CheckPassword(user.PasswordHash, password) {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": "Invalid username or password", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.error"), "Lang": lang})
 		return
 	}
 
@@ -135,26 +135,26 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if username == "" || password == "" {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Username is required", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": i18n.T(lang, "register.error.username_required"), "Lang": lang})
 		return
 	}
 	if len(password) < 8 {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Password must be at least 8 characters", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": i18n.T(lang, "register.error.password_min"), "Lang": lang})
 		return
 	}
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Error interno", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": i18n.T(lang, "register.error.internal"), "Lang": lang})
 		return
 	}
 
 	userID, err := h.DB.CreateUser(username, hash)
 	if err != nil {
 		lang := h.getLang(r, 0)
-		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": "Username already exists", "Lang": lang})
+		h.Templates.ExecuteTemplate(w, "register.html", map[string]any{"Error": i18n.T(lang, "register.error.username_taken"), "Lang": lang})
 		return
 	}
 
@@ -326,14 +326,14 @@ func (h *Handler) PageAddShow(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
+	lang := h.getLang(r, userID)
 	if h.TMDB == nil || !h.TMDB.Enabled() {
-		w.Write([]byte(`<p class="text-sm text-wl-gray">TMDB no configurado</p>`))
+		w.Write([]byte(`<p class="text-sm text-wl-gray">` + i18n.T(lang, "tmdb.not_configured") + `</p>`))
 		return
 	}
 	query := r.URL.Query().Get("q")
 	mediaType := r.URL.Query().Get("type")
 	if query == "" { w.Write([]byte("")); return }
-	lang := h.getLang(r, userID)
 
 	if mediaType == "movie" {
 		results, _ := h.TMDB.SearchMovie(query)
@@ -467,8 +467,9 @@ func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("ACTION: user=%d mark season show=%d S%02d (%d eps)", userID, showID, req.Season, marked)
 	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ Temporada %d: %d episodios</span>`, req.Season, marked)
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ `+i18n.T(lang, "tmdb.season_marked")+`</span>`, req.Season, marked)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "marked": marked})
@@ -568,7 +569,8 @@ func (h *Handler) APIAddToList(w http.ResponseWriter, r *http.Request) {
 	if req.ShowID > 0 { h.DB.AddShowToList(listID, req.ShowID) }
 	if req.MovieID > 0 { h.DB.AddMovieToList(listID, req.MovieID) }
 	if r.Header.Get("HX-Request") == "true" {
-		w.Write([]byte(`<span class="text-xs text-wl-gray">✓ Añadido</span>`))
+		lang := h.getLang(r, userID)
+		w.Write([]byte(`<span class="text-xs text-wl-gray">✓ ` + i18n.T(lang, "tmdb.list_added") + `</span>`))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -638,7 +640,7 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<span class="text-xs text-red-600">TMDB not configured</span>`))
+			w.Write([]byte(`<span class="text-xs text-red-600">` + i18n.T(h.getLang(r, userID), "tmdb.not_configured") + `</span>`))
 			return
 		}
 		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
@@ -676,8 +678,9 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("TMDB FETCH: complete — shows %d/%d, movies %d/%d", fetched, len(shows), moviesFetched, len(movies))
 	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ Shows: %d/%d, Movies: %d/%d</span>`, fetched, len(shows), moviesFetched, len(movies))
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ `+i18n.T(lang, "tmdb.fetch_result")+`</span>`, fetched, len(shows), moviesFetched, len(movies))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"shows_fetched": fetched, "movies_fetched": moviesFetched})
@@ -696,8 +699,9 @@ func (h *Handler) APIAddShowFromTMDB(w http.ResponseWriter, r *http.Request) {
 	h.DB.FollowShow(userID, id)
 	log.Printf("ACTION: user=%d add show %q tmdb_id=%d", userID, show.Name, show.ID)
 	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ "%s" añadida</span>`, html.EscapeString(show.Name))
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ "%s" `+i18n.T(lang, "tmdb.added")+`</span>`, html.EscapeString(show.Name))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "id": id})
@@ -716,8 +720,9 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	h.DB.MarkMovieWatched(userID, id, time.Now())
 	log.Printf("ACTION: user=%d add movie %q tmdb_id=%d", userID, movie.Title, movie.ID)
 	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ "%s" añadida</span>`, html.EscapeString(movie.Title))
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ "%s" `+i18n.T(lang, "tmdb.added")+`</span>`, html.EscapeString(movie.Title))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -729,15 +734,16 @@ func (h *Handler) APIRefreshUpcoming(w http.ResponseWriter, r *http.Request) {
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<span class="text-xs text-red-600">TMDB not configured</span>`))
+			w.Write([]byte(`<span class="text-xs text-red-600">` + i18n.T(h.getLang(r, userID), "tmdb.not_configured") + `</span>`))
 			return
 		}
 		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
 	}
 	worker.RefreshUpcomingCache(h.DB, h.TMDB)
 	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<span class="text-xs text-wl-gray">✓ Upcoming episodes refreshed</span>`))
+		w.Write([]byte(`<span class="text-xs text-wl-gray">✓ ` + i18n.T(lang, "tmdb.upcoming_refreshed") + `</span>`))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -749,7 +755,7 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<span class="text-xs text-red-600">TMDB not configured</span>`))
+			w.Write([]byte(`<span class="text-xs text-red-600">` + i18n.T(h.getLang(r, userID), "tmdb.not_configured") + `</span>`))
 			return
 		}
 		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
@@ -793,8 +799,9 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("TMDB REFRESH: complete — shows %d/%d, movies %d/%d", updated, len(shows), moviesUpdated, len(movies))
 	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ Updated: %d shows, %d movies</span>`, updated, moviesUpdated)
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ `+i18n.T(lang, "tmdb.refresh_result")+`</span>`, updated, moviesUpdated)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"shows_updated": updated, "movies_updated": moviesUpdated})
@@ -857,7 +864,8 @@ func (h *Handler) PageSetup(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es"})
+	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
+	h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang})
 }
 
 func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
@@ -865,20 +873,21 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	if username == "" {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es", "Error": "Username is required"})
+		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.username_required")})
 		return
 	}
 	if len(password) < 8 {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es", "Error": "Password must be at least 8 characters"})
+		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.password_min")})
 		return
 	}
 	hash, _ := auth.HashPassword(password)
 	userID, err := h.DB.CreateUser(username, hash)
 	if err != nil {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": "es", "Error": "Could not create user"})
+		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.create_failed")})
 		return
 	}
 	token := h.Sessions.Create(userID)
@@ -958,7 +967,8 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
-	sendSSE("Starting import...")
+	lang := h.getLang(r, userID)
+	sendSSE(i18n.T(lang, "import.starting"))
 
 	imp := importer.New(h.DB, tmpDir, userID)
 	imp.LogFunc = sendSSE
@@ -966,13 +976,13 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	if err := imp.ImportAll(); err != nil {
 		sendSSE("ERROR: " + err.Error())
 	} else {
-		sendSSE("✓ Import complete!")
+		sendSSE(i18n.T(lang, "import.complete"))
 	}
 
 	// Fetch TMDB metadata
 	if h.TMDB != nil && h.TMDB.Enabled() {
 		sendSSE("═══════════════════════════════════════")
-		sendSSE("  Fetching TMDB metadata...")
+		sendSSE("  " + i18n.T(lang, "import.fetching_tmdb"))
 		sendSSE("═══════════════════════════════════════")
 
 		shows, _ := h.DB.GetShowsWithoutTMDB()
@@ -1024,14 +1034,14 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 			sendSSE(fmt.Sprintf("  Movies: %d/%d enriched", fetched, len(movies)))
 		}
 
-		sendSSE("✓ TMDB fetch complete!")
+		sendSSE(i18n.T(lang, "import.tmdb_complete"))
 	}
 
 	// Refresh upcoming episodes cache after import
 	if h.TMDB != nil && h.TMDB.Enabled() {
-		sendSSE("Refreshing upcoming episodes...")
+		sendSSE(i18n.T(lang, "import.refreshing_upcoming"))
 		worker.RefreshUpcomingCache(h.DB, h.TMDB)
-		sendSSE("✓ Upcoming episodes updated!")
+		sendSSE(i18n.T(lang, "import.upcoming_complete"))
 	}
 
 	sendSSE("[DONE]")

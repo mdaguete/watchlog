@@ -111,10 +111,29 @@ var translations = map[string]map[string]string{
 	"login.submit":      {"es": "Entrar", "en": "Log in"},
 	"login.no_account":  {"es": "¿No tienes cuenta?", "en": "Don't have an account?"},
 	"login.register":    {"es": "Registrarse", "en": "Sign up"},
+	"login.error":       {"es": "Usuario o contraseña incorrectos", "en": "Invalid username or password"},
 	"register.title":    {"es": "Crear cuenta", "en": "Create account"},
 	"register.submit":   {"es": "Crear cuenta", "en": "Create account"},
 	"register.has_account": {"es": "¿Ya tienes cuenta?", "en": "Already have an account?"},
 	"register.login":    {"es": "Iniciar sesión", "en": "Log in"},
+	"register.error.username_required": {"es": "El nombre de usuario es obligatorio", "en": "Username is required"},
+	"register.error.password_min":      {"es": "La contraseña debe tener al menos 8 caracteres", "en": "Password must be at least 8 characters"},
+	"register.error.internal":          {"es": "Error interno", "en": "Internal error"},
+	"register.error.username_taken":    {"es": "El nombre de usuario ya existe", "en": "Username already exists"},
+
+	// Setup
+	"setup.error.username_required": {"es": "El nombre de usuario es obligatorio", "en": "Username is required"},
+	"setup.error.password_min":      {"es": "La contraseña debe tener al menos 8 caracteres", "en": "Password must be at least 8 characters"},
+	"setup.error.create_failed":     {"es": "No se pudo crear el usuario", "en": "Could not create user"},
+
+	// TMDB inline messages
+	"tmdb.not_configured":     {"es": "TMDB no configurado", "en": "TMDB not configured"},
+	"tmdb.added":              {"es": "añadida", "en": "added"},
+	"tmdb.list_added":         {"es": "Añadido", "en": "Added"},
+	"tmdb.season_marked":      {"es": "Temporada %d: %d episodios", "en": "Season %d: %d episodes"},
+	"tmdb.upcoming_refreshed": {"es": "Próximos episodios actualizados", "en": "Upcoming episodes refreshed"},
+	"tmdb.refresh_result":     {"es": "Actualizado: %d series, %d películas", "en": "Updated: %d shows, %d movies"},
+	"tmdb.fetch_result":       {"es": "Series: %d/%d, Películas: %d/%d", "en": "Shows: %d/%d, Movies: %d/%d"},
 
 	// Settings
 	"settings.title":    {"es": "Ajustes", "en": "Settings"},
@@ -135,6 +154,12 @@ var translations = map[string]map[string]string{
 	"import.log":         {"es": "Progreso", "en": "Progress"},
 	"import.go_home":     {"es": "Ir al inicio", "en": "Go to home"},
 	"import.link":        {"es": "Importar datos TVTime", "en": "Import TVTime data"},
+	"import.starting":    {"es": "Iniciando importación...", "en": "Starting import..."},
+	"import.complete":    {"es": "✓ Importación completada!", "en": "✓ Import complete!"},
+	"import.fetching_tmdb":       {"es": "Obteniendo metadatos TMDB...", "en": "Fetching TMDB metadata..."},
+	"import.tmdb_complete":       {"es": "✓ Metadatos TMDB obtenidos!", "en": "✓ TMDB fetch complete!"},
+	"import.refreshing_upcoming": {"es": "Actualizando próximos episodios...", "en": "Refreshing upcoming episodes..."},
+	"import.upcoming_complete":   {"es": "✓ Próximos episodios actualizados!", "en": "✓ Upcoming episodes updated!"},
 }
 
 // T returns the translation for a given key and language.
