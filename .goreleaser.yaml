@@ -9,7 +9,7 @@ before:
 builds:
   - id: server
     main: ./cmd/server/
-    binary: server
+    binary: watchlog
     env:
       - CGO_ENABLED=0
     goos:
@@ -20,20 +20,6 @@ builds:
       - arm64
     ldflags:
       - -s -w -X main.version={{.Version}}
-
-  - id: importer
-    main: ./cmd/importer/
-    binary: importer
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
 
 archives:
   - id: default

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/mdaguete/watchlog/internal/auth"
+	"github.com/mdaguete/watchlog/internal/cache"
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/handlers"
 	"github.com/mdaguete/watchlog/internal/i18n"
@@ -43,10 +45,11 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// setupMiddleware redirects to /setup if no users exist yet.
+// setupMiddleware redirects to /setup if setup is not complete.
 func setupMiddleware(next http.Handler, database *db.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !database.HasUsers() && r.URL.Path != "/setup" && !strings.HasPrefix(r.URL.Path, "/static/") {
+		setupDone := database.HasUsers() && database.GetSetting("setup_complete") == "true"
+		if !setupDone && r.URL.Path != "/setup" && r.URL.Path != "/import" && !strings.HasPrefix(r.URL.Path, "/static/") {
 			http.Redirect(w, r, "/setup", http.StatusFound)
 			return
 		}
@@ -72,15 +75,20 @@ func (lw *loggingResponseWriter) Flush() {
 
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
-	dbPath := flag.String("db", "./watchlog.db", "Path to SQLite database")
+	dataDir := flag.String("datadir", ".", "Data directory (database, cache, tmp)")
 	flag.Parse()
 
 	// Load .env if present
 	godotenv.Load()
 
 	log.Printf("WatchLog starting on %s", *addr)
+	log.Printf("Data directory: %s", *dataDir)
 
-	database, err := db.New(*dbPath)
+	// Ensure data directory exists
+	os.MkdirAll(*dataDir, 0755)
+
+	dbFile := filepath.Join(*dataDir, "watchlog.db")
+	database, err := db.New(dbFile)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -140,6 +148,13 @@ func main() {
 	defer cancel()
 	worker.StartUpcomingRefresher(ctx, database, tmdbClient)
 
+	// Image cache directory (relative to DB path)
+	cacheDir := filepath.Join(*dataDir, "cache", "images")
+	imgCache, err := cache.NewImageCache(cacheDir)
+	if err != nil {
+		log.Printf("Warning: image cache disabled: %v", err)
+	}
+
 	// Parse templates
 	funcMap := template.FuncMap{
 		"T": i18n.T,
@@ -166,6 +181,12 @@ func main() {
 			if nameES != "" { return nameES }
 			return name
 		},
+		"ImgURL": func(url string) string {
+			if imgCache == nil || url == "" { return url }
+			local, err := imgCache.Ensure(url)
+			if err != nil { return url }
+			return local
+		},
 		"min": func(a, b int) int {
 			if a < b {
 				return a
@@ -184,7 +205,7 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database))
+	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database), imgCache, *dataDir)
 
 	mux := http.NewServeMux()
 
@@ -271,6 +292,8 @@ func main() {
 
 	// Static files
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	// Cached images
+	mux.Handle("GET /static/cache/images/", http.StripPrefix("/static/cache/images/", http.FileServer(http.Dir(cacheDir))))
 
 	log.Printf("Listening on http://localhost%s", *addr)
 

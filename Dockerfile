@@ -49,4 +49,4 @@ WORKDIR /usr/local/share/watchlog
 # Use unprivileged user (provided by distroless)
 USER nonroot
 
-ENTRYPOINT ["/usr/local/bin/watchlog", "-db", "/data/watchlog.db"]
+ENTRYPOINT ["/usr/local/bin/watchlog", "-datadir", "/data"]

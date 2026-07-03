@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mdaguete/watchlog/internal/auth"
+	"github.com/mdaguete/watchlog/internal/cache"
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
@@ -31,15 +32,19 @@ type Handler struct {
 	TMDB         *tmdb.Client
 	Sessions     *auth.SessionStore
 	LoginLimiter *ratelimit.Limiter
+	ImageCache   *cache.ImageCache
+	DataDir      string
 }
 
-func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore) *Handler {
+func New(database *db.DB, tmpl *template.Template, tmdbClient *tmdb.Client, sessions *auth.SessionStore, imgCache *cache.ImageCache, dataDir string) *Handler {
 	return &Handler{
 		DB:           database,
 		Templates:    tmpl,
 		TMDB:         tmdbClient,
 		Sessions:     sessions,
 		LoginLimiter: ratelimit.New(5, 15*time.Minute),
+		ImageCache:   imgCache,
+		DataDir:      dataDir,
 	}
 }
 
@@ -509,20 +514,21 @@ func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 	episodes, _ := h.DB.GetEpisodesByShow(userID, id)
 	progress, _ := h.DB.GetShowProgress(userID, id)
 
-	// Build seasons map with total episode count per season
-	// Try TMDB first for accurate totals, fall back to watched episode data
-	seasons := make(map[int]int)
-	if show.TMDBID > 0 && h.TMDB != nil && h.TMDB.Enabled() {
+	// Build seasons map: read from cached season_episodes table first
+	seasons, _ := h.DB.GetSeasonEpisodes(id)
+	if len(seasons) == 0 && show.TMDBID > 0 && h.TMDB != nil && h.TMDB.Enabled() {
+		// Fallback: fetch from TMDB and cache for next time
 		tvShow, err := h.TMDB.GetTVShow(show.TMDBID)
 		if err == nil {
 			for _, s := range tvShow.Seasons {
-				if s.SeasonNumber > 0 { // skip specials (season 0)
+				if s.SeasonNumber > 0 {
 					seasons[s.SeasonNumber] = s.EpisodeCount
+					h.DB.UpsertSeasonEpisodes(id, s.SeasonNumber, s.EpisodeCount)
 				}
 			}
 		}
 	}
-	// Fill in from watched data if TMDB didn't provide info
+	// Fill in from watched data if nothing else available
 	for _, ep := range episodes {
 		if _, ok := seasons[ep.SeasonNumber]; !ok {
 			seasons[ep.SeasonNumber] = ep.EpisodeNumber
@@ -948,6 +954,12 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
 			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
 		}
+		// Cache season episode counts
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
+			}
+		}
 		fetched++
 		log.Printf("TMDB [%d/%d] ✓ %q → tmdb_id=%d", i+1, len(shows), show.Name, result.ID)
 	}
@@ -1066,6 +1078,12 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
 			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
+		}
+		// Cache season episode counts
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
+			}
 		}
 		updated++
 	}
@@ -1213,40 +1231,122 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 // --- Setup (first run) ---
 
 func (h *Handler) PageSetup(w http.ResponseWriter, r *http.Request) {
-	if h.DB.HasUsers() {
+	// Block access if setup is fully complete (except not possible to re-enter)
+	if h.DB.GetSetting("setup_complete") == "true" {
+		step := r.URL.Query().Get("step")
+		// Allow step 3 (import) even after setup_complete if admin just finished step 2
+		if step != "3" || h.currentUser(r) != 1 {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+	}
+	// Step 1 needs no users, steps 2-3 need admin logged in
+	if h.DB.HasUsers() && h.currentUser(r) != 1 {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
-	h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang})
+	if uid := h.currentUser(r); uid > 0 {
+		lang = h.getLang(r, uid)
+	}
+	step := 1
+	if s := r.URL.Query().Get("step"); s == "2" {
+		step = 2
+	} else if s == "3" {
+		step = 3
+	}
+	// Steps 2 and 3 require the user to be created already
+	if step > 1 && !h.DB.HasUsers() {
+		http.Redirect(w, r, "/setup", http.StatusFound)
+		return
+	}
+	h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": step})
 }
 
 func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
-	if h.DB.HasUsers() {
+	if h.DB.HasUsers() && h.currentUser(r) != 1 {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
-	username := r.FormValue("username")
-	password := r.FormValue("password")
-	if username == "" {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.username_required")})
-		return
+	step := r.FormValue("step")
+
+	switch step {
+	case "1":
+		// Create admin account
+		username := strings.TrimSpace(r.FormValue("username"))
+		email := strings.TrimSpace(r.FormValue("email"))
+		password := r.FormValue("password")
+		passwordConfirm := r.FormValue("password_confirm")
+
+		if username == "" {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.username_required"), "Email": email})
+			return
+		}
+		if email == "" {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.email_required"), "Username": username})
+			return
+		}
+		if len(password) < 8 {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.password_min"), "Username": username, "Email": email})
+			return
+		}
+		if password != passwordConfirm {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.password_mismatch"), "Username": username, "Email": email})
+			return
+		}
+
+		hash, _ := auth.HashPassword(password)
+		userID, err := h.DB.CreateUser(username, hash)
+		if err != nil {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.create_failed")})
+			return
+		}
+		h.DB.UpdateUserEmail(userID, email)
+
+		// Create session immediately
+		sessionToken := h.Sessions.Create(userID)
+		auth.SetSessionCookie(w, sessionToken)
+		log.Printf("ACTION: setup admin user=%q id=%d email=%q", username, userID, email)
+
+		// Go to step 2
+		http.Redirect(w, r, "/setup?step=2", http.StatusFound)
+
+	case "2":
+		// Server configuration
+		if tmdbKey := strings.TrimSpace(r.FormValue("tmdb_key")); tmdbKey != "" {
+			h.DB.SetSetting("tmdb_api_key", tmdbKey)
+			h.TMDB = tmdb.NewClient(tmdbKey)
+			log.Printf("ACTION: setup TMDB key configured")
+		}
+		if smtpURL := strings.TrimSpace(r.FormValue("smtp_url")); smtpURL != "" {
+			if _, err := mail.ParseURL(smtpURL); err == nil {
+				h.DB.SetSetting("smtp_url", smtpURL)
+				log.Printf("ACTION: setup SMTP configured")
+			}
+		}
+		if v := strings.TrimSpace(r.FormValue("watchlog_url")); v != "" {
+			h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
+		}
+		// Auth options
+		if r.FormValue("auth_registration") == "on" {
+			h.DB.SetSetting("auth_registration", "enabled")
+		} else {
+			h.DB.SetSetting("auth_registration", "disabled")
+		}
+		if defaultLogin := r.FormValue("auth_default_login"); defaultLogin == "password" || defaultLogin == "magic" {
+			h.DB.SetSetting("auth_default_login", defaultLogin)
+		}
+
+		log.Printf("ACTION: setup server configuration saved")
+		// Mark setup as complete
+		h.DB.SetSetting("setup_complete", "true")
+		// Go to step 3
+		http.Redirect(w, r, "/setup?step=3", http.StatusFound)
+
+	default:
+		http.Redirect(w, r, "/setup", http.StatusFound)
 	}
-	if len(password) < 8 {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.password_min")})
-		return
-	}
-	hash, _ := auth.HashPassword(password)
-	userID, err := h.DB.CreateUser(username, hash)
-	if err != nil {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.create_failed")})
-		return
-	}
-	token := h.Sessions.Create(userID)
-	auth.SetSessionCookie(w, token)
-	log.Printf("ACTION: setup user=%q id=%d", username, userID)
-	http.Redirect(w, r, "/import", http.StatusFound)
 }
 
 // --- Import ---
@@ -1278,7 +1378,9 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	log.Printf("import: received file %q (%d bytes)", header.Filename, header.Size)
 
 	// Save to temp file
-	tmpFile, err := os.CreateTemp("", "watchlog-import-*.zip")
+	tmpBase := filepath.Join(h.DataDir, "tmp")
+	os.MkdirAll(tmpBase, 0755)
+	tmpFile, err := os.CreateTemp(tmpBase, "watchlog-import-*.zip")
 	if err != nil {
 		log.Printf("import: create temp file error: %v", err)
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -1290,7 +1392,7 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	log.Printf("import: saved to %s", tmpFile.Name())
 
 	// Extract zip to temp dir
-	tmpDir, err := os.MkdirTemp("", "watchlog-import-data-")
+	tmpDir, err := os.MkdirTemp(tmpBase, "watchlog-import-data-")
 	if err != nil {
 		log.Printf("import: create temp dir error: %v", err)
 		http.Error(w, "Server error", http.StatusInternalServerError)

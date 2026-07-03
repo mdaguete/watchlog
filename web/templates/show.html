@@ -7,7 +7,7 @@
     <div class="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-12">
         {{if .Show.PosterURL}}
         <div class="aspect-[2/3] bg-wl-light overflow-hidden">
-            <img src="{{.Show.PosterURL}}" alt="{{.Show.Name}}" class="w-full h-full object-cover">
+            <img src="{{ImgURL .Show.PosterURL}}" alt="{{.Show.Name}}" class="w-full h-full object-cover">
         </div>
         {{end}}
         <div class="space-y-6">

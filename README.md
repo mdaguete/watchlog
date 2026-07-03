@@ -42,11 +42,8 @@ The database is automatically created at `/data/watchlog.db` on first run.
 ### With Make (development)
 
 ```bash
-make              # Build bin/server and bin/importer
-make server       # Server only
-make importer     # Importer only
+make              # Build bin/server
 make run          # Build and start server
-make import       # Build and run TVTime import from data/
 make clean        # Clean binaries and DB
 ```
 
@@ -60,7 +57,6 @@ nix develop       # Shell with go, make, sqlite, goreleaser, gopls
 
 ```bash
 go build -o bin/server ./cmd/server/
-go build -o bin/importer ./cmd/importer/
 ./bin/server
 ```
 
@@ -102,22 +98,7 @@ Request your GDPR export from TVTime. You'll receive a ZIP with ~50 CSV files.
 
 ### 2. Run the import
 
-**Option A: Web UI** — Start the server, go through setup, and upload the ZIP directly from `/import`.
-
-**Option B: CLI** — Place CSV files in `data/` and run:
-
-```bash
-make import
-
-# Or manually
-go run ./cmd/importer/ -data ./data -db ./watchlog.db
-```
-
-To skip TMDB enrichment:
-
-```bash
-make import-no-tmdb
-```
+Start the server and go through the setup wizard. On step 3, upload the ZIP file directly. Alternatively, after setup, go to `/import` to upload at any time.
 
 ### 3. Enrich later (if you skipped TMDB)
 
@@ -186,14 +167,16 @@ curl -X POST http://localhost:8080/api/tmdb/fetch-all
 
 ```
 cmd/server/          Web server (API + HTMX frontend)
-cmd/importer/        CLI to import TVTime CSVs
 internal/db/         SQLite with WAL, auto-migrations
 internal/models/     Domain models
 internal/handlers/   HTTP handlers (API + pages)
 internal/i18n/       Internationalization (ES/EN)
-internal/importer/   CSV import logic
+internal/importer/   CSV import logic (TVTime)
 internal/tmdb/       TMDB API client
 internal/auth/       Password hashing, sessions, cookies
+internal/mail/       SMTP email sending
+internal/ratelimit/  Login rate limiting
+internal/cache/      Disk image cache
 internal/worker/     Background workers (upcoming episodes)
 web/templates/       HTML templates (HTMX + Tailwind)
 web/static/          Static assets
