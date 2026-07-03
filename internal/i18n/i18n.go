@@ -111,6 +111,9 @@ var translations = map[string]map[string]string{
 	"login.submit":      {"es": "Entrar", "en": "Log in"},
 	"login.no_account":  {"es": "¿No tienes cuenta?", "en": "Don't have an account?"},
 	"login.register":    {"es": "Registrarse", "en": "Sign up"},
+	"login.magic_hint":  {"es": "Recibirás un enlace de acceso en tu email", "en": "You'll receive a login link via email"},
+	"login.with_password": {"es": "Acceder con contraseña", "en": "Log in with password"},
+	"login.forgot_password": {"es": "¿Olvidaste tu contraseña?", "en": "Forgot your password?"},
 	"login.error":       {"es": "Usuario o contraseña incorrectos", "en": "Invalid username or password"},
 	"login.rate_limited": {"es": "Demasiados intentos. Espera unos minutos.", "en": "Too many attempts. Please wait a few minutes."},
 	"register.title":    {"es": "Crear cuenta", "en": "Create account"},
@@ -191,10 +194,6 @@ var translations = map[string]map[string]string{
 	// Email subjects
 	"email.reset_subject":  {"es": "WatchLog — Restablecer contraseña", "en": "WatchLog — Reset your password"},
 	"email.magic_subject":  {"es": "WatchLog — Tu enlace de acceso", "en": "WatchLog — Your login link"},
-
-	// Login page extra links
-	"login.forgot_password": {"es": "¿Olvidaste tu contraseña?", "en": "Forgot your password?"},
-	"login.magic_link":      {"es": "Acceder con enlace mágico", "en": "Log in with magic link"},
 
 	// Register email field
 	"register.email":       {"es": "Email (opcional)", "en": "Email (optional)"},
