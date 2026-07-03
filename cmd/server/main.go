@@ -75,15 +75,20 @@ func (lw *loggingResponseWriter) Flush() {
 
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
-	dbPath := flag.String("db", "./watchlog.db", "Path to SQLite database")
+	dataDir := flag.String("datadir", ".", "Data directory (database, cache, tmp)")
 	flag.Parse()
 
 	// Load .env if present
 	godotenv.Load()
 
 	log.Printf("WatchLog starting on %s", *addr)
+	log.Printf("Data directory: %s", *dataDir)
 
-	database, err := db.New(*dbPath)
+	// Ensure data directory exists
+	os.MkdirAll(*dataDir, 0755)
+
+	dbFile := filepath.Join(*dataDir, "watchlog.db")
+	database, err := db.New(dbFile)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -144,7 +149,7 @@ func main() {
 	worker.StartUpcomingRefresher(ctx, database, tmdbClient)
 
 	// Image cache directory (relative to DB path)
-	cacheDir := filepath.Join(filepath.Dir(*dbPath), "cache", "images")
+	cacheDir := filepath.Join(*dataDir, "cache", "images")
 	imgCache, err := cache.NewImageCache(cacheDir)
 	if err != nil {
 		log.Printf("Warning: image cache disabled: %v", err)
@@ -200,7 +205,7 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
-	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database), imgCache, filepath.Dir(*dbPath))
+	h := handlers.New(database, tmpl, tmdbClient, auth.NewSessionStore(database), imgCache, *dataDir)
 
 	mux := http.NewServeMux()
 
