@@ -126,7 +126,11 @@ func (h *Handler) getLang(r *http.Request, userID int64) string {
 
 func (h *Handler) PageLogin(w http.ResponseWriter, r *http.Request) {
 	if h.currentUser(r) != 0 {
-		http.Redirect(w, r, "/", http.StatusFound)
+		if h.DB.GetSetting("setup_complete") != "true" {
+			http.Redirect(w, r, "/setup?step=2", http.StatusFound)
+		} else {
+			http.Redirect(w, r, "/", http.StatusFound)
+		}
 		return
 	}
 	lang := h.getLang(r, 0)
@@ -1260,6 +1264,10 @@ func (h *Handler) PageSetup(w http.ResponseWriter, r *http.Request) {
 		step = 2
 	} else if s == "3" {
 		step = 3
+	}
+	// If user already exists, skip step 1
+	if step == 1 && h.DB.HasUsers() {
+		step = 2
 	}
 	// Steps 2 and 3 require the user to be created already
 	if step > 1 && !h.DB.HasUsers() {
