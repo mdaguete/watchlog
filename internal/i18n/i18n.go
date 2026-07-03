@@ -163,3 +163,10 @@ func DetectLang(acceptLang string) string {
 	}
 	return "es"
 }
+
+// genreTranslations is intentionally empty — genre translations come from TMDB.
+// For TV shows where TMDB doesn't translate, we display as-is from the API.
+// This function exists as a hook in case local overrides are needed in the future.
+func TranslateGenres(lang, genres string) string {
+	return genres
+}

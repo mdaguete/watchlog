@@ -86,7 +86,7 @@ func fetchTMDB(database *db.DB, apiKey string) {
 	if len(shows) == 0 {
 		log.Println("TMDB: all shows already have metadata")
 	} else {
-		log.Printf("TMDB FETCH: starting %d shows...", len(shows))
+		log.Printf("TMDB FETCH: starting %d shows (es+en)...", len(shows))
 		fetched := 0
 		for i, show := range shows {
 			result, err := client.FindTVByName(show.Name)
@@ -100,6 +100,11 @@ func fetchTMDB(database *db.DB, apiKey string) {
 			backdropURL := tmdb.BackdropURL(result.BackdropPath, "w780")
 
 			database.UpdateShowTMDB(show.ID, result.ID, posterURL, backdropURL, result.Overview, genres, result.Status, len(result.Seasons))
+			// Fetch English version
+			if resultEN, err := client.GetTVShowLang(result.ID, "en-US"); err == nil {
+				database.UpdateShowTMDBEN(show.ID, resultEN.Overview, genreNames(resultEN.Genres))
+				database.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
+			}
 			fetched++
 			log.Printf("TMDB [%d/%d] ✓ %q → tmdb_id=%d, %d seasons, %s", i+1, len(shows), show.Name, result.ID, len(result.Seasons), result.Status)
 		}
@@ -116,7 +121,7 @@ func fetchTMDB(database *db.DB, apiKey string) {
 	if len(movies) == 0 {
 		log.Println("TMDB: all movies already have metadata")
 	} else {
-		log.Printf("TMDB FETCH: starting %d movies...", len(movies))
+		log.Printf("TMDB FETCH: starting %d movies (es+en)...", len(movies))
 		fetched := 0
 		for i, movie := range movies {
 			results, err := client.SearchMovie(movie.Name)
@@ -132,6 +137,11 @@ func fetchTMDB(database *db.DB, apiKey string) {
 			genres := genreNames(detail.Genres)
 			posterURL := tmdb.PosterURL(detail.PosterPath, "w342")
 			database.UpdateMovieTMDB(movie.ID, detail.ID, posterURL, detail.Overview, genres, detail.Runtime)
+			// Fetch English version
+			if detailEN, err := client.GetMovieLang(detail.ID, "en-US"); err == nil {
+				database.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, genreNames(detailEN.Genres))
+				database.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
+			}
 			fetched++
 			log.Printf("TMDB [%d/%d] ✓ movie %q → tmdb_id=%d", i+1, len(movies), movie.Name, detail.ID)
 		}

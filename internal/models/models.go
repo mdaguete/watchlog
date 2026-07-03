@@ -14,11 +14,15 @@ type Show struct {
 	ID           int64  `json:"id"`
 	ExternalID   int64  `json:"external_id"`
 	Name         string `json:"name"`
+	NameES       string `json:"name_es"`
+	NameEN       string `json:"name_en"`
 	TMDBID       int    `json:"tmdb_id"`
 	PosterURL    string `json:"poster_url"`
 	BackdropURL  string `json:"backdrop_url"`
 	Overview     string `json:"overview"`
+	OverviewEN   string `json:"overview_en"`
 	Genres       string `json:"genres"`
+	GenresEN     string `json:"genres_en"`
 	Status       string `json:"status"`
 	TotalSeasons int    `json:"total_seasons"`
 }
@@ -48,14 +52,18 @@ type Episode struct {
 
 // Movie is the shared catalog entry
 type Movie struct {
-	ID        int64  `json:"id"`
+	ID         int64  `json:"id"`
 	ExternalID string `json:"external_id"`
-	Name      string `json:"name"`
-	TMDBID    int    `json:"tmdb_id"`
-	PosterURL string `json:"poster_url"`
-	Overview  string `json:"overview"`
-	Genres    string `json:"genres"`
-	Runtime   int    `json:"runtime"`
+	Name       string `json:"name"`
+	NameES     string `json:"name_es"`
+	NameEN     string `json:"name_en"`
+	TMDBID     int    `json:"tmdb_id"`
+	PosterURL  string `json:"poster_url"`
+	Overview   string `json:"overview"`
+	OverviewEN string `json:"overview_en"`
+	Genres     string `json:"genres"`
+	GenresEN   string `json:"genres_en"`
+	Runtime    int    `json:"runtime"`
 }
 
 // UserMovie is the per-user watch record

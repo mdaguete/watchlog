@@ -651,6 +651,10 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 		if err != nil { log.Printf("TMDB [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err); continue }
 		genres := extractGenreNames(result.Genres)
 		h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
+		if resultEN, err := h.TMDB.GetTVShowLang(result.ID, "en-US"); err == nil {
+			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
+			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
+		}
 		fetched++
 		log.Printf("TMDB [%d/%d] ✓ %q → tmdb_id=%d", i+1, len(shows), show.Name, result.ID)
 	}
@@ -663,6 +667,10 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 		detail, err := h.TMDB.GetMovie(results[0].ID)
 		if err != nil { continue }
 		h.DB.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, extractGenreNames(detail.Genres), detail.Runtime)
+		if detailEN, err := h.TMDB.GetMovieLang(detail.ID, "en-US"); err == nil {
+			h.DB.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
+			h.DB.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
+		}
 		moviesFetched++
 		log.Printf("TMDB [%d/%d] ✓ movie %q → tmdb_id=%d", i+1, len(movies), movie.Name, detail.ID)
 	}
@@ -748,24 +756,38 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shows, _ := h.DB.GetAllShowsWithTMDB()
-	log.Printf("TMDB REFRESH: updating %d shows...", len(shows))
+	log.Printf("TMDB REFRESH: updating %d shows (es+en)...", len(shows))
 	updated := 0
 	for i, show := range shows {
-		result, err := h.TMDB.GetTVShow(show.TMDBID)
+		// Fetch in Spanish (primary)
+		result, err := h.TMDB.GetTVShowLang(show.TMDBID, "es-ES")
 		if err != nil { log.Printf("TMDB REFRESH [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err); continue }
 		genres := extractGenreNames(result.Genres)
 		h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
+		// Fetch in English
+		resultEN, err := h.TMDB.GetTVShowLang(show.TMDBID, "en-US")
+		if err == nil {
+			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
+			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
+		}
 		updated++
 	}
 
 	movies, _ := h.DB.GetAllMoviesWithTMDB()
-	log.Printf("TMDB REFRESH: updating %d movies...", len(movies))
+	log.Printf("TMDB REFRESH: updating %d movies (es+en)...", len(movies))
 	moviesUpdated := 0
 	for i, movie := range movies {
-		detail, err := h.TMDB.GetMovie(movie.TMDBID)
+		// Fetch in Spanish (primary)
+		detail, err := h.TMDB.GetMovieLang(movie.TMDBID, "es-ES")
 		if err != nil { log.Printf("TMDB REFRESH [%d/%d] ✗ movie %q: %v", i+1, len(movies), movie.Name, err); continue }
 		genres := extractGenreNames(detail.Genres)
 		h.DB.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, genres, detail.Runtime)
+		// Fetch in English
+		detailEN, err := h.TMDB.GetMovieLang(movie.TMDBID, "en-US")
+		if err == nil {
+			h.DB.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
+			h.DB.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
+		}
 		moviesUpdated++
 	}
 
@@ -965,6 +987,11 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 				}
 				genres := extractGenreNames(result.Genres)
 				h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
+				// Fetch English version
+				if resultEN, err := h.TMDB.GetTVShowLang(result.ID, "en-US"); err == nil {
+					h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
+					h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
+				}
 				fetched++
 				sendSSE(fmt.Sprintf("  [%d/%d] ✓ %q", i+1, len(shows), show.Name))
 			}
@@ -986,6 +1013,11 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				h.DB.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, extractGenreNames(detail.Genres), detail.Runtime)
+				// Fetch English version
+				if detailEN, err := h.TMDB.GetMovieLang(detail.ID, "en-US"); err == nil {
+					h.DB.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
+					h.DB.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
+				}
 				fetched++
 				sendSSE(fmt.Sprintf("  [%d/%d] ✓ %q", i+1, len(movies), movie.Name))
 			}

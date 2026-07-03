@@ -38,6 +38,16 @@ func (db *DB) migrate() error {
 	}
 	// Add lang column if missing (existing DBs)
 	db.conn.Exec("ALTER TABLE users ADD COLUMN lang TEXT NOT NULL DEFAULT 'es'")
+	// Add i18n columns for shows
+	db.conn.Exec("ALTER TABLE shows ADD COLUMN overview_en TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE shows ADD COLUMN genres_en TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE shows ADD COLUMN name_es TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE shows ADD COLUMN name_en TEXT NOT NULL DEFAULT ''")
+	// Add i18n columns for movies
+	db.conn.Exec("ALTER TABLE movies ADD COLUMN overview_en TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE movies ADD COLUMN genres_en TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE movies ADD COLUMN name_es TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE movies ADD COLUMN name_en TEXT NOT NULL DEFAULT ''")
 	return nil
 }
 
@@ -255,14 +265,24 @@ func (db *DB) UpsertShow(s models.Show) (int64, error) {
 
 func (db *DB) GetShow(id int64) (models.Show, error) {
 	var s models.Show
-	err := db.conn.QueryRow("SELECT id, external_id, name, tmdb_id, poster_url, backdrop_url, overview, genres, status, total_seasons FROM shows WHERE id = ?", id).
-		Scan(&s.ID, &s.ExternalID, &s.Name, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.Genres, &s.Status, &s.TotalSeasons)
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons FROM shows WHERE id = ?", id).
+		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons)
 	return s, err
 }
 
 func (db *DB) UpdateShowTMDB(id int64, tmdbID int, posterURL, backdropURL, overview, genres, status string, totalSeasons int) error {
 	_, err := db.conn.Exec(`UPDATE shows SET tmdb_id=?, poster_url=?, backdrop_url=?, overview=?, genres=?, status=?, total_seasons=? WHERE id=?`,
 		tmdbID, posterURL, backdropURL, overview, genres, status, totalSeasons, id)
+	return err
+}
+
+func (db *DB) UpdateShowTMDBNames(id int64, nameES, nameEN string) error {
+	_, err := db.conn.Exec(`UPDATE shows SET name_es=?, name_en=? WHERE id=?`, nameES, nameEN, id)
+	return err
+}
+
+func (db *DB) UpdateShowTMDBEN(id int64, overviewEN, genresEN string) error {
+	_, err := db.conn.Exec(`UPDATE shows SET overview_en=?, genres_en=? WHERE id=?`, overviewEN, genresEN, id)
 	return err
 }
 
@@ -330,7 +350,7 @@ func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, 
 		orderClause = `ORDER BY COALESCE(ew.last_watched, sp.updated_at, us.followed_at) DESC, s.name ASC`
 	}
 
-	query := `SELECT s.id, s.external_id, s.name, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
+	query := `SELECT s.id, s.external_id, s.name, s.name_es, s.name_en, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
 		us.is_followed, us.is_favorited, us.is_archived, us.episodes_seen, us.followed_at, us.updated_at
 		FROM user_shows us
 		JOIN shows s ON s.id = us.show_id
@@ -353,7 +373,7 @@ func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, 
 	var shows []models.UserShow
 	for rows.Next() {
 		var us models.UserShow
-		if err := rows.Scan(&us.ID, &us.ExternalID, &us.Name, &us.TMDBID, &us.PosterURL, &us.BackdropURL, &us.Overview, &us.Genres, &us.Status, &us.TotalSeasons,
+		if err := rows.Scan(&us.ID, &us.ExternalID, &us.Name, &us.NameES, &us.NameEN, &us.TMDBID, &us.PosterURL, &us.BackdropURL, &us.Overview, &us.Genres, &us.Status, &us.TotalSeasons,
 			&us.IsFollowed, &us.IsFavorited, &us.IsArchived, &us.EpisodesSeen, &us.FollowedAt, &us.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -364,11 +384,11 @@ func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, 
 
 func (db *DB) GetUserShow(userID, showID int64) (models.UserShow, error) {
 	var us models.UserShow
-	err := db.conn.QueryRow(`SELECT s.id, s.external_id, s.name, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
+	err := db.conn.QueryRow(`SELECT s.id, s.external_id, s.name, s.name_es, s.name_en, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.overview_en, s.genres, s.genres_en, s.status, s.total_seasons,
 		us.is_followed, us.is_favorited, us.is_archived, us.episodes_seen, us.followed_at, us.updated_at
 		FROM user_shows us JOIN shows s ON s.id = us.show_id
 		WHERE us.user_id = ? AND us.show_id = ?`, userID, showID).
-		Scan(&us.ID, &us.ExternalID, &us.Name, &us.TMDBID, &us.PosterURL, &us.BackdropURL, &us.Overview, &us.Genres, &us.Status, &us.TotalSeasons,
+		Scan(&us.ID, &us.ExternalID, &us.Name, &us.NameES, &us.NameEN, &us.TMDBID, &us.PosterURL, &us.BackdropURL, &us.Overview, &us.OverviewEN, &us.Genres, &us.GenresEN, &us.Status, &us.TotalSeasons,
 			&us.IsFollowed, &us.IsFavorited, &us.IsArchived, &us.EpisodesSeen, &us.FollowedAt, &us.UpdatedAt)
 	return us, err
 }
@@ -396,7 +416,7 @@ func (db *DB) FollowShow(userID, showID int64) error {
 }
 
 func (db *DB) SearchShows(query string) ([]models.Show, error) {
-	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, backdrop_url, overview, genres, status, total_seasons FROM shows WHERE name LIKE ? ORDER BY name LIMIT 20", "%"+query+"%")
+	rows, err := db.conn.Query("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, genres, status, total_seasons FROM shows WHERE name LIKE ? OR name_es LIKE ? OR name_en LIKE ? ORDER BY name LIMIT 20", "%"+query+"%", "%"+query+"%", "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +424,7 @@ func (db *DB) SearchShows(query string) ([]models.Show, error) {
 	var shows []models.Show
 	for rows.Next() {
 		var s models.Show
-		if err := rows.Scan(&s.ID, &s.ExternalID, &s.Name, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.Genres, &s.Status, &s.TotalSeasons); err != nil {
+		if err := rows.Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.Genres, &s.Status, &s.TotalSeasons); err != nil {
 			return nil, err
 		}
 		shows = append(shows, s)
@@ -413,7 +433,7 @@ func (db *DB) SearchShows(query string) ([]models.Show, error) {
 }
 
 func (db *DB) GetFollowedShowsWithTMDB(userID int64) ([]models.UserShow, error) {
-	rows, err := db.conn.Query(`SELECT s.id, s.external_id, s.name, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
+	rows, err := db.conn.Query(`SELECT s.id, s.external_id, s.name, s.name_es, s.name_en, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
 		us.is_followed, us.is_favorited, us.is_archived, us.episodes_seen, us.followed_at, us.updated_at
 		FROM user_shows us JOIN shows s ON s.id = us.show_id
 		WHERE us.user_id = ? AND us.is_followed = 1 AND s.tmdb_id > 0 AND s.status != 'Ended' AND s.status != 'Canceled'
@@ -425,7 +445,7 @@ func (db *DB) GetFollowedShowsWithTMDB(userID int64) ([]models.UserShow, error) 
 	var shows []models.UserShow
 	for rows.Next() {
 		var us models.UserShow
-		if err := rows.Scan(&us.ID, &us.ExternalID, &us.Name, &us.TMDBID, &us.PosterURL, &us.BackdropURL, &us.Overview, &us.Genres, &us.Status, &us.TotalSeasons,
+		if err := rows.Scan(&us.ID, &us.ExternalID, &us.Name, &us.NameES, &us.NameEN, &us.TMDBID, &us.PosterURL, &us.BackdropURL, &us.Overview, &us.Genres, &us.Status, &us.TotalSeasons,
 			&us.IsFollowed, &us.IsFavorited, &us.IsArchived, &us.EpisodesSeen, &us.FollowedAt, &us.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -573,7 +593,7 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 		orderClause = "ORDER BY um.watched_at DESC, m.name ASC"
 	}
 
-	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.tmdb_id, m.poster_url, m.overview, m.genres, m.runtime, um.watched_at
+	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime, um.watched_at
 		FROM user_movies um JOIN movies m ON m.id = um.movie_id
 		WHERE um.user_id = ? `+orderClause, userID)
 	if err != nil {
@@ -583,7 +603,7 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 	var movies []models.UserMovie
 	for rows.Next() {
 		var um models.UserMovie
-		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.TMDBID, &um.PosterURL, &um.Overview, &um.Genres, &um.Runtime, &um.WatchedAt); err != nil {
+		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime, &um.WatchedAt); err != nil {
 			return nil, err
 		}
 		movies = append(movies, um)
@@ -594,6 +614,16 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 func (db *DB) UpdateMovieTMDB(id int64, tmdbID int, posterURL, overview, genres string, runtime int) error {
 	_, err := db.conn.Exec(`UPDATE movies SET tmdb_id=?, poster_url=?, overview=?, genres=?, runtime=? WHERE id=?`,
 		tmdbID, posterURL, overview, genres, runtime, id)
+	return err
+}
+
+func (db *DB) UpdateMovieTMDBEN(id int64, overviewEN, genresEN string) error {
+	_, err := db.conn.Exec(`UPDATE movies SET overview_en=?, genres_en=? WHERE id=?`, overviewEN, genresEN, id)
+	return err
+}
+
+func (db *DB) UpdateMovieTMDBNames(id int64, nameES, nameEN string) error {
+	_, err := db.conn.Exec(`UPDATE movies SET name_es=?, name_en=? WHERE id=?`, nameES, nameEN, id)
 	return err
 }
 
@@ -630,7 +660,7 @@ func (db *DB) AddMovieFromTMDB(tmdbID int, name, posterURL, overview, genres str
 }
 
 func (db *DB) SearchMovies(query string) ([]models.Movie, error) {
-	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime FROM movies WHERE name LIKE ? ORDER BY name LIMIT 20", "%"+query+"%")
+	rows, err := db.conn.Query("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime FROM movies WHERE name LIKE ? OR name_es LIKE ? OR name_en LIKE ? ORDER BY name LIMIT 20", "%"+query+"%", "%"+query+"%", "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +668,7 @@ func (db *DB) SearchMovies(query string) ([]models.Movie, error) {
 	var movies []models.Movie
 	for rows.Next() {
 		var m models.Movie
-		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime); err != nil {
+		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime); err != nil {
 			return nil, err
 		}
 		movies = append(movies, m)

@@ -97,8 +97,12 @@ type SearchResponse[T any] struct {
 // --- API Methods ---
 
 func (c *Client) SearchTV(query string) ([]ShowResult, error) {
+	return c.SearchTVLang(query, "es-ES")
+}
+
+func (c *Client) SearchTVLang(query, lang string) ([]ShowResult, error) {
 	var resp SearchResponse[ShowResult]
-	err := c.get("/search/tv", map[string]string{"query": query, "language": "es-ES"}, &resp)
+	err := c.get("/search/tv", map[string]string{"query": query, "language": lang}, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +110,12 @@ func (c *Client) SearchTV(query string) ([]ShowResult, error) {
 }
 
 func (c *Client) SearchMovie(query string) ([]MovieResult, error) {
+	return c.SearchMovieLang(query, "es-ES")
+}
+
+func (c *Client) SearchMovieLang(query, lang string) ([]MovieResult, error) {
 	var resp SearchResponse[MovieResult]
-	err := c.get("/search/movie", map[string]string{"query": query, "language": "es-ES"}, &resp)
+	err := c.get("/search/movie", map[string]string{"query": query, "language": lang}, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +123,12 @@ func (c *Client) SearchMovie(query string) ([]MovieResult, error) {
 }
 
 func (c *Client) GetTVShow(id int) (*ShowResult, error) {
+	return c.GetTVShowLang(id, "es-ES")
+}
+
+func (c *Client) GetTVShowLang(id int, lang string) (*ShowResult, error) {
 	var show ShowResult
-	err := c.get(fmt.Sprintf("/tv/%d", id), map[string]string{"language": "es-ES"}, &show)
+	err := c.get(fmt.Sprintf("/tv/%d", id), map[string]string{"language": lang}, &show)
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +136,12 @@ func (c *Client) GetTVShow(id int) (*ShowResult, error) {
 }
 
 func (c *Client) GetMovie(id int) (*MovieResult, error) {
+	return c.GetMovieLang(id, "es-ES")
+}
+
+func (c *Client) GetMovieLang(id int, lang string) (*MovieResult, error) {
 	var movie MovieResult
-	err := c.get(fmt.Sprintf("/movie/%d", id), map[string]string{"language": "es-ES"}, &movie)
+	err := c.get(fmt.Sprintf("/movie/%d", id), map[string]string{"language": lang}, &movie)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +149,12 @@ func (c *Client) GetMovie(id int) (*MovieResult, error) {
 }
 
 func (c *Client) GetSeason(showID, seasonNumber int) (*SeasonDetail, error) {
+	return c.GetSeasonLang(showID, seasonNumber, "es-ES")
+}
+
+func (c *Client) GetSeasonLang(showID, seasonNumber int, lang string) (*SeasonDetail, error) {
 	var season SeasonDetail
-	err := c.get(fmt.Sprintf("/tv/%d/season/%d", showID, seasonNumber), map[string]string{"language": "es-ES"}, &season)
+	err := c.get(fmt.Sprintf("/tv/%d/season/%d", showID, seasonNumber), map[string]string{"language": lang}, &season)
 	if err != nil {
 		return nil, err
 	}

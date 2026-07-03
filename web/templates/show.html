@@ -12,13 +12,13 @@
         {{end}}
         <div class="space-y-6">
             <div>
-                <h1 class="font-serif text-4xl md:text-5xl leading-tight">{{.Show.Name}}</h1>
-                {{if .Show.Genres}}<p class="mt-3 text-sm text-wl-gray">{{.Show.Genres}}</p>{{end}}
+                <h1 class="font-serif text-4xl md:text-5xl leading-tight">{{LocName .Lang .Show.Name .Show.NameES .Show.NameEN}}</h1>
+                {{if .Show.Genres}}<p class="mt-3 text-sm text-wl-gray">{{LocGenres .Lang .Show.Genres .Show.GenresEN}}</p>{{end}}
                 {{if .Show.Status}}<p class="mt-1 text-xs uppercase tracking-widest text-wl-gray">{{.Show.Status}}</p>{{end}}
             </div>
 
             {{if .Show.Overview}}
-            <p class="text-sm leading-relaxed text-wl-dark max-w-lg">{{.Show.Overview}}</p>
+            <p class="text-sm leading-relaxed text-wl-dark max-w-lg">{{Loc .Lang .Show.Overview .Show.OverviewEN}}</p>
             {{end}}
 
             <div class="flex items-center gap-6 pt-4 border-t border-wl-border">

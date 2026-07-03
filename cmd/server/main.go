@@ -121,6 +121,29 @@ func main() {
 	// Parse templates
 	funcMap := template.FuncMap{
 		"T": i18n.T,
+		"Loc": func(lang, es, en string) string {
+			if lang == "en" && en != "" {
+				return en
+			}
+			if es != "" {
+				return es
+			}
+			return en
+		},
+		"LocGenres": func(lang, es, en string) string {
+			if lang == "en" && en != "" {
+				return en
+			}
+			return i18n.TranslateGenres(lang, es)
+		},
+		"LocName": func(lang, name, nameES, nameEN string) string {
+			if lang == "en" {
+				if nameEN != "" { return nameEN }
+				return name
+			}
+			if nameES != "" { return nameES }
+			return name
+		},
 		"min": func(a, b int) int {
 			if a < b {
 				return a
