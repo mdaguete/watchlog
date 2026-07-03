@@ -124,6 +124,8 @@ var translations = map[string]map[string]string{
 	"settings.current_key":     {"es": "Clave actual", "en": "Current key"},
 	"settings.tmdb_placeholder": {"es": "Introduce nueva clave para actualizar", "en": "Enter new key to update"},
 	"settings.tmdb_help":       {"es": "Déjalo vacío para mantener la clave actual. Obtén una en themoviedb.org/settings/api", "en": "Leave empty to keep current key. Get one at themoviedb.org/settings/api"},
+	"settings.refresh_metadata": {"es": "Refrescar metadatos", "en": "Refresh metadata"},
+	"settings.refresh_upcoming": {"es": "Refrescar próximos", "en": "Refresh upcoming"},
 
 	// Import
 	"import.title":       {"es": "Importar datos", "en": "Import data"},

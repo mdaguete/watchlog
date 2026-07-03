@@ -212,6 +212,7 @@ func main() {
 	mux.HandleFunc("POST /api/tmdb/fetch-all", h.APIFetchAllTMDB)
 	mux.HandleFunc("POST /api/tmdb/add-show", h.APIAddShowFromTMDB)
 	mux.HandleFunc("POST /api/tmdb/add-movie", h.APIAddMovieFromTMDB)
+	mux.HandleFunc("POST /api/tmdb/refresh-upcoming", h.APIRefreshUpcoming)
 
 	// Static files
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))

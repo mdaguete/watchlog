@@ -660,6 +660,11 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 		log.Printf("TMDB [%d/%d] ✓ movie %q → tmdb_id=%d", i+1, len(movies), movie.Name, detail.ID)
 	}
 	log.Printf("TMDB FETCH: complete — shows %d/%d, movies %d/%d", fetched, len(shows), moviesFetched, len(movies))
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ Shows: %d/%d, Movies: %d/%d</span>`, fetched, len(shows), moviesFetched, len(movies))
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"shows_fetched": fetched, "movies_fetched": moviesFetched})
 }
 
@@ -698,6 +703,19 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ "%s" añadida</span>`, html.EscapeString(movie.Title))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) APIRefreshUpcoming(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	if h.TMDB == nil || !h.TMDB.Enabled() { writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return }
+	worker.RefreshUpcomingCache(h.DB, h.TMDB)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<span class="text-xs text-wl-gray">✓ Upcoming episodes refreshed</span>`))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
