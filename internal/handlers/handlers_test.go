@@ -1309,3 +1309,85 @@ func TestSaveSettings_Email(t *testing.T) {
 	user, _ := h.DB.GetUserByID(1)
 	if user.Email != "user@example.com" { t.Errorf("email not saved, got %q", user.Email) }
 }
+
+func TestSetupWizard_Step1_EmptyUsername(t *testing.T) {
+	f, _ := os.CreateTemp("", "watchlog-setup-*.db")
+	f.Close()
+	defer os.Remove(f.Name())
+	database, _ := db.New(f.Name())
+	defer database.Close()
+	funcMap := template.FuncMap{
+		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"LocGenres": func(l, e, n string) string { return e },
+		"LocName": func(l, n, e, en string) string { return n },
+		"min": func(a, b int) int { if a < b { return a }; return b },
+		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b },
+	}
+	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
+	sessions := auth.NewSessionStore(database)
+	h := New(database, tmpl, nil, sessions)
+
+	body := "step=1&username=&email=test@x.com&password=12345678&password_confirm=12345678"
+	req := httptest.NewRequest("POST", "/setup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleSetup(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestSetupWizard_Step1_PasswordMismatch(t *testing.T) {
+	f, _ := os.CreateTemp("", "watchlog-setup-*.db")
+	f.Close()
+	defer os.Remove(f.Name())
+	database, _ := db.New(f.Name())
+	defer database.Close()
+	funcMap := template.FuncMap{
+		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"LocGenres": func(l, e, n string) string { return e },
+		"LocName": func(l, n, e, en string) string { return n },
+		"min": func(a, b int) int { if a < b { return a }; return b },
+		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b },
+	}
+	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
+	sessions := auth.NewSessionStore(database)
+	h := New(database, tmpl, nil, sessions)
+
+	body := "step=1&username=admin&email=a@b.com&password=12345678&password_confirm=different"
+	req := httptest.NewRequest("POST", "/setup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleSetup(w, req)
+	if w.Code != 200 { t.Errorf("expected 200, got %d", w.Code) }
+}
+
+func TestSetupWizard_Step1_Success(t *testing.T) {
+	f, _ := os.CreateTemp("", "watchlog-setup-*.db")
+	f.Close()
+	defer os.Remove(f.Name())
+	database, _ := db.New(f.Name())
+	defer database.Close()
+	funcMap := template.FuncMap{
+		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"LocGenres": func(l, e, n string) string { return e },
+		"LocName": func(l, n, e, en string) string { return n },
+		"min": func(a, b int) int { if a < b { return a }; return b },
+		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b },
+	}
+	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
+	sessions := auth.NewSessionStore(database)
+	h := New(database, tmpl, nil, sessions)
+
+	body := "step=1&username=admin&email=admin@example.com&password=securepass&password_confirm=securepass"
+	req := httptest.NewRequest("POST", "/setup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.HandleSetup(w, req)
+	if w.Code != 302 { t.Errorf("expected 302, got %d", w.Code) }
+	if loc := w.Header().Get("Location"); loc != "/setup?step=2" {
+		t.Errorf("expected redirect to /setup?step=2, got %q", loc)
+	}
+	// Verify user was created
+	if !database.HasUsers() { t.Error("user was not created") }
+	user, _ := database.GetUserByUsername("admin")
+	if user.Email != "admin@example.com" { t.Errorf("email = %q", user.Email) }
+}

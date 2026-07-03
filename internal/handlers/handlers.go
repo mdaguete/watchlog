@@ -1213,40 +1213,122 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 // --- Setup (first run) ---
 
 func (h *Handler) PageSetup(w http.ResponseWriter, r *http.Request) {
-	if h.DB.HasUsers() {
+	// Block access if setup is fully complete (except not possible to re-enter)
+	if h.DB.GetSetting("setup_complete") == "true" {
+		step := r.URL.Query().Get("step")
+		// Allow step 3 (import) even after setup_complete if admin just finished step 2
+		if step != "3" || h.currentUser(r) != 1 {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+	}
+	// Step 1 needs no users, steps 2-3 need admin logged in
+	if h.DB.HasUsers() && h.currentUser(r) != 1 {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
-	h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang})
+	if uid := h.currentUser(r); uid > 0 {
+		lang = h.getLang(r, uid)
+	}
+	step := 1
+	if s := r.URL.Query().Get("step"); s == "2" {
+		step = 2
+	} else if s == "3" {
+		step = 3
+	}
+	// Steps 2 and 3 require the user to be created already
+	if step > 1 && !h.DB.HasUsers() {
+		http.Redirect(w, r, "/setup", http.StatusFound)
+		return
+	}
+	h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": step})
 }
 
 func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
-	if h.DB.HasUsers() {
+	if h.DB.HasUsers() && h.currentUser(r) != 1 {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
-	username := r.FormValue("username")
-	password := r.FormValue("password")
-	if username == "" {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.username_required")})
-		return
+	step := r.FormValue("step")
+
+	switch step {
+	case "1":
+		// Create admin account
+		username := strings.TrimSpace(r.FormValue("username"))
+		email := strings.TrimSpace(r.FormValue("email"))
+		password := r.FormValue("password")
+		passwordConfirm := r.FormValue("password_confirm")
+
+		if username == "" {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.username_required"), "Email": email})
+			return
+		}
+		if email == "" {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.email_required"), "Username": username})
+			return
+		}
+		if len(password) < 8 {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.password_min"), "Username": username, "Email": email})
+			return
+		}
+		if password != passwordConfirm {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.password_mismatch"), "Username": username, "Email": email})
+			return
+		}
+
+		hash, _ := auth.HashPassword(password)
+		userID, err := h.DB.CreateUser(username, hash)
+		if err != nil {
+			h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Step": 1, "Error": i18n.T(lang, "setup.error.create_failed")})
+			return
+		}
+		h.DB.UpdateUserEmail(userID, email)
+
+		// Create session immediately
+		sessionToken := h.Sessions.Create(userID)
+		auth.SetSessionCookie(w, sessionToken)
+		log.Printf("ACTION: setup admin user=%q id=%d email=%q", username, userID, email)
+
+		// Go to step 2
+		http.Redirect(w, r, "/setup?step=2", http.StatusFound)
+
+	case "2":
+		// Server configuration
+		if tmdbKey := strings.TrimSpace(r.FormValue("tmdb_key")); tmdbKey != "" {
+			h.DB.SetSetting("tmdb_api_key", tmdbKey)
+			h.TMDB = tmdb.NewClient(tmdbKey)
+			log.Printf("ACTION: setup TMDB key configured")
+		}
+		if smtpURL := strings.TrimSpace(r.FormValue("smtp_url")); smtpURL != "" {
+			if _, err := mail.ParseURL(smtpURL); err == nil {
+				h.DB.SetSetting("smtp_url", smtpURL)
+				log.Printf("ACTION: setup SMTP configured")
+			}
+		}
+		if v := strings.TrimSpace(r.FormValue("watchlog_url")); v != "" {
+			h.DB.SetSetting("watchlog_url", strings.TrimRight(v, "/"))
+		}
+		// Auth options
+		if r.FormValue("auth_registration") == "on" {
+			h.DB.SetSetting("auth_registration", "enabled")
+		} else {
+			h.DB.SetSetting("auth_registration", "disabled")
+		}
+		if defaultLogin := r.FormValue("auth_default_login"); defaultLogin == "password" || defaultLogin == "magic" {
+			h.DB.SetSetting("auth_default_login", defaultLogin)
+		}
+
+		log.Printf("ACTION: setup server configuration saved")
+		// Mark setup as complete
+		h.DB.SetSetting("setup_complete", "true")
+		// Go to step 3
+		http.Redirect(w, r, "/setup?step=3", http.StatusFound)
+
+	default:
+		http.Redirect(w, r, "/setup", http.StatusFound)
 	}
-	if len(password) < 8 {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.password_min")})
-		return
-	}
-	hash, _ := auth.HashPassword(password)
-	userID, err := h.DB.CreateUser(username, hash)
-	if err != nil {
-		h.Templates.ExecuteTemplate(w, "setup.html", map[string]any{"Lang": lang, "Error": i18n.T(lang, "setup.error.create_failed")})
-		return
-	}
-	token := h.Sessions.Create(userID)
-	auth.SetSessionCookie(w, token)
-	log.Printf("ACTION: setup user=%q id=%d", username, userID)
-	http.Redirect(w, r, "/import", http.StatusFound)
 }
 
 // --- Import ---

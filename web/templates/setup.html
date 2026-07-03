@@ -1,31 +1,188 @@
 {{define "setup.html"}}
 {{template "head" .}}
-<div class="max-w-sm mx-auto py-24">
-    <div class="text-center mb-12">
-        <h1 class="font-serif text-5xl">WatchLog</h1>
-        <p class="mt-4 text-sm text-wl-gray tracking-wide uppercase">Initial Setup</p>
+<div class="max-w-lg mx-auto py-24">
+    <h1 class="font-serif text-4xl text-center mb-4">WatchLog</h1>
+    <p class="text-xs uppercase tracking-widest text-wl-gray text-center mb-12">{{T .Lang "setup.subtitle"}}</p>
+
+    <!-- Progress indicator -->
+    <div class="flex justify-center gap-2 mb-12">
+        <div class="w-8 h-1 {{if eq .Step 1}}bg-black{{else}}bg-wl-border{{end}}"></div>
+        <div class="w-8 h-1 {{if eq .Step 2}}bg-black{{else}}bg-wl-border{{end}}"></div>
+        <div class="w-8 h-1 {{if eq .Step 3}}bg-black{{else}}bg-wl-border{{end}}"></div>
     </div>
 
     {{if .Error}}
     <p class="text-sm text-red-600 mb-6 text-center">{{.Error}}</p>
     {{end}}
 
+    {{if eq .Step 1}}
+    <!-- Step 1: Admin account -->
+    <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-8 text-center">{{T .Lang "setup.step1_title"}}</h2>
     <form method="POST" action="/setup" class="space-y-6">
+        <input type="hidden" name="step" value="1">
         <div>
-            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">Username</label>
-            <input type="text" name="username" required autofocus
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.username"}}</label>
+            <input type="text" name="username" value="{{.Username}}" required autofocus
                 class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
         </div>
         <div>
-            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">Password</label>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "settings.email"}}</label>
+            <input type="email" name="email" value="{{.Email}}" required
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+        </div>
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "login.password"}}</label>
             <input type="password" name="password" required
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+        </div>
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "setup.confirm_password"}}</label>
+            <input type="password" name="password_confirm" required
                 class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
         </div>
         <button type="submit"
             class="w-full py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
-            Create Account & Continue
+            {{T .Lang "setup.next"}}
         </button>
     </form>
+
+    {{else if eq .Step 2}}
+    <!-- Step 2: Server configuration -->
+    <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-8 text-center">{{T .Lang "setup.step2_title"}}</h2>
+    <form method="POST" action="/setup" class="space-y-6">
+        <input type="hidden" name="step" value="2">
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">TMDB API Key</label>
+            <input type="text" name="tmdb_key" value="{{.TMDBKey}}"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "setup.tmdb_help"}}</p>
+        </div>
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">SMTP URL</label>
+            <input type="text" name="smtp_url" value="{{.SMTPURL}}" placeholder="smtps://user:pass@host:465/from@example.com"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm font-mono focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "setup.smtp_help"}}</p>
+        </div>
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.watchlog_url"}}</label>
+            <input type="url" name="watchlog_url" value="{{.WatchLogURL}}" placeholder="https://watchlog.example.com"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "setup.url_help"}}</p>
+        </div>
+        <div class="border-t border-wl-border pt-6">
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "setup.auth_options"}}</label>
+            <div class="space-y-3">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="auth_registration" checked class="accent-black">
+                    <span class="text-sm">{{T .Lang "admin.auth_registration"}}</span>
+                </label>
+            </div>
+            <div class="mt-4">
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "admin.auth_default"}}</label>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_default_login" value="magic" checked class="accent-black">
+                        <span class="text-sm">Magic link</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_default_login" value="password" class="accent-black">
+                        <span class="text-sm">{{T .Lang "login.password"}}</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-4">
+            <a href="/setup?step=1"
+                class="flex-1 py-3 text-xs uppercase tracking-widest border border-black text-black text-center hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "setup.back"}}
+            </a>
+            <button type="submit"
+                class="flex-1 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                {{T .Lang "setup.next"}}
+            </button>
+        </div>
+    </form>
+
+    {{else if eq .Step 3}}
+    <!-- Step 3: Import -->
+    <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-8 text-center">{{T .Lang "setup.step3_title"}}</h2>
+    <p class="text-sm text-wl-gray text-center mb-8">{{T .Lang "setup.step3_description"}}</p>
+
+    <div id="import-section">
+        <form id="import-form" class="space-y-6">
+            <div>
+                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "import.select_file"}}</label>
+                <input type="file" name="zipfile" accept=".zip" id="zipfile"
+                    class="block w-full text-sm text-wl-gray file:mr-4 file:py-2 file:px-4 file:border file:border-black file:text-xs file:uppercase file:tracking-widest file:bg-white file:text-black hover:file:bg-black hover:file:text-white file:transition-colors file:cursor-pointer">
+            </div>
+            <div class="flex gap-4">
+                <a href="/"
+                    class="flex-1 py-3 text-xs uppercase tracking-widest border border-black text-black text-center hover:bg-black hover:text-white transition-colors">
+                    {{T .Lang "setup.skip"}}
+                </a>
+                <button type="submit" id="import-btn"
+                    class="flex-1 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                    {{T .Lang "setup.import"}}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Log output (hidden until import starts) -->
+    <div id="log-section" class="hidden mt-8">
+        <h3 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "import.log"}}</h3>
+        <div id="log-output" class="bg-wl-light border border-wl-border p-6 font-mono text-xs leading-relaxed max-h-96 overflow-y-auto"></div>
+        <div id="import-done" class="hidden mt-6">
+            <a href="/"
+                class="inline-block px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                {{T .Lang "setup.go_dashboard"}}
+            </a>
+        </div>
+    </div>
+
+    <script>
+    document.getElementById('import-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const fileInput = document.getElementById('zipfile');
+        if (!fileInput.files.length) return;
+
+        document.getElementById('import-section').querySelector('form').classList.add('hidden');
+        document.getElementById('log-section').classList.remove('hidden');
+        const logOutput = document.getElementById('log-output');
+
+        const formData = new FormData();
+        formData.append('zipfile', fileInput.files[0]);
+
+        fetch('/import', { method: 'POST', body: formData }).then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            function read() {
+                reader.read().then(({done, value}) => {
+                    if (done) { document.getElementById('import-done').classList.remove('hidden'); return; }
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    lines.forEach(line => {
+                        if (line.startsWith('data: ')) {
+                            const msg = line.substring(6);
+                            if (msg === '[DONE]') { document.getElementById('import-done').classList.remove('hidden'); return; }
+                            const div = document.createElement('div');
+                            div.textContent = msg;
+                            if (msg.startsWith('ERROR')) div.className = 'text-red-600';
+                            if (msg.startsWith('✓')) div.className = 'font-bold';
+                            logOutput.appendChild(div);
+                            logOutput.scrollTop = logOutput.scrollHeight;
+                        }
+                    });
+                    read();
+                });
+            }
+            read();
+        });
+    });
+    </script>
+    {{end}}
 </div>
 {{template "foot" .}}
 {{end}}
