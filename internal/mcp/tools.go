@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -66,6 +67,7 @@ type showIDArgs struct {
 }
 
 func (s *Server) toolGetContinueWatching(ctx context.Context, req *mcp.CallToolRequest, args emptyArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=get_continue_watching user=%d", getUserID(ctx))
 	if !hasScope(ctx, "read") {
 		return errNoScope("read")
 	}
@@ -81,6 +83,7 @@ func (s *Server) toolGetContinueWatching(ctx context.Context, req *mcp.CallToolR
 }
 
 func (s *Server) toolGetShows(ctx context.Context, req *mcp.CallToolRequest, args emptyArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=get_shows user=%d", getUserID(ctx))
 	if !hasScope(ctx, "read") {
 		return errNoScope("read")
 	}
@@ -106,6 +109,7 @@ func (s *Server) toolGetShows(ctx context.Context, req *mcp.CallToolRequest, arg
 }
 
 func (s *Server) toolGetShow(ctx context.Context, req *mcp.CallToolRequest, args showIDArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=get_show user=%d show_id=%d", getUserID(ctx), args.ShowID)
 	if !hasScope(ctx, "read") {
 		return errNoScope("read")
 	}
@@ -121,6 +125,7 @@ func (s *Server) toolGetShow(ctx context.Context, req *mcp.CallToolRequest, args
 }
 
 func (s *Server) toolGetMovies(ctx context.Context, req *mcp.CallToolRequest, args emptyArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=get_movies user=%d", getUserID(ctx))
 	if !hasScope(ctx, "read") {
 		return errNoScope("read")
 	}
@@ -141,6 +146,7 @@ func (s *Server) toolGetMovies(ctx context.Context, req *mcp.CallToolRequest, ar
 }
 
 func (s *Server) toolGetStats(ctx context.Context, req *mcp.CallToolRequest, args emptyArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=get_stats user=%d", getUserID(ctx))
 	if !hasScope(ctx, "read") {
 		return errNoScope("read")
 	}
@@ -164,6 +170,7 @@ type markSeasonArgs struct {
 }
 
 func (s *Server) toolMarkEpisode(ctx context.Context, req *mcp.CallToolRequest, args markEpisodeArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=mark_episode user=%d show=%d S%02dE%02d", getUserID(ctx), args.ShowID, args.Season, args.Episode)
 	if !hasScope(ctx, "mark") {
 		return errNoScope("mark")
 	}
@@ -178,6 +185,7 @@ func (s *Server) toolMarkEpisode(ctx context.Context, req *mcp.CallToolRequest, 
 }
 
 func (s *Server) toolUnmarkEpisode(ctx context.Context, req *mcp.CallToolRequest, args markEpisodeArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=unmark_episode user=%d show=%d S%02dE%02d", getUserID(ctx), args.ShowID, args.Season, args.Episode)
 	if !hasScope(ctx, "mark") {
 		return errNoScope("mark")
 	}
@@ -190,6 +198,7 @@ func (s *Server) toolUnmarkEpisode(ctx context.Context, req *mcp.CallToolRequest
 }
 
 func (s *Server) toolMarkSeason(ctx context.Context, req *mcp.CallToolRequest, args markSeasonArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=mark_season user=%d show=%d S%02d", getUserID(ctx), args.ShowID, args.Season)
 	if !hasScope(ctx, "mark") {
 		return errNoScope("mark")
 	}
@@ -205,6 +214,7 @@ func (s *Server) toolMarkSeason(ctx context.Context, req *mcp.CallToolRequest, a
 }
 
 func (s *Server) toolSnoozeShow(ctx context.Context, req *mcp.CallToolRequest, args showIDArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=snooze_show user=%d show=%d", getUserID(ctx), args.ShowID)
 	if !hasScope(ctx, "mark") {
 		return errNoScope("mark")
 	}

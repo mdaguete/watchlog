@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -22,9 +23,14 @@ func New(database *db.DB) *Server {
 	s := &Server{db: database}
 	s.server = mcp.NewServer(
 		&mcp.Implementation{Name: "watchlog", Version: "0.12.0"},
-		nil,
+		&mcp.ServerOptions{
+			InitializedHandler: func(ctx context.Context, req *mcp.InitializedRequest) {
+				log.Printf("MCP: session initialized (user=%d)", getUserID(ctx))
+			},
+		},
 	)
 	s.registerTools()
+	log.Println("MCP: server ready at /mcp")
 	return s
 }
 
@@ -32,22 +38,27 @@ func New(database *db.DB) *Server {
 // It wraps the streamable HTTP handler with API key authentication.
 func (s *Server) Handler() http.Handler {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		// The server is shared; auth is checked in the middleware wrapper
 		return s.server
 	}, nil)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("MCP: %s /mcp from %s", r.Method, r.RemoteAddr)
+
 		// Authenticate via Bearer token (API key)
 		key := extractAPIKey(r)
 		if key == "" {
+			log.Printf("MCP: rejected - no API key")
 			http.Error(w, `{"error":"missing api key"}`, http.StatusUnauthorized)
 			return
 		}
 		userID, scopes, ok := s.db.ValidateAPIKey(key)
 		if !ok {
+			log.Printf("MCP: rejected - invalid API key")
 			http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)
 			return
 		}
+		log.Printf("MCP: authenticated user=%d scopes=[%s]", userID, scopes)
+
 		// Store auth context for tool handlers
 		ctx := context.WithValue(r.Context(), ctxUserID, userID)
 		ctx = context.WithValue(ctx, ctxScopes, scopes)
