@@ -7,25 +7,29 @@
 
     <!-- Year/Month filter -->
     {{if .Years}}
-    <div class="flex flex-wrap items-center gap-3">
-        <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "timeline.jump"}}</span>
-        {{range .Years}}
-        <button onclick="jumpToYear('{{.}}')" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black border border-wl-border px-2 py-1 transition-colors">{{.}}</button>
-        {{end}}
-    </div>
-    <div id="month-filter" class="hidden flex flex-wrap items-center gap-2">
-        <button onclick="jumpToMonth('01')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">01</button>
-        <button onclick="jumpToMonth('02')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">02</button>
-        <button onclick="jumpToMonth('03')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">03</button>
-        <button onclick="jumpToMonth('04')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">04</button>
-        <button onclick="jumpToMonth('05')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">05</button>
-        <button onclick="jumpToMonth('06')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">06</button>
-        <button onclick="jumpToMonth('07')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">07</button>
-        <button onclick="jumpToMonth('08')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">08</button>
-        <button onclick="jumpToMonth('09')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">09</button>
-        <button onclick="jumpToMonth('10')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">10</button>
-        <button onclick="jumpToMonth('11')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">11</button>
-        <button onclick="jumpToMonth('12')" class="text-xs text-wl-gray hover:text-black px-2 py-1 border border-wl-border transition-colors">12</button>
+    <div class="flex flex-wrap items-start gap-4">
+        <span class="text-xs uppercase tracking-widest text-wl-gray pt-1">{{T .Lang "timeline.jump"}}</span>
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+            {{range .Years}}
+            <div class="flex items-baseline gap-2">
+                <span class="text-sm font-medium">{{.}}</span>
+                <div class="flex gap-1.5">
+                    <button onclick="jumpTo('{{.}}','01')" class="text-xs text-wl-gray hover:text-black">ene</button>
+                    <button onclick="jumpTo('{{.}}','02')" class="text-xs text-wl-gray hover:text-black">feb</button>
+                    <button onclick="jumpTo('{{.}}','03')" class="text-xs text-wl-gray hover:text-black">mar</button>
+                    <button onclick="jumpTo('{{.}}','04')" class="text-xs text-wl-gray hover:text-black">abr</button>
+                    <button onclick="jumpTo('{{.}}','05')" class="text-xs text-wl-gray hover:text-black">may</button>
+                    <button onclick="jumpTo('{{.}}','06')" class="text-xs text-wl-gray hover:text-black">jun</button>
+                    <button onclick="jumpTo('{{.}}','07')" class="text-xs text-wl-gray hover:text-black">jul</button>
+                    <button onclick="jumpTo('{{.}}','08')" class="text-xs text-wl-gray hover:text-black">ago</button>
+                    <button onclick="jumpTo('{{.}}','09')" class="text-xs text-wl-gray hover:text-black">sep</button>
+                    <button onclick="jumpTo('{{.}}','10')" class="text-xs text-wl-gray hover:text-black">oct</button>
+                    <button onclick="jumpTo('{{.}}','11')" class="text-xs text-wl-gray hover:text-black">nov</button>
+                    <button onclick="jumpTo('{{.}}','12')" class="text-xs text-wl-gray hover:text-black">dic</button>
+                </div>
+            </div>
+            {{end}}
+        </div>
     </div>
     {{end}}
 
@@ -38,19 +42,17 @@
 </div>
 
 <script>
-let selectedYear = '';
-function jumpToYear(year) {
-    selectedYear = year;
-    document.getElementById('month-filter').classList.remove('hidden');
-}
-function jumpToMonth(month) {
-    const from = selectedYear + '-' + month + '-01';
-    const lastDay = new Date(parseInt(selectedYear), parseInt(month), 0).getDate();
-    const to = selectedYear + '-' + month + '-' + String(lastDay).padStart(2, '0');
-    fetch('/api/timeline?from=' + from + '&to=' + to, {headers: {'HX-Request': 'true'}})
+function jumpTo(year, month) {
+    // "before" = first day of next month (so we include the selected month)
+    let nextMonth = parseInt(month) + 1;
+    let nextYear = parseInt(year);
+    if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+    const before = nextYear + '-' + String(nextMonth).padStart(2, '0') + '-01';
+    fetch('/api/timeline?before=' + before, {headers: {'HX-Request': 'true'}})
         .then(r => r.text())
         .then(html => {
             document.getElementById('timeline-days').innerHTML = html;
+            htmx.process(document.getElementById('timeline-days'));
         });
 }
 </script>
