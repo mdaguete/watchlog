@@ -49,15 +49,28 @@
             transition: width 0.3s ease;
         }
         .nav-link:hover::after { width: 100%; }
+        .line-clamp-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body class="h-full bg-white text-wl-black">
     <div class="min-h-full">
         <header class="border-b border-wl-border">
-            <div class="mx-auto max-w-7xl px-6 lg:px-8">
-                <div class="flex h-20 items-center justify-between">
-                    <a href="/" class="text-2xl font-serif tracking-widest uppercase">WatchLog</a>
-                    <nav class="flex items-center gap-8">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div class="flex h-16 sm:h-20 items-center justify-between">
+                    <a href="/" class="text-xl sm:text-2xl font-serif tracking-widest uppercase">WatchLog</a>
+                    <!-- Mobile menu button -->
+                    <button onclick="document.getElementById('mobile-nav').classList.toggle('hidden')" class="lg:hidden p-2 text-wl-dark">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <!-- Desktop nav -->
+                    <nav class="hidden lg:flex items-center gap-6 xl:gap-8">
                         <a href="/shows" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
                         <a href="/movies" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
                         <a href="/upcoming" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
@@ -69,14 +82,27 @@
                     </nav>
                 </div>
             </div>
+            <!-- Mobile nav -->
+            <nav id="mobile-nav" class="hidden lg:hidden border-t border-wl-border">
+                <div class="mx-auto max-w-7xl px-4 py-4 grid grid-cols-2 gap-3">
+                    <a href="/shows" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
+                    <a href="/movies" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
+                    <a href="/upcoming" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
+                    <a href="/lists" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.lists"}}{{else}}Listas{{end}}</a>
+                    <a href="/stats" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.stats"}}{{else}}Stats{{end}}</a>
+                    <a href="/search" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
+                    <a href="/add" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
+                    <a href="/settings" class="text-xs uppercase tracking-widest text-wl-dark py-2">⚙</a>
+                </div>
+            </nav>
         </header>
-        <main class="mx-auto max-w-7xl px-6 py-12 lg:px-8">
+        <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
 {{end}}
 
 {{define "foot"}}
         </main>
-        <footer class="border-t border-wl-border mt-24">
-            <div class="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+        <footer class="border-t border-wl-border mt-16 sm:mt-24">
+            <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
                 <p class="text-xs text-wl-gray tracking-wide">{{if .}}{{T .Lang "footer.tagline"}}{{else}}WatchLog — Tu seguimiento personal de series y películas{{end}}</p>
             </div>
         </footer>
