@@ -318,7 +318,8 @@ func main() {
 
 	// MCP endpoint
 	mcpSrv := mcpserver.New(database)
-	mux.Handle("/mcp", mcpSrv.Handler())
+	mux.Handle("POST /mcp", mcpSrv.Handler())
+	mux.Handle("GET /mcp", mcpSrv.Handler())
 
 	log.Printf("Listening on http://localhost%s", *addr)
 
