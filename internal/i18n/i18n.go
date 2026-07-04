@@ -9,11 +9,17 @@ var translations = map[string]map[string]string{
 	"nav.upcoming": {"es": "Próximos", "en": "Upcoming"},
 	"nav.lists":    {"es": "Listas", "en": "Lists"},
 	"nav.stats":    {"es": "Stats", "en": "Stats"},
+	"nav.timeline": {"es": "Historial", "en": "Timeline"},
 	"nav.search":   {"es": "Buscar", "en": "Search"},
 	"nav.add":      {"es": "+ Añadir", "en": "+ Add"},
 
 	// Footer
 	"footer.tagline": {"es": "WatchLog — Tu seguimiento personal de series y películas", "en": "WatchLog — Your personal TV & movie tracker"},
+
+	// PWA
+	"pwa.install_prompt": {"es": "Instalar WatchLog", "en": "Install WatchLog"},
+	"pwa.install":        {"es": "Instalar", "en": "Install"},
+	"pwa.ios_prompt":     {"es": "Pulsa compartir ⎋ y \"Añadir a pantalla de inicio\"", "en": "Tap share ⎋ and \"Add to Home Screen\""},
 
 	// Dashboard
 	"dashboard.title":          {"es": "Tu colección", "en": "Your collection"},
@@ -26,6 +32,8 @@ var translations = map[string]map[string]string{
 	"dashboard.movies_link":    {"es": "Películas →", "en": "Movies →"},
 	"dashboard.upcoming_link":  {"es": "Próximos →", "en": "Upcoming →"},
 	"dashboard.continue":       {"es": "Continuar viendo", "en": "Continue watching"},
+	"dashboard.new_seasons":    {"es": "Novedades", "en": "New seasons"},
+	"dashboard.new_season_label": {"es": "Nueva temporada", "en": "New season"},
 	"dashboard.mark_watched":   {"es": "Marcar como visto", "en": "Mark as watched"},
 	"dashboard.snooze":         {"es": "Posponer", "en": "Snooze"},
 
@@ -67,6 +75,10 @@ var translations = map[string]map[string]string{
 	"movies.sort.name":   {"es": "A–Z", "en": "A–Z"},
 	"movies.total":       {"es": "Películas vistas", "en": "Movies watched"},
 	"movies.runtime":     {"es": "Tiempo total", "en": "Total runtime"},
+	"movies.watchlist":     {"es": "Pendientes", "en": "Watchlist"},
+	"movies.watched_count": {"es": "vistas", "en": "watched"},
+	"movies.mark_watched":  {"es": "Vista", "en": "Watched"},
+	"movies.watched":       {"es": "Vista", "en": "Watched"},
 
 	// Stats
 	"stats.title":     {"es": "Estadísticas", "en": "Statistics"},
@@ -77,6 +89,15 @@ var translations = map[string]map[string]string{
 	"stats.calendar":  {"es": "Calendario de actividad", "en": "Activity calendar"},
 	"stats.less":      {"es": "Menos", "en": "Less"},
 	"stats.more":      {"es": "Más", "en": "More"},
+
+	// Timeline
+	"timeline.title": {"es": "Historial", "en": "Timeline"},
+	"timeline.movie": {"es": "Película", "en": "Movie"},
+	"timeline.items": {"es": "episodios", "en": "episodes"},
+	"timeline.more":     {"es": "más", "en": "more"},
+	"timeline.collapse": {"es": "Menos", "en": "Less"},
+	"timeline.jump":     {"es": "Ir a:", "en": "Jump to:"},
+	"timeline.today":    {"es": "Hoy", "en": "Today"},
 
 	// Lists
 	"lists.title":       {"es": "Listas", "en": "Lists"},
@@ -169,6 +190,10 @@ var translations = map[string]map[string]string{
 	// Settings
 	"settings.title":    {"es": "Ajustes", "en": "Settings"},
 	"settings.language": {"es": "Idioma", "en": "Language"},
+	"settings.theme":          {"es": "Tema", "en": "Theme"},
+	"settings.theme.system":   {"es": "Sistema", "en": "System"},
+	"settings.theme.light":    {"es": "Claro", "en": "Light"},
+	"settings.theme.dark":     {"es": "Oscuro", "en": "Dark"},
 	"settings.save":     {"es": "Guardar", "en": "Save"},
 	"settings.saved":           {"es": "Guardado", "en": "Saved"},
 	"settings.current_key":     {"es": "Clave actual", "en": "Current key"},
@@ -178,6 +203,11 @@ var translations = map[string]map[string]string{
 	"settings.refresh_upcoming": {"es": "Refrescar próximos", "en": "Refresh upcoming"},
 	"settings.admin_link":       {"es": "Administración del servidor", "en": "Server administration"},
 	"settings.logout":           {"es": "Cerrar sesión", "en": "Log out"},
+	"settings.api_keys":         {"es": "API Keys (MCP)", "en": "API Keys (MCP)"},
+	"settings.key_name":         {"es": "Nombre", "en": "Name"},
+	"settings.key_scopes":       {"es": "Permisos", "en": "Scopes"},
+	"settings.create_key":       {"es": "Crear clave", "en": "Create key"},
+	"settings.confirm_delete_key": {"es": "¿Eliminar esta clave?", "en": "Delete this key?"},
 
 	// Admin
 	"admin.title":          {"es": "Administración", "en": "Administration"},

@@ -80,6 +80,20 @@ func (db *DB) SetUserLang(userID int64, lang string) error {
 	return err
 }
 
+func (db *DB) GetUserTheme(userID int64) string {
+	var theme string
+	err := db.conn.QueryRow("SELECT theme FROM users WHERE id = ?", userID).Scan(&theme)
+	if err != nil || theme == "" {
+		return "system"
+	}
+	return theme
+}
+
+func (db *DB) SetUserTheme(userID int64, theme string) error {
+	_, err := db.conn.Exec("UPDATE users SET theme = ? WHERE id = ?", theme, userID)
+	return err
+}
+
 // --- Settings (key-value store) ---
 
 func (db *DB) GetSetting(key string) string {
@@ -122,6 +136,10 @@ func (db *DB) GetShow(id int64) (models.Show, error) {
 	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons FROM shows WHERE id = ?", id).
 		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons)
 	return s, err
+}
+
+func (db *DB) GetShowByTMDBID(tmdbID int, id *int64) {
+	db.conn.QueryRow("SELECT id FROM shows WHERE tmdb_id = ?", tmdbID).Scan(id)
 }
 
 func (db *DB) UpdateShowTMDB(id int64, tmdbID int, posterURL, backdropURL, overview, genres, status string, totalSeasons int) error {
@@ -329,6 +347,24 @@ func (db *DB) AutoUnarchiveIfIncomplete(userID, showID int64) bool {
 	return true
 }
 
+// UnarchiveForNewSeason unarchives a show for all users who have it archived,
+// if the show is "Returning Series" and has new seasons available.
+func (db *DB) UnarchiveForNewSeason(showID int64, newSeasonCount int) {
+	// Only act on shows that are returning
+	var status string
+	db.conn.QueryRow("SELECT status FROM shows WHERE id = ?", showID).Scan(&status)
+	if status != "Returning Series" {
+		return
+	}
+	// Get previously cached season count
+	var oldCount int
+	db.conn.QueryRow("SELECT COUNT(*) FROM season_episodes WHERE show_id = ?", showID).Scan(&oldCount)
+	// If new seasons were added, unarchive for all users
+	if newSeasonCount > oldCount {
+		db.conn.Exec("UPDATE user_shows SET is_archived = 0, updated_at = ? WHERE show_id = ? AND is_archived = 1", time.Now(), showID)
+	}
+}
+
 // SnoozeShow sets a snooze-until date for a show (hides from continue watching).
 func (db *DB) SnoozeShow(userID, showID int64, until time.Time) error {
 	_, err := db.conn.Exec("UPDATE user_shows SET snoozed_until = ? WHERE user_id = ? AND show_id = ?", until, userID, showID)
@@ -511,10 +547,53 @@ func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 	return id, nil
 }
 
+func (db *DB) GetMovie(id int64) (models.Movie, error) {
+	var m models.Movie
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime FROM movies WHERE id = ?", id).
+		Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime)
+	return m, err
+}
+
+func (db *DB) IsMovieWatched(userID, movieID int64) bool {
+	var watchedAt *string
+	db.conn.QueryRow("SELECT watched_at FROM user_movies WHERE user_id = ? AND movie_id = ?", userID, movieID).Scan(&watchedAt)
+	return watchedAt != nil
+}
+
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
-		ON CONFLICT(user_id, movie_id) DO NOTHING`, userID, movieID, watchedAt)
+		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedAt)
 	return err
+}
+
+func (db *DB) AddMovieToLibrary(userID, movieID int64) error {
+	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id) VALUES (?, ?)
+		ON CONFLICT(user_id, movie_id) DO NOTHING`, userID, movieID)
+	return err
+}
+
+func (db *DB) UnmarkMovieWatched(userID, movieID int64) error {
+	_, err := db.conn.Exec(`UPDATE user_movies SET watched_at = NULL WHERE user_id = ? AND movie_id = ?`, userID, movieID)
+	return err
+}
+
+func (db *DB) GetUserMoviesUnwatched(userID int64) ([]models.UserMovie, error) {
+	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime
+		FROM user_movies um JOIN movies m ON m.id = um.movie_id
+		WHERE um.user_id = ? AND um.watched_at IS NULL ORDER BY m.name ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var movies []models.UserMovie
+	for rows.Next() {
+		var um models.UserMovie
+		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime); err != nil {
+			return nil, err
+		}
+		movies = append(movies, um)
+	}
+	return movies, nil
 }
 
 func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie, error) {
@@ -528,7 +607,7 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 
 	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime, um.watched_at
 		FROM user_movies um JOIN movies m ON m.id = um.movie_id
-		WHERE um.user_id = ? `+orderClause, userID)
+		WHERE um.user_id = ? AND um.watched_at IS NOT NULL `+orderClause, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -974,7 +1053,7 @@ type MovieStats struct {
 
 func (db *DB) GetMovieStats(userID int64) (MovieStats, error) {
 	var s MovieStats
-	db.conn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(m.runtime), 0) FROM user_movies um JOIN movies m ON m.id = um.movie_id WHERE um.user_id = ?`, userID).Scan(&s.TotalMovies, &s.TotalRuntime)
+	db.conn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(m.runtime), 0) FROM user_movies um JOIN movies m ON m.id = um.movie_id WHERE um.user_id = ? AND um.watched_at IS NOT NULL`, userID).Scan(&s.TotalMovies, &s.TotalRuntime)
 	return s, nil
 }
 
@@ -1112,59 +1191,100 @@ type ContinueWatchingItem struct {
 	DaysSinceLast int
 }
 
-// GetContinueWatching returns the next unwatched episode for the N most recently active shows.
+// GetContinueWatching returns the next unwatched episode for shows the user is mid-season on.
+// It excludes shows where the next episode is in a new (unwatched) season — those go to GetNewSeasons.
 func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]ContinueWatchingItem, error) {
 	off := 0
 	if len(offset) > 0 {
 		off = offset[0]
 	}
-	// Get the most recently active shows (by latest watched episode)
+	all, err := db.getContinueWatchingCandidates(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []ContinueWatchingItem
+	skipped := 0
+	for _, item := range all {
+		if len(items) >= limit {
+			break
+		}
+		if item.isNewSeason {
+			continue
+		}
+		if skipped < off {
+			skipped++
+			continue
+		}
+		items = append(items, item.ContinueWatchingItem)
+	}
+	return items, nil
+}
+
+// GetNewSeasons returns shows where the user completed previous seasons and a new season is now available.
+func (db *DB) GetNewSeasons(userID int64) ([]ContinueWatchingItem, error) {
+	all, err := db.getContinueWatchingCandidates(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []ContinueWatchingItem
+	for _, item := range all {
+		if item.isNewSeason {
+			items = append(items, item.ContinueWatchingItem)
+		}
+	}
+	return items, nil
+}
+
+type candidateItem struct {
+	ContinueWatchingItem
+	isNewSeason bool
+}
+
+func (db *DB) getContinueWatchingCandidates(userID int64) ([]candidateItem, error) {
 	rows, err := db.conn.Query(`
-		SELECT e.show_id, s.name, s.name_es, s.name_en, s.poster_url, MAX(e.watched_at) as last_watched
-		FROM episodes e
-		JOIN shows s ON s.id = e.show_id
-		JOIN user_shows us ON us.show_id = e.show_id AND us.user_id = e.user_id
-		WHERE e.user_id = ? AND (us.snoozed_until IS NULL OR us.snoozed_until < ?)
-		GROUP BY e.show_id
-		ORDER BY last_watched DESC
-		LIMIT ? OFFSET ?`, userID, time.Now(), limit*3, off*3) // fetch extra in case some are fully watched
+		SELECT us.show_id, s.name, s.name_es, s.name_en, s.poster_url,
+			COALESCE((SELECT MAX(e.watched_at) FROM episodes e WHERE e.user_id = us.user_id AND e.show_id = us.show_id), us.followed_at) as last_activity
+		FROM user_shows us
+		JOIN shows s ON s.id = us.show_id
+		WHERE us.user_id = ? AND us.is_followed = 1 AND us.is_archived = 0
+			AND (us.snoozed_until IS NULL OR us.snoozed_until < ?)
+		ORDER BY last_activity DESC`, userID, time.Now())
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	type recentShow struct {
-		id          int64
-		name        string
-		nameES      string
-		nameEN      string
-		poster      string
-		lastWatched string
+	type candidateShow struct {
+		id           int64
+		name         string
+		nameES       string
+		nameEN       string
+		poster       string
+		lastActivity string
 	}
-	var recent []recentShow
+	var candidates []candidateShow
 	for rows.Next() {
-		var rs recentShow
-		if err := rows.Scan(&rs.id, &rs.name, &rs.nameES, &rs.nameEN, &rs.poster, &rs.lastWatched); err != nil {
+		var c candidateShow
+		if err := rows.Scan(&c.id, &c.name, &c.nameES, &c.nameEN, &c.poster, &c.lastActivity); err != nil {
 			return nil, err
 		}
-		recent = append(recent, rs)
+		candidates = append(candidates, c)
 	}
 
-	var items []ContinueWatchingItem
-	for _, rs := range recent {
-		if len(items) >= limit {
-			break
-		}
-
+	var items []candidateItem
+	for _, c := range candidates {
 		// Get all season/episode counts for this show
-		seasons, _ := db.GetSeasonEpisodes(rs.id)
+		seasons, _ := db.GetSeasonEpisodes(c.id)
 		if len(seasons) == 0 {
 			continue
 		}
 
 		// Get watched episodes for this user/show
 		watchedSet := make(map[string]bool)
-		wRows, err := db.conn.Query("SELECT season_number, episode_number FROM episodes WHERE user_id = ? AND show_id = ?", userID, rs.id)
+		maxWatchedSeason := 0
+		wRows, err := db.conn.Query("SELECT season_number, episode_number FROM episodes WHERE user_id = ? AND show_id = ?", userID, c.id)
 		if err != nil {
 			continue
 		}
@@ -1172,13 +1292,15 @@ func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]Con
 			var sn, en int
 			wRows.Scan(&sn, &en)
 			watchedSet[fmt.Sprintf("%d-%d", sn, en)] = true
+			if sn > maxWatchedSeason {
+				maxWatchedSeason = sn
+			}
 		}
 		wRows.Close()
 
 		// Find first unwatched episode
 		var foundSeason, foundEpisode int
 		found := false
-		// Sort seasons
 		sortedSeasons := make([]int, 0, len(seasons))
 		for sn := range seasons {
 			sortedSeasons = append(sortedSeasons, sn)
@@ -1203,31 +1325,35 @@ func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]Con
 		}
 
 		// Get episode details
-		var item ContinueWatchingItem
-		item.ShowID = rs.id
-		item.ShowName = rs.name
-		item.ShowNameES = rs.nameES
-		item.ShowNameEN = rs.nameEN
-		item.PosterURL = rs.poster
+		var item candidateItem
+		item.ShowID = c.id
+		item.ShowName = c.name
+		item.ShowNameES = c.nameES
+		item.ShowNameEN = c.nameEN
+		item.PosterURL = c.poster
 		item.SeasonNumber = foundSeason
 		item.EpisodeNumber = foundEpisode
 
 		var airDate string
 		err = db.conn.QueryRow(`SELECT name, name_en, overview, overview_en, still_url, air_date
 			FROM episode_details WHERE show_id = ? AND season_number = ? AND episode_number = ?`,
-			rs.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL, &airDate)
+			c.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL, &airDate)
 		if err != nil {
-			// No details available, still show the item
 			item.EpName = fmt.Sprintf("S%02dE%02d", foundSeason, foundEpisode)
 		} else if airDate == "" || airDate > time.Now().Format("2006-01-02") {
-			// Episode not yet aired — skip this show
+			// Episode not yet aired — skip
 			continue
 		}
 
-		// Calculate days since last watched
-		if t, err := time.Parse("2006-01-02 15:04:05", rs.lastWatched[:19]); err == nil {
-			item.DaysSinceLast = int(time.Since(t).Hours() / 24)
+		// Calculate days since last activity
+		if len(c.lastActivity) >= 19 {
+			if t, err := time.Parse("2006-01-02 15:04:05", c.lastActivity[:19]); err == nil {
+				item.DaysSinceLast = int(time.Since(t).Hours() / 24)
+			}
 		}
+
+		// Determine if this is a new season: first unwatched is in a season beyond what user has watched
+		item.isNewSeason = foundSeason > maxWatchedSeason && maxWatchedSeason > 0
 
 		items = append(items, item)
 	}
@@ -1246,3 +1372,333 @@ func sortInts(s []int) {
 	}
 }
 
+
+// --- API Keys ---
+
+// APIKey represents a user's API key metadata.
+type APIKey struct {
+	ID         int64
+	Name       string
+	Scopes     string
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+}
+
+func (db *DB) CreateAPIKey(userID int64, keyHash, name, scopes string) (int64, error) {
+	res, err := db.conn.Exec(`INSERT INTO api_keys (user_id, key_hash, name, scopes) VALUES (?, ?, ?, ?)`,
+		userID, keyHash, name, scopes)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (db *DB) ValidateAPIKey(keyHash string) (int64, string, bool) {
+	var userID int64
+	var scopes string
+	err := db.conn.QueryRow(`SELECT user_id, scopes FROM api_keys WHERE key_hash = ?`, keyHash).Scan(&userID, &scopes)
+	if err != nil {
+		return 0, "", false
+	}
+	// Update last_used_at
+	db.conn.Exec(`UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?`, time.Now(), keyHash)
+	return userID, scopes, true
+}
+
+func (db *DB) GetUserAPIKeys(userID int64) ([]APIKey, error) {
+	rows, err := db.conn.Query(`SELECT id, name, scopes, created_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []APIKey
+	for rows.Next() {
+		var k APIKey
+		var lastUsed sql.NullTime
+		if err := rows.Scan(&k.ID, &k.Name, &k.Scopes, &k.CreatedAt, &lastUsed); err != nil {
+			return nil, err
+		}
+		if lastUsed.Valid {
+			k.LastUsedAt = lastUsed.Time
+		}
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+func (db *DB) DeleteAPIKey(userID, keyID int64) error {
+	_, err := db.conn.Exec(`DELETE FROM api_keys WHERE id = ? AND user_id = ?`, keyID, userID)
+	return err
+}
+
+// --- Timeline ---
+
+// TimelineItem represents a watched episode or movie in the timeline.
+type TimelineItem struct {
+	Type          string // "episode" or "movie"
+	ShowID        int64
+	ShowName      string
+	ShowNameES    string
+	ShowNameEN    string
+	PosterURL     string
+	SeasonNumber  int
+	EpisodeNumber int
+	EpName        string
+	EpNameEN      string
+	MovieName     string
+	WatchedAt     string
+	Date          string // YYYY-MM-DD
+}
+
+// GetTimelineItems returns watched items (episodes + movies) ordered by date, paginated.
+func (db *DB) GetTimelineItems(userID int64, before string, limit int) ([]TimelineItem, error) {
+	var beforeClause string
+	var args []any
+	args = append(args, userID, userID)
+	if before != "" {
+		beforeClause = "HAVING date < ?"
+		args = append(args, before)
+	}
+
+	query := `
+		SELECT type, show_id, show_name, show_name_es, show_name_en, poster_url, season_number, episode_number, ep_name, ep_name_en, date FROM (
+			SELECT 'episode' as type, e.show_id, s.name as show_name, s.name_es as show_name_es, s.name_en as show_name_en, s.poster_url,
+				e.season_number, e.episode_number,
+				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				COALESCE((SELECT ed.name_en FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name_en,
+				substr(e.watched_at, 1, 10) as date
+			FROM episodes e JOIN shows s ON s.id = e.show_id
+			WHERE e.user_id = ? AND e.watched_at != ''
+			UNION ALL
+			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.name_es as show_name_es, m.name_en as show_name_en, m.poster_url,
+				0 as season_number, 0 as episode_number, '' as ep_name, '' as ep_name_en,
+				substr(um.watched_at, 1, 10) as date
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL
+		) items
+		GROUP BY type, show_id, season_number, episode_number
+		` + beforeClause + `
+		ORDER BY date DESC, show_name ASC
+		LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []TimelineItem
+	for rows.Next() {
+		var item TimelineItem
+		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.ShowNameES, &item.ShowNameEN, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.EpNameEN, &item.Date); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// TimelinePeriod represents a collapsed time period with item count.
+type TimelinePeriod struct {
+	Type  string // "week", "month", "year"
+	Label string
+	From  string // YYYY-MM-DD
+	To    string // YYYY-MM-DD
+	Count int
+}
+
+// GetTimelinePeriods returns grouped periods (weeks, months, years) for items older than a cutoff date.
+func (db *DB) GetTimelinePeriods(userID int64, olderThan string) ([]TimelinePeriod, error) {
+	// Get all dates with activity older than cutoff
+	rows, err := db.conn.Query(`
+		SELECT date, cnt FROM (
+			SELECT substr(watched_at, 1, 10) as date, COUNT(*) as cnt
+			FROM episodes WHERE user_id = ? AND watched_at != '' AND substr(watched_at, 1, 10) < ?
+			GROUP BY date
+			UNION ALL
+			SELECT substr(watched_at, 1, 10) as date, COUNT(*) as cnt
+			FROM user_movies WHERE user_id = ? AND watched_at IS NOT NULL AND substr(watched_at, 1, 10) < ?
+			GROUP BY date
+		) ORDER BY date DESC`, userID, olderThan, userID, olderThan)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type dayCount struct {
+		date  string
+		count int
+	}
+	var days []dayCount
+	for rows.Next() {
+		var d dayCount
+		rows.Scan(&d.date, &d.count)
+		days = append(days, d)
+	}
+
+	if len(days) == 0 {
+		return nil, nil
+	}
+
+	// Group into weeks (for first ~8 weeks), then months, then years
+	var periods []TimelinePeriod
+	weekCount := 0
+	monthCount := 0
+	currentWeek := ""
+	currentMonth := ""
+	currentYear := ""
+
+	for _, d := range days {
+		year := d.date[:4]
+		month := d.date[:7]
+		// Simple week grouping: by ISO week approximation (group by 7-day blocks)
+		// For simplicity, group by month when > 8 weeks old
+
+		if weekCount < 8 {
+			// Group by week (use the Monday of the week)
+			week := getWeekLabel(d.date)
+			if week != currentWeek {
+				if currentWeek != "" {
+					weekCount++
+				}
+				currentWeek = week
+				if weekCount < 8 {
+					periods = append(periods, TimelinePeriod{
+						Type:  "week",
+						Label: week,
+						From:  d.date,
+						To:    d.date,
+						Count: d.count,
+					})
+				} else {
+					// Switch to months
+					currentMonth = month
+					periods = append(periods, TimelinePeriod{
+						Type:  "month",
+						Label: month,
+						From:  d.date,
+						To:    d.date,
+						Count: d.count,
+					})
+				}
+			} else {
+				// Add to current week
+				last := &periods[len(periods)-1]
+				last.Count += d.count
+				last.From = d.date
+			}
+		} else if monthCount < 12 {
+			// Group by month
+			if month != currentMonth {
+				currentMonth = month
+				monthCount++
+				periods = append(periods, TimelinePeriod{
+					Type:  "month",
+					Label: month,
+					From:  d.date,
+					To:    d.date,
+					Count: d.count,
+				})
+			} else {
+				last := &periods[len(periods)-1]
+				last.Count += d.count
+				last.From = d.date
+			}
+		} else {
+			// Group by year
+			if year != currentYear {
+				currentYear = year
+				periods = append(periods, TimelinePeriod{
+					Type:  "year",
+					Label: year,
+					From:  d.date,
+					To:    d.date,
+					Count: d.count,
+				})
+			} else {
+				last := &periods[len(periods)-1]
+				last.Count += d.count
+				last.From = d.date
+			}
+		}
+	}
+
+	return periods, nil
+}
+
+// GetTimelineItemsForRange returns items between two dates.
+func (db *DB) GetTimelineItemsForRange(userID int64, from, to string) ([]TimelineItem, error) {
+	query := `
+		SELECT type, show_id, show_name, show_name_es, show_name_en, poster_url, season_number, episode_number, ep_name, ep_name_en, date FROM (
+			SELECT 'episode' as type, e.show_id, s.name as show_name, s.name_es as show_name_es, s.name_en as show_name_en, s.poster_url,
+				e.season_number, e.episode_number,
+				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				COALESCE((SELECT ed.name_en FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name_en,
+				substr(e.watched_at, 1, 10) as date
+			FROM episodes e JOIN shows s ON s.id = e.show_id
+			WHERE e.user_id = ? AND e.watched_at != '' AND substr(e.watched_at, 1, 10) >= ? AND substr(e.watched_at, 1, 10) <= ?
+			UNION ALL
+			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.name_es as show_name_es, m.name_en as show_name_en, m.poster_url,
+				0 as season_number, 0 as episode_number, '' as ep_name, '' as ep_name_en,
+				substr(um.watched_at, 1, 10) as date
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 10) >= ? AND substr(um.watched_at, 1, 10) <= ?
+		) items
+		ORDER BY date DESC, show_name ASC`
+
+	rows, err := db.conn.Query(query, userID, from, to, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []TimelineItem
+	for rows.Next() {
+		var item TimelineItem
+		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.ShowNameES, &item.ShowNameEN, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.EpNameEN, &item.Date); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func getWeekLabel(date string) string {
+	// Return YYYY-Www format for grouping
+	if len(date) < 10 {
+		return date
+	}
+	// Simple: group by the date's year + week-of-month approximation
+	// Use the date truncated to the start of the week (Monday)
+	// For simplicity, just use YYYY-MM-WN where N is day/7
+	day := 1
+	if len(date) >= 10 {
+		fmt.Sscanf(date[8:10], "%d", &day)
+	}
+	weekNum := (day - 1) / 7
+	return fmt.Sprintf("%s-w%d", date[:7], weekNum)
+}
+
+// GetTimelineYears returns distinct years that have watched activity.
+func (db *DB) GetTimelineYears(userID int64) ([]string, error) {
+	rows, err := db.conn.Query(`
+		SELECT DISTINCT year FROM (
+			SELECT substr(watched_at, 1, 4) as year FROM episodes WHERE user_id = ? AND watched_at != ''
+			UNION
+			SELECT substr(watched_at, 1, 4) as year FROM user_movies WHERE user_id = ? AND watched_at IS NOT NULL
+		) ORDER BY year DESC`, userID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var years []string
+	for rows.Next() {
+		var y string
+		rows.Scan(&y)
+		if y != "" {
+			years = append(years, y)
+		}
+	}
+	return years, nil
+}

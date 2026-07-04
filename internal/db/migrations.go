@@ -28,6 +28,8 @@ var migrations = []Migration{
 	{Version: 5, Description: "episode details table", Up: migrateV5, NeedsTMDBRefresh: true},
 	{Version: 6, Description: "episode still image URL", Up: migrateV6, NeedsTMDBRefresh: true},
 	{Version: 7, Description: "snooze shows from continue watching", Up: migrateV7},
+	{Version: 8, Description: "user theme preference", Up: migrateV8},
+	{Version: 9, Description: "API keys for MCP", Up: migrateV9},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -363,6 +365,11 @@ func migrateV7(tx *sql.Tx) error {
 	return err
 }
 
+func migrateV8(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'")
+	return err
+}
+
 // TMDBRefreshPending returns true if a migration flagged a TMDB refresh as needed.
 func (db *DB) TMDBRefreshPending() bool {
 	return db.GetSetting("tmdb_refresh_pending") == "1"
@@ -407,4 +414,18 @@ func (db *DB) backupBeforeMigration(currentVersion int) error {
 
 	log.Printf("DB: backup created at %s", backupPath)
 	return nil
+}
+
+func migrateV9(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS api_keys (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER NOT NULL REFERENCES users(id),
+	key_hash TEXT UNIQUE NOT NULL,
+	name TEXT NOT NULL,
+	scopes TEXT NOT NULL DEFAULT 'read',
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	last_used_at DATETIME
+)`)
+	return err
 }

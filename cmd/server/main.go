@@ -20,6 +20,7 @@ import (
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/handlers"
 	"github.com/mdaguete/watchlog/internal/i18n"
+	mcpserver "github.com/mdaguete/watchlog/internal/mcp"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/mdaguete/watchlog/internal/worker"
 )
@@ -209,6 +210,9 @@ func main() {
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"mod": func(a, b int) int {
+			return a % b
+		},
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("web/templates/*.html")
 	if err != nil {
@@ -247,9 +251,12 @@ func main() {
 	mux.HandleFunc("GET /shows", h.PageShows)
 	mux.HandleFunc("GET /shows/{id}", h.PageShow)
 	mux.HandleFunc("GET /movies", h.PageMovies)
+	mux.HandleFunc("GET /movies/{id}", h.PageMovie)
 	mux.HandleFunc("GET /lists", h.PageLists)
 	mux.HandleFunc("GET /lists/{id}", h.PageList)
 	mux.HandleFunc("GET /stats", h.PageStats)
+	mux.HandleFunc("GET /timeline", h.PageTimeline)
+	mux.HandleFunc("GET /api/timeline", h.APITimelineItems)
 	mux.HandleFunc("GET /search", h.PageSearch)
 	mux.HandleFunc("GET /search/results", h.SearchResults)
 	mux.HandleFunc("GET /add", h.PageAddShow)
@@ -277,6 +284,8 @@ func main() {
 
 	// API: Movies
 	mux.HandleFunc("GET /api/movies", h.APIGetMovies)
+	mux.HandleFunc("POST /api/movies/{id}/watched", h.APIMarkMovieWatched)
+	mux.HandleFunc("DELETE /api/movies/{id}/watched", h.APIUnmarkMovieWatched)
 
 	// API: Lists
 	mux.HandleFunc("GET /api/lists", h.APIGetLists)
@@ -304,8 +313,21 @@ func main() {
 
 	// Static files
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	mux.HandleFunc("GET /sw.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		http.ServeFile(w, r, "web/static/sw.js")
+	})
 	// Cached images
 	mux.Handle("GET /static/cache/images/", http.StripPrefix("/static/cache/images/", http.FileServer(http.Dir(cacheDir))))
+
+	// API Keys
+	mux.HandleFunc("POST /api/keys", h.APICreateKey)
+	mux.HandleFunc("DELETE /api/keys/{id}", h.APIDeleteKey)
+
+	// MCP endpoint
+	mcpSrv := mcpserver.New(database, tmdbClient)
+	mux.Handle("POST /mcp", mcpSrv.Handler())
+	mux.Handle("GET /mcp", mcpSrv.Handler())
 
 	log.Printf("Listening on http://localhost%s", *addr)
 

@@ -33,6 +33,13 @@ func RunTMDBRefresh(database *db.DB, client *tmdb.Client) {
 			database.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
 		}
 		// Cache season episode counts and episode details
+		newSeasonCount := 0
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				newSeasonCount++
+			}
+		}
+		database.UnarchiveForNewSeason(show.ID, newSeasonCount)
 		for _, s := range result.Seasons {
 			if s.SeasonNumber == 0 {
 				continue

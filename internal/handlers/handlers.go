@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"archive/zip"
+	crypto_rand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -183,6 +184,16 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	h.LoginLimiter.Reset(ip)
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)
+	// Set theme cookie for client-side dark mode
+	theme := h.DB.GetUserTheme(user.ID)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "theme",
+		Value:    theme,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+	})
 	log.Printf("ACTION: login user=%q", username)
 	// If setup incomplete, redirect to continue setup
 	if h.DB.GetSetting("setup_complete") != "true" {
@@ -486,11 +497,13 @@ func (h *Handler) PageDashboard(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, userID)
 	stats, _ := h.DB.GetDashboardStats(userID)
 	continueWatching, _ := h.DB.GetContinueWatching(userID, 5)
+	newSeasons, _ := h.DB.GetNewSeasons(userID)
 	h.Templates.ExecuteTemplate(w, "dashboard.html", map[string]any{
 		"Lang":             lang,
 		"Stats":            stats,
 		"Runtime":          importer.FormatRuntime(stats.TotalRuntime),
 		"ContinueWatching": continueWatching,
+		"NewSeasons":       newSeasons,
 		"Page":             1,
 		"HasMore":          len(continueWatching) == 5,
 	})
@@ -586,13 +599,31 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	if sort == "" { sort = "recent" }
 	movies, _ := h.DB.GetUserMoviesSorted(userID, sort)
+	unwatched, _ := h.DB.GetUserMoviesUnwatched(userID)
 	stats, _ := h.DB.GetMovieStats(userID)
 	h.Templates.ExecuteTemplate(w, "movies.html", map[string]any{
+		"Lang":      lang,
+		"Movies":    movies,
+		"Unwatched": unwatched,
+		"Sort":      sort,
+		"Stats":     stats,
+		"Runtime":   importer.FormatRuntime(stats.TotalRuntime),
+	})
+}
+
+func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	movie, err := h.DB.GetMovie(id)
+	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	lang := h.getLang(r, userID)
+	watched := h.DB.IsMovieWatched(userID, id)
+	h.Templates.ExecuteTemplate(w, "movie.html", map[string]any{
 		"Lang":    lang,
-		"Movies":  movies,
-		"Sort":    sort,
-		"Stats":   stats,
-		"Runtime": importer.FormatRuntime(stats.TotalRuntime),
+		"Movie":   movie,
+		"Watched": watched,
 	})
 }
 
@@ -626,6 +657,76 @@ func (h *Handler) PageStats(w http.ResponseWriter, r *http.Request) {
 		"WatchStats": stats,
 		"Dashboard":  dashboard,
 		"Runtime":    importer.FormatRuntime(dashboard.TotalRuntime),
+	})
+}
+
+func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	items, _ := h.DB.GetTimelineItems(userID, "", 100)
+	days := groupByDay(items)
+	if len(days) > 10 {
+		days = days[:10]
+	}
+	lastDate := ""
+	if len(days) > 0 {
+		lastDate = days[len(days)-1].Date
+	}
+	years, _ := h.DB.GetTimelineYears(userID)
+	h.Templates.ExecuteTemplate(w, "timeline.html", map[string]any{
+		"Lang":     lang,
+		"Days":     days,
+		"LastDate": lastDate,
+		"HasMore":  len(days) == 10,
+		"Years":    years,
+	})
+}
+
+type timelineDay struct {
+	Date  string
+	Items []db.TimelineItem
+}
+
+func groupByDay(items []db.TimelineItem) []timelineDay {
+	var days []timelineDay
+	for _, item := range items {
+		if len(days) == 0 || days[len(days)-1].Date != item.Date {
+			days = append(days, timelineDay{Date: item.Date})
+		}
+		days[len(days)-1].Items = append(days[len(days)-1].Items, item)
+	}
+	return days
+}
+
+func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	before := r.URL.Query().Get("before")
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+
+	var items []db.TimelineItem
+	if from != "" && to != "" {
+		items, _ = h.DB.GetTimelineItemsForRange(userID, from, to)
+	} else if before != "" {
+		items, _ = h.DB.GetTimelineItems(userID, before, 100)
+	}
+
+	days := groupByDay(items)
+	if from == "" && len(days) > 10 {
+		days = days[:10]
+	}
+	lastDate := ""
+	if len(days) > 0 {
+		lastDate = days[len(days)-1].Date
+	}
+	h.Templates.ExecuteTemplate(w, "timeline_items.html", map[string]any{
+		"Lang":     lang,
+		"Days":     days,
+		"LastDate": lastDate,
+		"HasMore":  from == "" && len(days) == 10,
 	})
 }
 
@@ -872,6 +973,26 @@ func (h *Handler) APIGetMovies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, movies)
 }
 
+func (h *Handler) APIMarkMovieWatched(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok { return }
+	h.DB.MarkMovieWatched(userID, id, time.Now())
+	log.Printf("ACTION: user=%d mark movie watched id=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) APIUnmarkMovieWatched(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok { return }
+	h.DB.UnmarkMovieWatched(userID, id)
+	log.Printf("ACTION: user=%d unmark movie watched id=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *Handler) APIGetLists(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
@@ -1099,7 +1220,7 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	if err != nil { writeError(w, http.StatusNotFound, "not found"); return }
 	genres := extractGenreNames(movie.Genres)
 	id, _ := h.DB.AddMovieFromTMDB(movie.ID, movie.Title, tmdb.PosterURL(movie.PosterPath, "w342"), movie.Overview, genres, movie.Runtime)
-	h.DB.MarkMovieWatched(userID, id, time.Now())
+	h.DB.AddMovieToLibrary(userID, id)
 	log.Printf("ACTION: user=%d add movie %q tmdb_id=%d", userID, movie.Title, movie.ID)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
@@ -1159,6 +1280,13 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
 		}
 		// Cache season episode counts
+		newSeasonCount := 0
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				newSeasonCount++
+			}
+		}
+		h.DB.UnarchiveForNewSeason(show.ID, newSeasonCount)
 		for _, s := range result.Seasons {
 			if s.SeasonNumber > 0 {
 				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
@@ -1242,10 +1370,14 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
 	user, _ := h.DB.GetUserByID(userID)
+	theme := h.DB.GetUserTheme(userID)
+	apiKeys, _ := h.DB.GetUserAPIKeys(userID)
 	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
 		"Lang":    lang,
+		"Theme":   theme,
 		"IsAdmin": userID == 1,
 		"Email":   user.Email,
+		"APIKeys": apiKeys,
 	})
 }
 
@@ -1258,6 +1390,19 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		lang = "es"
 	}
 	h.DB.SetUserLang(userID, lang)
+	theme := r.FormValue("theme")
+	if theme != "light" && theme != "dark" && theme != "system" {
+		theme = "system"
+	}
+	h.DB.SetUserTheme(userID, theme)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "theme",
+		Value:    theme,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		HttpOnly: false, // JS needs to read it
+		SameSite: http.SameSiteLaxMode,
+	})
 	email := strings.TrimSpace(r.FormValue("email"))
 	h.DB.UpdateUserEmail(userID, email)
 	http.Redirect(w, r, "/settings", http.StatusFound)
@@ -1654,4 +1799,55 @@ func extractZip(zipPath, destDir string) error {
 		outFile.Close()
 	}
 	return nil
+}
+
+// --- API Keys ---
+
+func (h *Handler) APICreateKey(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("key_name"))
+	if name == "" {
+		name = "default"
+	}
+	scopes := strings.Join(r.Form["scopes"], ",")
+	if scopes == "" {
+		scopes = "read"
+	}
+
+	// Generate random API key
+	keyBytes := make([]byte, 32)
+	crypto_rand.Read(keyBytes)
+	key := fmt.Sprintf("wl_%x", keyBytes)
+
+	// Store key (the key itself is the lookup token since it's cryptographically random)
+	h.DB.CreateAPIKey(userID, key, name, scopes)
+
+	// Return the key once (won't be shown again)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<div class="border border-wl-border p-4 my-4"><p class="text-xs uppercase tracking-widest text-wl-gray mb-2">API Key (copy now, won't be shown again):</p><div class="flex items-center gap-2"><code class="text-sm break-all select-all flex-1" id="api-key-value">%s</code><button onclick="navigator.clipboard.writeText(document.getElementById('api-key-value').textContent).then(()=>{this.textContent='✓'});setTimeout(()=>{this.textContent='Copy'},1500)" class="px-3 py-1 text-xs uppercase tracking-widest border border-wl-border hover:bg-black hover:text-white transition-colors shrink-0">Copy</button></div></div>`, html.EscapeString(key))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"key": key})
+}
+
+func (h *Handler) APIDeleteKey(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	h.DB.DeleteAPIKey(userID, id)
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

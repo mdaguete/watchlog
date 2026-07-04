@@ -48,22 +48,28 @@ function setType(type) {
 function addShow(tmdbId, btn) {
     btn.disabled = true;
     btn.textContent = '...';
-    htmx.ajax('POST', '/api/tmdb/add-show', {
-        target: btn.closest('.tmdb-item').querySelector('.add-result'),
-        swap: 'innerHTML',
-        headers: {'Content-Type': 'application/json'},
-        values: JSON.stringify({tmdb_id: tmdbId})
+    const resultEl = btn.closest('.tmdb-item').querySelector('.add-result');
+    fetch('/api/tmdb/add-show', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
+        body: JSON.stringify({tmdb_id: tmdbId})
+    }).then(r => r.text()).then(html => {
+        resultEl.innerHTML = html;
+        btn.style.display = 'none';
     });
 }
 
 function addMovie(tmdbId, btn) {
     btn.disabled = true;
     btn.textContent = '...';
-    htmx.ajax('POST', '/api/tmdb/add-movie', {
-        target: btn.closest('.tmdb-item').querySelector('.add-result'),
-        swap: 'innerHTML',
-        headers: {'Content-Type': 'application/json'},
-        values: JSON.stringify({tmdb_id: tmdbId})
+    const resultEl = btn.closest('.tmdb-item').querySelector('.add-result');
+    fetch('/api/tmdb/add-movie', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
+        body: JSON.stringify({tmdb_id: tmdbId})
+    }).then(r => r.text()).then(html => {
+        resultEl.innerHTML = html;
+        btn.style.display = 'none';
     });
 }
 </script>

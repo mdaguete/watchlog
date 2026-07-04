@@ -52,6 +52,27 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Dashboard shows "Continue Watching" cards (no stats/navigation clutter)
 - Movies page has stats header (total count + runtime)
 
+### Dark Mode
+- Tailwind `darkMode: 'class'` strategy
+- User preference stored in DB (`users.theme`: `system`, `light`, `dark`)
+- Theme cookie set on login and settings save (JS reads it before render)
+- CSS overrides in `<style>` block invert key utility colors for dark
+- Calendar heatmap uses dedicated `cal-*` classes for both modes
+- No flash: theme script in `<head>` runs before body paint
+- Settings page: Sistema / Claro / Oscuro radio selector
+
+### PWA (Progressive Web App)
+- Installable on iOS (Add to Home Screen) and Android (native install prompt)
+- Web App Manifest: standalone display, theme color black, orientation portrait
+- Service Worker: network-first strategy, caches static assets for offline
+- SW served at `/sw.js` (root scope)
+- Install banner: auto-detected on Android (`beforeinstallprompt`), manual instructions on iOS
+- Banner dismissible, persisted in localStorage
+- Maskable icon (512x512 with safe zone) for Android adaptive icons
+- Apple touch icon (180x180) for iOS home screen
+- App shortcuts on long-press (Android): Series, Películas, Buscar, Añadir
+- `viewport-fit=cover` for notch devices
+
 ### Security
 - bcrypt password hashing (DefaultCost)
 - Session tokens: 32 bytes from `crypto/rand`, stored in SQLite `sessions` table (persistent across restarts)
@@ -124,6 +145,15 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Accepts `context.Context` for graceful cancellation
 - Only processes shows with status != "Ended"/"Canceled" and tmdb_id > 0
 - `RunTMDBRefresh`: full metadata refresh callable programmatically (used by post-migration hook)
+
+### MCP (Model Context Protocol)
+- Streamable HTTP transport at `/mcp` endpoint
+- Bearer token auth via user-generated API keys
+- Scopes: `read`, `mark`, `write`, `lists`, `admin`
+- Tools filtered by key scopes at runtime
+- SDK: `github.com/modelcontextprotocol/go-sdk`
+- API keys stored hashed in `api_keys` table, prefixed `wl_`
+- See `docs/MCP.md` for agent configuration
 
 ### Email
 - HTML email template wrapper (`wrapEmailHTML`) for consistent branding
@@ -214,6 +244,4 @@ Download from GoReleaser releases or build with `make`. Run the `server` binary 
 ## What It Does NOT Have (potential additions)
 
 - Push notifications for new episodes
-- Dark mode
-- PWA / improved mobile responsive
 - CSRF tokens (mitigated by SameSite=Lax cookie)
