@@ -27,6 +27,7 @@ var migrations = []Migration{
 	{Version: 4, Description: "season episodes cache table", Up: migrateV4},
 	{Version: 5, Description: "episode details table", Up: migrateV5, NeedsTMDBRefresh: true},
 	{Version: 6, Description: "episode still image URL", Up: migrateV6, NeedsTMDBRefresh: true},
+	{Version: 7, Description: "snooze shows from continue watching", Up: migrateV7},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -354,6 +355,11 @@ CREATE TABLE IF NOT EXISTS episode_details (
 
 func migrateV6(tx *sql.Tx) error {
 	_, err := tx.Exec("ALTER TABLE episode_details ADD COLUMN still_url TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+func migrateV7(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE user_shows ADD COLUMN snoozed_until DATETIME")
 	return err
 }
 

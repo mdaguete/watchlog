@@ -329,6 +329,18 @@ func (db *DB) AutoUnarchiveIfIncomplete(userID, showID int64) bool {
 	return true
 }
 
+// SnoozeShow sets a snooze-until date for a show (hides from continue watching).
+func (db *DB) SnoozeShow(userID, showID int64, until time.Time) error {
+	_, err := db.conn.Exec("UPDATE user_shows SET snoozed_until = ? WHERE user_id = ? AND show_id = ?", until, userID, showID)
+	return err
+}
+
+// UnsnoozeShow clears the snooze for a show.
+func (db *DB) UnsnoozeShow(userID, showID int64) error {
+	_, err := db.conn.Exec("UPDATE user_shows SET snoozed_until = NULL WHERE user_id = ? AND show_id = ?", userID, showID)
+	return err
+}
+
 func (db *DB) FollowShow(userID, showID int64) error {
 	_, err := db.conn.Exec(`INSERT INTO user_shows (user_id, show_id, is_followed, followed_at, updated_at) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT(user_id, show_id) DO UPDATE SET is_followed=1, updated_at=excluded.updated_at`,
@@ -1097,6 +1109,7 @@ type ContinueWatchingItem struct {
 	EpOverview    string
 	EpOverviewEN  string
 	StillURL      string
+	DaysSinceLast int
 }
 
 // GetContinueWatching returns the next unwatched episode for the N most recently active shows.
@@ -1110,27 +1123,28 @@ func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]Con
 		SELECT e.show_id, s.name, s.name_es, s.name_en, s.poster_url, MAX(e.watched_at) as last_watched
 		FROM episodes e
 		JOIN shows s ON s.id = e.show_id
-		WHERE e.user_id = ?
+		JOIN user_shows us ON us.show_id = e.show_id AND us.user_id = e.user_id
+		WHERE e.user_id = ? AND (us.snoozed_until IS NULL OR us.snoozed_until < ?)
 		GROUP BY e.show_id
 		ORDER BY last_watched DESC
-		LIMIT ? OFFSET ?`, userID, limit*3, off*3) // fetch extra in case some are fully watched
+		LIMIT ? OFFSET ?`, userID, time.Now(), limit*3, off*3) // fetch extra in case some are fully watched
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	type recentShow struct {
-		id       int64
-		name     string
-		nameES   string
-		nameEN   string
-		poster   string
+		id          int64
+		name        string
+		nameES      string
+		nameEN      string
+		poster      string
+		lastWatched string
 	}
 	var recent []recentShow
 	for rows.Next() {
 		var rs recentShow
-		var lastWatched string
-		if err := rows.Scan(&rs.id, &rs.name, &rs.nameES, &rs.nameEN, &rs.poster, &lastWatched); err != nil {
+		if err := rows.Scan(&rs.id, &rs.name, &rs.nameES, &rs.nameEN, &rs.poster, &rs.lastWatched); err != nil {
 			return nil, err
 		}
 		recent = append(recent, rs)
@@ -1208,6 +1222,11 @@ func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]Con
 		} else if airDate == "" || airDate > time.Now().Format("2006-01-02") {
 			// Episode not yet aired — skip this show
 			continue
+		}
+
+		// Calculate days since last watched
+		if t, err := time.Parse("2006-01-02 15:04:05", rs.lastWatched[:19]); err == nil {
+			item.DaysSinceLast = int(time.Since(t).Hours() / 24)
 		}
 
 		items = append(items, item)

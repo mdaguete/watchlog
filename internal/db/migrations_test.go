@@ -137,6 +137,7 @@ func TestDetectVersion_PreExistingDB(t *testing.T) {
 	rawDB.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, lang TEXT DEFAULT 'es', email TEXT DEFAULT '', created_at DATETIME)`)
 	rawDB.Exec(`CREATE TABLE shows (id INTEGER PRIMARY KEY, external_id INTEGER, name TEXT, tmdb_id INTEGER DEFAULT 0, poster_url TEXT DEFAULT '', backdrop_url TEXT DEFAULT '', overview TEXT DEFAULT '', overview_en TEXT DEFAULT '', genres TEXT DEFAULT '', genres_en TEXT DEFAULT '', name_es TEXT DEFAULT '', name_en TEXT DEFAULT '', status TEXT DEFAULT '', total_seasons INTEGER DEFAULT 0)`)
 	rawDB.Exec(`CREATE TABLE movies (id INTEGER PRIMARY KEY, external_id TEXT, name TEXT, tmdb_id INTEGER DEFAULT 0, poster_url TEXT DEFAULT '', overview TEXT DEFAULT '', overview_en TEXT DEFAULT '', genres TEXT DEFAULT '', genres_en TEXT DEFAULT '', name_es TEXT DEFAULT '', name_en TEXT DEFAULT '', runtime INTEGER DEFAULT 0)`)
+	rawDB.Exec(`CREATE TABLE user_shows (id INTEGER PRIMARY KEY, user_id INTEGER, show_id INTEGER, is_followed INTEGER DEFAULT 1, is_favorited INTEGER DEFAULT 0, is_archived INTEGER DEFAULT 0, episodes_seen INTEGER DEFAULT 0, followed_at DATETIME, updated_at DATETIME, UNIQUE(user_id, show_id))`)
 	rawDB.Exec(`CREATE TABLE sessions (token TEXT PRIMARY KEY, user_id INTEGER, expires_at DATETIME)`)
 	rawDB.Exec(`CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT DEFAULT '')`)
 	rawDB.Close()
