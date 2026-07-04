@@ -76,7 +76,7 @@
                     <span class="text-sm">{{.Name}}</span>
                     <span class="text-xs text-wl-gray ml-2">{{.Scopes}}</span>
                 </div>
-                <button hx-delete="/api/keys/{{.ID}}" hx-confirm="{{T $.Lang "settings.confirm_delete_key"}}" hx-target="closest div" hx-swap="outerHTML"
+                <button onclick="if(this.dataset.confirm){fetch('/api/keys/{{.ID}}',{method:'DELETE'}).then(()=>this.closest('div.flex').remove())}else{this.dataset.confirm='1';this.textContent='{{T $.Lang "settings.confirm_delete_key"}}';this.classList.add('text-red-600');setTimeout(()=>{this.removeAttribute('data-confirm');this.textContent='✕';this.classList.remove('text-red-600')},3000)}"
                     class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">✕</button>
             </div>
             {{end}}
