@@ -87,6 +87,7 @@ watched.add("{{.SeasonNumber}}-{{.EpisodeNumber}}");
 {{end}}
 
 const seasons = { {{range $season, $count := .Seasons}} {{$season}}: {{$count}}, {{end}} };
+const episodeNames = { {{range .EpisodeDetails}} '{{.SeasonNumber}}-{{.EpisodeNumber}}': '{{.Name}}', {{end}} };
 const sortedSeasons = Object.keys(seasons).map(Number).sort((a, b) => a - b);
 const labelMarkNext = '{{T .Lang "show.mark_next"}}';
 const labelMark = '{{T .Lang "show.mark"}}';
@@ -154,7 +155,8 @@ Object.entries(seasons).forEach(([season, count]) => {
             ? 'w-9 h-9 text-xs bg-black text-white border border-black'
             : 'w-9 h-9 text-xs border border-wl-border text-wl-gray hover:border-black hover:text-black transition-colors';
         btn.textContent = ep;
-        btn.title = 'S' + String(season).padStart(2,'0') + 'E' + String(ep).padStart(2,'0');
+        const epName = episodeNames[season + '-' + ep] || '';
+        btn.title = 'S' + String(season).padStart(2,'0') + 'E' + String(ep).padStart(2,'0') + (epName ? ' — ' + epName : '');
         btn.id = 'ep-' + season + '-' + ep;
         if (isWatched) {
             btn.onclick = () => unmarkSingle(parseInt(season), ep, btn);

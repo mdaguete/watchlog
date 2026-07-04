@@ -12,6 +12,7 @@ import (
 
 type DB struct {
 	conn *sql.DB
+	path string
 }
 
 func New(path string) (*DB, error) {
@@ -20,7 +21,7 @@ func New(path string) (*DB, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	conn.SetMaxOpenConns(1)
-	db := &DB{conn: conn}
+	db := &DB{conn: conn, path: path}
 	if err := db.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -900,6 +901,18 @@ func (db *DB) GetActiveShowsWithTMDB() ([]models.Show, error) {
 	return shows, nil
 }
 
+// MovieStats holds aggregate movie statistics for a user.
+type MovieStats struct {
+	TotalMovies  int
+	TotalRuntime int
+}
+
+func (db *DB) GetMovieStats(userID int64) (MovieStats, error) {
+	var s MovieStats
+	db.conn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(m.runtime), 0) FROM user_movies um JOIN movies m ON m.id = um.movie_id WHERE um.user_id = ?`, userID).Scan(&s.TotalMovies, &s.TotalRuntime)
+	return s, nil
+}
+
 // --- Sessions ---
 
 func (db *DB) CreateSession(token string, userID int64, expiresAt time.Time) error {
@@ -970,4 +983,48 @@ func (db *DB) DeleteMagicLink(token string) error {
 func (db *DB) CleanExpiredMagicLinks() error {
 	_, err := db.conn.Exec(`DELETE FROM magic_links WHERE expires_at <= ?`, time.Now())
 	return err
+}
+
+// --- Episode Details ---
+
+// EpisodeDetail holds metadata for a single episode from TMDB.
+type EpisodeDetail struct {
+	ShowID        int64
+	SeasonNumber  int
+	EpisodeNumber int
+	Name          string
+	NameEN        string
+	Overview      string
+	OverviewEN    string
+	AirDate       string
+	Runtime       int
+}
+
+func (db *DB) UpsertEpisodeDetail(d EpisodeDetail) error {
+	_, err := db.conn.Exec(`INSERT INTO episode_details (show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
+			name=excluded.name, name_en=excluded.name_en,
+			overview=excluded.overview, overview_en=excluded.overview_en,
+			air_date=excluded.air_date, runtime=excluded.runtime`,
+		d.ShowID, d.SeasonNumber, d.EpisodeNumber, d.Name, d.NameEN, d.Overview, d.OverviewEN, d.AirDate, d.Runtime)
+	return err
+}
+
+func (db *DB) GetEpisodeDetails(showID int64) ([]EpisodeDetail, error) {
+	rows, err := db.conn.Query(`SELECT show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime
+		FROM episode_details WHERE show_id = ? ORDER BY season_number, episode_number`, showID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var details []EpisodeDetail
+	for rows.Next() {
+		var d EpisodeDetail
+		if err := rows.Scan(&d.ShowID, &d.SeasonNumber, &d.EpisodeNumber, &d.Name, &d.NameEN, &d.Overview, &d.OverviewEN, &d.AirDate, &d.Runtime); err != nil {
+			return nil, err
+		}
+		details = append(details, d)
+	}
+	return details, nil
 }

@@ -88,6 +88,38 @@ func (c Config) Configured() bool {
 	return c.Host != "" && c.Port != "" && c.From != ""
 }
 
+// wrapEmailHTML wraps email body content in a styled HTML template.
+func wrapEmailHTML(subject, body string) string {
+	return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>` + subject + `</title>
+</head>
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;">
+<tr><td align="center" style="padding:40px 20px;">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+<!-- Header -->
+<tr><td style="padding-bottom:32px;border-bottom:1px solid #e5e5e5;">
+<span style="font-size:14px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#000000;">WatchLog</span>
+</td></tr>
+<!-- Content -->
+<tr><td style="padding:32px 0;color:#1a1a1a;font-size:15px;line-height:1.6;">
+` + body + `
+</td></tr>
+<!-- Footer -->
+<tr><td style="padding-top:32px;border-top:1px solid #e5e5e5;">
+<p style="margin:0;font-size:12px;color:#999999;">WatchLog</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+}
+
 // Send sends an HTML email.
 func Send(cfg Config, to, subject, body string) error {
 	if !cfg.Configured() {
@@ -101,7 +133,8 @@ func Send(cfg Config, to, subject, body string) error {
 		"MIME-Version: 1.0",
 		"Content-Type: text/html; charset=\"UTF-8\"",
 	}
-	msg := []byte(strings.Join(headers, "\r\n") + "\r\n\r\n" + body)
+	htmlBody := wrapEmailHTML(subject, body)
+	msg := []byte(strings.Join(headers, "\r\n") + "\r\n\r\n" + htmlBody)
 
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)
 

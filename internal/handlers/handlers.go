@@ -548,12 +548,14 @@ func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	episodeDetails, _ := h.DB.GetEpisodeDetails(id)
 	h.Templates.ExecuteTemplate(w, "show.html", map[string]any{
-		"Lang":     h.getLang(r, userID),
-		"Show":     show,
-		"Episodes": episodes,
-		"Progress": progress,
-		"Seasons":  seasons,
+		"Lang":           h.getLang(r, userID),
+		"Show":           show,
+		"Episodes":       episodes,
+		"Progress":       progress,
+		"Seasons":        seasons,
+		"EpisodeDetails": episodeDetails,
 	})
 }
 
@@ -564,10 +566,13 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	if sort == "" { sort = "recent" }
 	movies, _ := h.DB.GetUserMoviesSorted(userID, sort)
+	stats, _ := h.DB.GetMovieStats(userID)
 	h.Templates.ExecuteTemplate(w, "movies.html", map[string]any{
-		"Lang":   lang,
-		"Movies": movies,
-		"Sort":   sort,
+		"Lang":    lang,
+		"Movies":  movies,
+		"Sort":    sort,
+		"Stats":   stats,
+		"Runtime": importer.FormatRuntime(stats.TotalRuntime),
 	})
 }
 
@@ -1094,6 +1099,39 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 		for _, s := range result.Seasons {
 			if s.SeasonNumber > 0 {
 				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
+			}
+		}
+		// Fetch episode details per season
+		for _, s := range result.Seasons {
+			if s.SeasonNumber == 0 {
+				continue
+			}
+			seasonES, err := h.TMDB.GetSeasonLang(show.TMDBID, s.SeasonNumber, "es-ES")
+			if err != nil {
+				continue
+			}
+			seasonEN, _ := h.TMDB.GetSeasonLang(show.TMDBID, s.SeasonNumber, "en-US")
+			for _, ep := range seasonES.Episodes {
+				d := db.EpisodeDetail{
+					ShowID:        show.ID,
+					SeasonNumber:  ep.SeasonNumber,
+					EpisodeNumber: ep.EpisodeNumber,
+					Name:          ep.Name,
+					Overview:      ep.Overview,
+					AirDate:       ep.AirDate,
+					Runtime:       ep.Runtime,
+				}
+				// Fill English data if available
+				if seasonEN != nil {
+					for _, epEN := range seasonEN.Episodes {
+						if epEN.EpisodeNumber == ep.EpisodeNumber {
+							d.NameEN = epEN.Name
+							d.OverviewEN = epEN.Overview
+							break
+						}
+					}
+				}
+				h.DB.UpsertEpisodeDetail(d)
 			}
 		}
 		updated++
