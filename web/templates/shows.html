@@ -6,7 +6,7 @@
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{len .Shows}} {{T .Lang "shows.titles_count"}}</span>
     </div>
 
-    <div class="flex items-center gap-6">
+    <div class="flex flex-wrap items-center gap-3 sm:gap-6">
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "shows.sort"}}</span>
         <a href="/shows?sort=recent{{if .Filter}}&filter={{.Filter}}{{end}}" class="text-xs uppercase tracking-widest {{if eq .Sort "recent"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.recent"}}</a>
         <a href="/shows?sort=name{{if .Filter}}&filter={{.Filter}}{{end}}" class="text-xs uppercase tracking-widest {{if eq .Sort "name"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.name"}}</a>
@@ -14,7 +14,7 @@
         <a href="/shows?sort=followed{{if .Filter}}&filter={{.Filter}}{{end}}" class="text-xs uppercase tracking-widest {{if eq .Sort "followed"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.sort.followed"}}</a>
     </div>
 
-    <div class="flex items-center gap-4">
+    <div class="flex flex-wrap items-center gap-3 sm:gap-4">
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "shows.filter"}}</span>
         <a href="/shows?sort={{.Sort}}" class="text-xs uppercase tracking-widest {{if eq .Filter ""}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.filter.all"}}</a>
         <a href="/shows?sort={{.Sort}}&filter=favorites" class="text-xs uppercase tracking-widest {{if eq .Filter "favorites"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">★ {{T .Lang "shows.filter.favorites"}}</a>
