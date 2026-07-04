@@ -92,6 +92,7 @@ var translations = map[string]map[string]string{
 	// Timeline
 	"timeline.title": {"es": "Historial", "en": "Timeline"},
 	"timeline.movie": {"es": "Película", "en": "Movie"},
+	"timeline.items": {"es": "episodios", "en": "episodes"},
 
 	// Lists
 	"lists.title":       {"es": "Listas", "en": "Lists"},

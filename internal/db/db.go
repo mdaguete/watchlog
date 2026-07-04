@@ -1481,3 +1481,183 @@ func (db *DB) GetTimelineItems(userID int64, before string, limit int) ([]Timeli
 	}
 	return items, nil
 }
+
+// TimelinePeriod represents a collapsed time period with item count.
+type TimelinePeriod struct {
+	Type  string // "week", "month", "year"
+	Label string
+	From  string // YYYY-MM-DD
+	To    string // YYYY-MM-DD
+	Count int
+}
+
+// GetTimelinePeriods returns grouped periods (weeks, months, years) for items older than a cutoff date.
+func (db *DB) GetTimelinePeriods(userID int64, olderThan string) ([]TimelinePeriod, error) {
+	// Get all dates with activity older than cutoff
+	rows, err := db.conn.Query(`
+		SELECT date, cnt FROM (
+			SELECT substr(watched_at, 1, 10) as date, COUNT(*) as cnt
+			FROM episodes WHERE user_id = ? AND watched_at != '' AND substr(watched_at, 1, 10) < ?
+			GROUP BY date
+			UNION ALL
+			SELECT substr(watched_at, 1, 10) as date, COUNT(*) as cnt
+			FROM user_movies WHERE user_id = ? AND watched_at IS NOT NULL AND substr(watched_at, 1, 10) < ?
+			GROUP BY date
+		) ORDER BY date DESC`, userID, olderThan, userID, olderThan)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type dayCount struct {
+		date  string
+		count int
+	}
+	var days []dayCount
+	for rows.Next() {
+		var d dayCount
+		rows.Scan(&d.date, &d.count)
+		days = append(days, d)
+	}
+
+	if len(days) == 0 {
+		return nil, nil
+	}
+
+	// Group into weeks (for first ~8 weeks), then months, then years
+	var periods []TimelinePeriod
+	weekCount := 0
+	monthCount := 0
+	currentWeek := ""
+	currentMonth := ""
+	currentYear := ""
+
+	for _, d := range days {
+		year := d.date[:4]
+		month := d.date[:7]
+		// Simple week grouping: by ISO week approximation (group by 7-day blocks)
+		// For simplicity, group by month when > 8 weeks old
+
+		if weekCount < 8 {
+			// Group by week (use the Monday of the week)
+			week := getWeekLabel(d.date)
+			if week != currentWeek {
+				if currentWeek != "" {
+					weekCount++
+				}
+				currentWeek = week
+				if weekCount < 8 {
+					periods = append(periods, TimelinePeriod{
+						Type:  "week",
+						Label: week,
+						From:  d.date,
+						To:    d.date,
+						Count: d.count,
+					})
+				} else {
+					// Switch to months
+					currentMonth = month
+					periods = append(periods, TimelinePeriod{
+						Type:  "month",
+						Label: month,
+						From:  d.date,
+						To:    d.date,
+						Count: d.count,
+					})
+				}
+			} else {
+				// Add to current week
+				last := &periods[len(periods)-1]
+				last.Count += d.count
+				last.From = d.date
+			}
+		} else if monthCount < 12 {
+			// Group by month
+			if month != currentMonth {
+				currentMonth = month
+				monthCount++
+				periods = append(periods, TimelinePeriod{
+					Type:  "month",
+					Label: month,
+					From:  d.date,
+					To:    d.date,
+					Count: d.count,
+				})
+			} else {
+				last := &periods[len(periods)-1]
+				last.Count += d.count
+				last.From = d.date
+			}
+		} else {
+			// Group by year
+			if year != currentYear {
+				currentYear = year
+				periods = append(periods, TimelinePeriod{
+					Type:  "year",
+					Label: year,
+					From:  d.date,
+					To:    d.date,
+					Count: d.count,
+				})
+			} else {
+				last := &periods[len(periods)-1]
+				last.Count += d.count
+				last.From = d.date
+			}
+		}
+	}
+
+	return periods, nil
+}
+
+// GetTimelineItemsForRange returns items between two dates.
+func (db *DB) GetTimelineItemsForRange(userID int64, from, to string) ([]TimelineItem, error) {
+	query := `
+		SELECT type, show_id, show_name, poster_url, season_number, episode_number, ep_name, date FROM (
+			SELECT 'episode' as type, e.show_id, s.name as show_name, s.poster_url,
+				e.season_number, e.episode_number,
+				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				substr(e.watched_at, 1, 10) as date
+			FROM episodes e JOIN shows s ON s.id = e.show_id
+			WHERE e.user_id = ? AND e.watched_at != '' AND substr(e.watched_at, 1, 10) >= ? AND substr(e.watched_at, 1, 10) <= ?
+			UNION ALL
+			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.poster_url,
+				0 as season_number, 0 as episode_number, '' as ep_name,
+				substr(um.watched_at, 1, 10) as date
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 10) >= ? AND substr(um.watched_at, 1, 10) <= ?
+		) items
+		ORDER BY date DESC, show_name ASC`
+
+	rows, err := db.conn.Query(query, userID, from, to, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []TimelineItem
+	for rows.Next() {
+		var item TimelineItem
+		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.Date); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func getWeekLabel(date string) string {
+	// Return YYYY-Www format for grouping
+	if len(date) < 10 {
+		return date
+	}
+	// Simple: group by the date's year + week-of-month approximation
+	// Use the date truncated to the start of the week (Monday)
+	// For simplicity, just use YYYY-MM-WN where N is day/7
+	day := 1
+	if len(date) >= 10 {
+		fmt.Sscanf(date[8:10], "%d", &day)
+	}
+	weekNum := (day - 1) / 7
+	return fmt.Sprintf("%s-w%d", date[:7], weekNum)
+}

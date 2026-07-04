@@ -648,16 +648,15 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	items, _ := h.DB.GetTimelineItems(userID, "", 50)
-	lastDate := ""
-	if len(items) > 0 {
-		lastDate = items[len(items)-1].Date
-	}
+	// Last 15 days: show daily items
+	cutoff := time.Now().AddDate(0, 0, -15).Format("2006-01-02")
+	items, _ := h.DB.GetTimelineItemsForRange(userID, cutoff, time.Now().Format("2006-01-02"))
+	// Older periods: collapsed
+	periods, _ := h.DB.GetTimelinePeriods(userID, cutoff)
 	h.Templates.ExecuteTemplate(w, "timeline.html", map[string]any{
-		"Lang":     lang,
-		"Items":    items,
-		"LastDate": lastDate,
-		"HasMore":  len(items) == 50,
+		"Lang":    lang,
+		"Items":   items,
+		"Periods": periods,
 	})
 }
 
@@ -665,17 +664,15 @@ func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	before := r.URL.Query().Get("before")
-	items, _ := h.DB.GetTimelineItems(userID, before, 50)
-	lastDate := ""
-	if len(items) > 0 {
-		lastDate = items[len(items)-1].Date
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+	if from == "" || to == "" {
+		writeError(w, http.StatusBadRequest, "from and to required"); return
 	}
+	items, _ := h.DB.GetTimelineItemsForRange(userID, from, to)
 	h.Templates.ExecuteTemplate(w, "timeline_items.html", map[string]any{
-		"Lang":     lang,
-		"Items":    items,
-		"LastDate": lastDate,
-		"HasMore":  len(items) == 50,
+		"Lang":  lang,
+		"Items": items,
 	})
 }
 
