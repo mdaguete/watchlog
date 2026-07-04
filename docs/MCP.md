@@ -122,6 +122,24 @@ In `.kiro/settings/mcp.json`:
 }
 ```
 
+### Opencode
+
+In `.opencode.json` or `~/.config/opencode/config.json`:
+
+```json
+{
+  "mcp": {
+    "watchlog": {
+      "type": "remote",
+      "url": "https://your-watchlog-url/mcp",
+      "headers": {
+        "Authorization": "Bearer wl_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
 ### Generic (any MCP client)
 
 The server uses **Streamable HTTP** transport. Connect to the `/mcp` endpoint with:
