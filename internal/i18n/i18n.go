@@ -189,6 +189,11 @@ var translations = map[string]map[string]string{
 	"settings.refresh_upcoming": {"es": "Refrescar próximos", "en": "Refresh upcoming"},
 	"settings.admin_link":       {"es": "Administración del servidor", "en": "Server administration"},
 	"settings.logout":           {"es": "Cerrar sesión", "en": "Log out"},
+	"settings.api_keys":         {"es": "API Keys (MCP)", "en": "API Keys (MCP)"},
+	"settings.key_name":         {"es": "Nombre", "en": "Name"},
+	"settings.key_scopes":       {"es": "Permisos", "en": "Scopes"},
+	"settings.create_key":       {"es": "Crear clave", "en": "Create key"},
+	"settings.confirm_delete_key": {"es": "¿Eliminar esta clave?", "en": "Delete this key?"},
 
 	// Admin
 	"admin.title":          {"es": "Administración", "en": "Administration"},

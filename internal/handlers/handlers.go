@@ -1263,11 +1263,13 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, userID)
 	user, _ := h.DB.GetUserByID(userID)
 	theme := h.DB.GetUserTheme(userID)
+	apiKeys, _ := h.DB.GetUserAPIKeys(userID)
 	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
 		"Lang":    lang,
 		"Theme":   theme,
 		"IsAdmin": userID == 1,
 		"Email":   user.Email,
+		"APIKeys": apiKeys,
 	})
 }
 

@@ -64,6 +64,50 @@
     </div>
     {{end}}
 
+    <!-- API Keys -->
+    <div class="border-t border-wl-border pt-8 mt-12">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "settings.api_keys"}}</h2>
+
+        {{if .APIKeys}}
+        <div class="space-y-3 mb-6">
+            {{range .APIKeys}}
+            <div class="flex items-center justify-between border border-wl-border p-3">
+                <div>
+                    <span class="text-sm">{{.Name}}</span>
+                    <span class="text-xs text-wl-gray ml-2">{{.Scopes}}</span>
+                </div>
+                <button hx-delete="/api/keys/{{.ID}}" hx-confirm="{{T $.Lang "settings.confirm_delete_key"}}" hx-target="closest div" hx-swap="outerHTML"
+                    class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">✕</button>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+
+        <div id="new-key-result"></div>
+
+        <form hx-post="/api/keys" hx-target="#new-key-result" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="text-xs text-wl-gray block mb-1">{{T .Lang "settings.key_name"}}</label>
+                <input type="text" name="key_name" placeholder="my-agent"
+                    class="border-b border-wl-border bg-transparent px-0 py-1 text-sm focus:outline-none focus:border-black dark:focus:border-white w-32">
+            </div>
+            <div>
+                <label class="text-xs text-wl-gray block mb-1">{{T .Lang "settings.key_scopes"}}</label>
+                <select name="scopes" class="border-b border-wl-border bg-transparent px-0 py-1 text-sm focus:outline-none">
+                    <option value="read">read</option>
+                    <option value="read,mark">read, mark</option>
+                    <option value="read,mark,write">read, mark, write</option>
+                    <option value="read,mark,write,lists">read, mark, write, lists</option>
+                    <option value="read,mark,write,lists,admin">all</option>
+                </select>
+            </div>
+            <button type="submit"
+                class="px-4 py-2 text-xs uppercase tracking-widest border border-wl-border hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "settings.create_key"}}
+            </button>
+        </form>
+    </div>
+
     <div class="border-t border-wl-border pt-8 mt-12">
         <form method="POST" action="/logout">
             <button type="submit"
