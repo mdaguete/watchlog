@@ -67,7 +67,7 @@ function jumpTo(year, month) {
             <div class="text-xs uppercase tracking-widest text-wl-gray mb-3 border-b border-wl-border pb-2">{{$day.Date}}</div>
             <div class="space-y-2">
                 {{range $j, $item := $day.Items}}
-                <div class="{{if gt $j 0}}hidden timeline-day-item{{end}} flex items-center gap-3">
+                <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies{{end}}" class="{{if gt $j 0}}hidden timeline-day-item{{end}} flex items-center gap-3 hover:bg-wl-light -mx-2 px-2 py-1 rounded transition-colors">
                     {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
                     <div>
                         <p class="text-sm">{{$item.ShowName}}</p>
@@ -77,7 +77,7 @@ function jumpTo(year, month) {
                         <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
                         {{end}}
                     </div>
-                </div>
+                </a>
                 {{end}}
             </div>
             {{if gt (len $day.Items) 1}}
@@ -106,7 +106,7 @@ function jumpTo(year, month) {
         <div class="text-xs uppercase tracking-widest text-wl-gray mb-2 border-b border-wl-border pb-1.5">{{$day.Date}}</div>
         <div class="space-y-2">
             {{range $j, $item := $day.Items}}
-            <div class="{{if gt $j 0}}hidden timeline-day-item-m{{end}} flex items-center gap-3">
+            <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies{{end}}" class="{{if gt $j 0}}hidden timeline-day-item-m{{end}} flex items-center gap-3 hover:bg-wl-light -mx-1 px-1 py-1 rounded transition-colors">
                 {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
                 <div>
                     <p class="text-sm">{{$item.ShowName}}</p>
@@ -116,7 +116,7 @@ function jumpTo(year, month) {
                     <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
                     {{end}}
                 </div>
-            </div>
+            </a>
             {{end}}
         </div>
         {{if gt (len $day.Items) 1}}
