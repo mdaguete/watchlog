@@ -276,6 +276,12 @@ func (db *DB) ToggleUserShowArchive(userID, showID int64) error {
 	return err
 }
 
+func (db *DB) GetUserShowField(userID, showID int64, field string, dest *bool) {
+	var val int
+	db.conn.QueryRow("SELECT "+field+" FROM user_shows WHERE user_id = ? AND show_id = ?", userID, showID).Scan(&val)
+	*dest = val == 1
+}
+
 func (db *DB) FollowShow(userID, showID int64) error {
 	_, err := db.conn.Exec(`INSERT INTO user_shows (user_id, show_id, is_followed, followed_at, updated_at) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT(user_id, show_id) DO UPDATE SET is_followed=1, updated_at=excluded.updated_at`,
