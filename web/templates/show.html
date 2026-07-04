@@ -35,7 +35,7 @@
 
             <div class="flex items-center gap-6 pt-4 border-t border-wl-border">
                 <div>
-                    <div class="text-2xl font-light" id="episodes-count">{{.Show.EpisodesSeen}}</div>
+                    <div class="text-2xl font-light" id="episodes-count">✓ {{.Show.EpisodesSeen}}</div>
                     <div class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "show.episodes_watched"}}</div>
                 </div>
                 {{if .Seasons}}
@@ -80,7 +80,10 @@ watched.add("{{.SeasonNumber}}-{{.EpisodeNumber}}");
 
 function updateCount(delta) {
     const el = document.getElementById('episodes-count');
-    if (el) { el.textContent = parseInt(el.textContent) + delta; }
+    if (el) {
+        const current = parseInt(el.textContent.replace('✓ ', ''));
+        el.textContent = '✓ ' + (current + delta);
+    }
 }
 
 const seasons = { {{range $season, $count := .Seasons}} {{$season}}: {{$count}}, {{end}} };
