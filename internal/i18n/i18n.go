@@ -18,6 +18,7 @@ var translations = map[string]map[string]string{
 	// PWA
 	"pwa.install_prompt": {"es": "Instalar WatchLog", "en": "Install WatchLog"},
 	"pwa.install":        {"es": "Instalar", "en": "Install"},
+	"pwa.ios_prompt":     {"es": "Pulsa compartir ⎋ y \"Añadir a pantalla de inicio\"", "en": "Tap share ⎋ and \"Add to Home Screen\""},
 
 	// Dashboard
 	"dashboard.title":          {"es": "Tu colección", "en": "Your collection"},
