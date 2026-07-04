@@ -22,7 +22,7 @@ Authorization: Bearer wl_your_api_key_here
 |-------|-------------|
 | `read` | Get shows, movies, stats, continue watching |
 | `mark` | Mark/unmark episodes, mark seasons, snooze shows |
-| `write` | Add shows and movies (future) |
+| `write` | Search TMDB and add shows |
 | `lists` | Manage lists (future) |
 | `admin` | TMDB refresh, settings (future) |
 
@@ -44,6 +44,12 @@ Authorization: Bearer wl_your_api_key_here
 | `unmark_episode` | Unmark episode | `show_id`, `season`, `episode` |
 | `mark_season` | Mark full season | `show_id`, `season`, `episodes` |
 | `snooze_show` | Hide from continue watching | `show_id` |
+
+### Write (scope: `write`)
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `search_shows` | Search TMDB for TV shows | `query` |
+| `add_show` | Add a show from TMDB to your library | `tmdb_id` |
 
 ## Agent Configuration
 
