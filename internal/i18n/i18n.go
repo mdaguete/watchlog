@@ -15,6 +15,10 @@ var translations = map[string]map[string]string{
 	// Footer
 	"footer.tagline": {"es": "WatchLog — Tu seguimiento personal de series y películas", "en": "WatchLog — Your personal TV & movie tracker"},
 
+	// PWA
+	"pwa.install_prompt": {"es": "Instalar WatchLog", "en": "Install WatchLog"},
+	"pwa.install":        {"es": "Instalar", "en": "Install"},
+
 	// Dashboard
 	"dashboard.title":          {"es": "Tu colección", "en": "Your collection"},
 	"dashboard.subtitle":       {"es": "Seguimiento personal", "en": "Personal tracking"},

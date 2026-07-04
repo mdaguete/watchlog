@@ -4,6 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="WatchLog">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
     <title>WatchLog</title>
     <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
     <!-- Tailwind CDN is a JIT compiler (no fixed hash possible for SRI) -->
@@ -107,6 +113,45 @@
             </div>
         </footer>
     </div>
+    <!-- PWA install banner -->
+    <div id="pwa-install" class="hidden fixed bottom-0 left-0 right-0 bg-black text-white px-4 py-3 flex items-center justify-between z-50">
+        <span class="text-xs uppercase tracking-widest">{{if .}}{{T .Lang "pwa.install_prompt"}}{{else}}Instalar WatchLog{{end}}</span>
+        <div class="flex gap-3">
+            <button onclick="installPWA()" class="text-xs uppercase tracking-widest border border-white px-3 py-1.5 hover:bg-white hover:text-black transition-colors">{{if .}}{{T .Lang "pwa.install"}}{{else}}Instalar{{end}}</button>
+            <button onclick="dismissInstall()" class="text-xs uppercase tracking-widest text-wl-gray px-2">✕</button>
+        </div>
+    </div>
+    <script>
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+    }
+
+    // PWA Install prompt
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        // Show install banner if not dismissed before
+        if (!localStorage.getItem('pwa-dismissed')) {
+            document.getElementById('pwa-install').classList.remove('hidden');
+        }
+    });
+
+    function installPWA() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(() => {
+            deferredPrompt = null;
+            document.getElementById('pwa-install').classList.add('hidden');
+        });
+    }
+
+    function dismissInstall() {
+        document.getElementById('pwa-install').classList.add('hidden');
+        localStorage.setItem('pwa-dismissed', '1');
+    }
+    </script>
 </body>
 </html>
 {{end}}
