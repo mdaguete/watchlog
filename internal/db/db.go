@@ -329,6 +329,24 @@ func (db *DB) AutoUnarchiveIfIncomplete(userID, showID int64) bool {
 	return true
 }
 
+// UnarchiveForNewSeason unarchives a show for all users who have it archived,
+// if the show is "Returning Series" and has new seasons available.
+func (db *DB) UnarchiveForNewSeason(showID int64, newSeasonCount int) {
+	// Only act on shows that are returning
+	var status string
+	db.conn.QueryRow("SELECT status FROM shows WHERE id = ?", showID).Scan(&status)
+	if status != "Returning Series" {
+		return
+	}
+	// Get previously cached season count
+	var oldCount int
+	db.conn.QueryRow("SELECT COUNT(*) FROM season_episodes WHERE show_id = ?", showID).Scan(&oldCount)
+	// If new seasons were added, unarchive for all users
+	if newSeasonCount > oldCount {
+		db.conn.Exec("UPDATE user_shows SET is_archived = 0, updated_at = ? WHERE show_id = ? AND is_archived = 1", time.Now(), showID)
+	}
+}
+
 // SnoozeShow sets a snooze-until date for a show (hides from continue watching).
 func (db *DB) SnoozeShow(userID, showID int64, until time.Time) error {
 	_, err := db.conn.Exec("UPDATE user_shows SET snoozed_until = ? WHERE user_id = ? AND show_id = ?", until, userID, showID)
