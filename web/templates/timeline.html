@@ -17,13 +17,13 @@
                 <div class="border border-wl-border p-4">
                     <div class="text-xs uppercase tracking-widest text-wl-gray mb-3 border-b border-wl-border pb-2">{{$day.Date}}</div>
                     <div class="space-y-2">
-                        {{range $day.Items}}
-                        <div class="flex items-center gap-3">
-                            {{if .PosterURL}}<img src="{{ImgURL .PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
+                        {{range $j, $item := $day.Items}}
+                        <div class="{{if gt $j 0}}hidden timeline-day-item{{end}} flex items-center gap-3">
+                            {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
                             <div>
-                                <p class="text-sm">{{.ShowName}}</p>
-                                {{if eq .Type "episode"}}
-                                <p class="text-xs text-wl-gray">S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}{{if .EpName}} — {{.EpName}}{{end}}</p>
+                                <p class="text-sm">{{$item.ShowName}}</p>
+                                {{if eq $item.Type "episode"}}
+                                <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{$item.EpName}}{{end}}</p>
                                 {{else}}
                                 <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
                                 {{end}}
@@ -31,6 +31,12 @@
                         </div>
                         {{end}}
                     </div>
+                    {{if gt (len $day.Items) 1}}
+                    <button onclick="this.parentElement.querySelectorAll('.timeline-day-item').forEach(e=>e.classList.remove('hidden'));this.remove()"
+                        class="mt-2 text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                        +{{add (len $day.Items) -1}} {{T $.Lang "timeline.more"}}
+                    </button>
+                    {{end}}
                 </div>
             </div>
             <!-- Center: connector line + dot -->
@@ -44,13 +50,13 @@
             <div class="md:hidden border border-wl-border p-3 w-full">
                 <div class="text-xs uppercase tracking-widest text-wl-gray mb-2 border-b border-wl-border pb-1.5">{{$day.Date}}</div>
                 <div class="space-y-2">
-                    {{range $day.Items}}
-                    <div class="flex items-center gap-3">
-                        {{if .PosterURL}}<img src="{{ImgURL .PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
+                    {{range $j, $item := $day.Items}}
+                    <div class="{{if gt $j 0}}hidden timeline-day-item-m{{end}} flex items-center gap-3">
+                        {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
                         <div>
-                            <p class="text-sm">{{.ShowName}}</p>
-                            {{if eq .Type "episode"}}
-                            <p class="text-xs text-wl-gray">S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}{{if .EpName}} — {{.EpName}}{{end}}</p>
+                            <p class="text-sm">{{$item.ShowName}}</p>
+                            {{if eq $item.Type "episode"}}
+                            <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{$item.EpName}}{{end}}</p>
                             {{else}}
                             <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
                             {{end}}
@@ -58,6 +64,12 @@
                     </div>
                     {{end}}
                 </div>
+                {{if gt (len $day.Items) 1}}
+                <button onclick="this.parentElement.querySelectorAll('.timeline-day-item-m').forEach(e=>e.classList.remove('hidden'));this.remove()"
+                    class="mt-2 text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                    +{{add (len $day.Items) -1}} {{T $.Lang "timeline.more"}}
+                </button>
+                {{end}}
             </div>
         </div>
         {{end}}
