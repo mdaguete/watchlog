@@ -1161,6 +1161,13 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
 		}
 		// Cache season episode counts
+		newSeasonCount := 0
+		for _, s := range result.Seasons {
+			if s.SeasonNumber > 0 {
+				newSeasonCount++
+			}
+		}
+		h.DB.UnarchiveForNewSeason(show.ID, newSeasonCount)
 		for _, s := range result.Seasons {
 			if s.SeasonNumber > 0 {
 				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)

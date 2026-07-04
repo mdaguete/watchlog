@@ -52,6 +52,18 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Dashboard shows "Continue Watching" cards (no stats/navigation clutter)
 - Movies page has stats header (total count + runtime)
 
+### PWA (Progressive Web App)
+- Installable on iOS (Add to Home Screen) and Android (native install prompt)
+- Web App Manifest: standalone display, theme color black, orientation portrait
+- Service Worker: network-first strategy, caches static assets for offline
+- SW served at `/sw.js` (root scope)
+- Install banner: auto-detected on Android (`beforeinstallprompt`), manual instructions on iOS
+- Banner dismissible, persisted in localStorage
+- Maskable icon (512x512 with safe zone) for Android adaptive icons
+- Apple touch icon (180x180) for iOS home screen
+- App shortcuts on long-press (Android): Series, Películas, Buscar, Añadir
+- `viewport-fit=cover` for notch devices
+
 ### Security
 - bcrypt password hashing (DefaultCost)
 - Session tokens: 32 bytes from `crypto/rand`, stored in SQLite `sessions` table (persistent across restarts)
@@ -215,5 +227,4 @@ Download from GoReleaser releases or build with `make`. Run the `server` binary 
 
 - Push notifications for new episodes
 - Dark mode
-- PWA / improved mobile responsive
 - CSRF tokens (mitigated by SameSite=Lax cookie)

@@ -15,6 +15,11 @@ var translations = map[string]map[string]string{
 	// Footer
 	"footer.tagline": {"es": "WatchLog — Tu seguimiento personal de series y películas", "en": "WatchLog — Your personal TV & movie tracker"},
 
+	// PWA
+	"pwa.install_prompt": {"es": "Instalar WatchLog", "en": "Install WatchLog"},
+	"pwa.install":        {"es": "Instalar", "en": "Install"},
+	"pwa.ios_prompt":     {"es": "Pulsa compartir ⎋ y \"Añadir a pantalla de inicio\"", "en": "Tap share ⎋ and \"Add to Home Screen\""},
+
 	// Dashboard
 	"dashboard.title":          {"es": "Tu colección", "en": "Your collection"},
 	"dashboard.subtitle":       {"es": "Seguimiento personal", "en": "Personal tracking"},

@@ -19,6 +19,7 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 - **i18n** — Spanish and English, auto-detected or user-selected
 - **Multi-user** — each user has their own library and preferences
 - **Email notifications** — styled HTML emails for magic links and password reset
+- **PWA** — installable on iOS and Android, works like a native app
 
 ## Requirements
 
