@@ -19,6 +19,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
@@ -42,6 +43,16 @@
             }
         }
     </script>
+    <script>
+        // Apply dark mode based on user preference or system
+        (function() {
+            const theme = document.cookie.match(/(?:^|; )theme=(\w+)/)?.[1] || 'system';
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (theme === 'dark' || (theme === 'system' && prefersDark)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     <style>
         .htmx-indicator { display: none; }
         .htmx-request .htmx-indicator { display: inline-block; }
@@ -54,7 +65,7 @@
             left: 0;
             width: 0;
             height: 1px;
-            background: #000;
+            background: currentColor;
             transition: width 0.3s ease;
         }
         .nav-link:hover::after { width: 100%; }
@@ -64,44 +75,76 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
+        /* Dark mode: invert key utility colors */
+        .dark .bg-white { background-color: #111 !important; }
+        .dark .bg-wl-light { background-color: #1a1a1a !important; }
+        .dark .text-black, .dark .text-wl-black { color: #f5f5f5 !important; }
+        .dark .text-wl-dark { color: #e0e0e0 !important; }
+        .dark .text-wl-gray { color: #999 !important; }
+        .dark .border-wl-border { border-color: #333 !important; }
+        .dark .border-black { border-color: #f5f5f5 !important; }
+        .dark .bg-black { background-color: #f5f5f5 !important; color: #111 !important; }
+        .dark .hover\:bg-black:hover { background-color: #f5f5f5 !important; color: #111 !important; }
+        .dark .hover\:text-black:hover { color: #f5f5f5 !important; }
+        .dark .hover\:border-black:hover { border-color: #f5f5f5 !important; }
+        .dark .border-b.border-black { border-color: #f5f5f5 !important; }
+        .dark input, .dark select { background-color: transparent; color: inherit; }
+        /* Calendar heatmap */
+        .cal-0 { background-color: #f5f5f5; border: 1px solid #e0e0e0; }
+        .cal-1 { background-color: #c8c8c8; }
+        .cal-2 { background-color: #888; }
+        .cal-3 { background-color: #555; }
+        .cal-4 { background-color: #000; }
+        .cal-text { color: #fff; }
+        .cal-0 .cal-text { color: #767676; }
+        .cal-1 .cal-text { color: #333; }
+        .dark .cal-0 { background-color: #1a1a1a; border-color: #333; }
+        .dark .cal-1 { background-color: #333; }
+        .dark .cal-2 { background-color: #555; }
+        .dark .cal-3 { background-color: #888; }
+        .dark .cal-4 { background-color: #ccc; }
+        .dark .cal-text { color: #fff; }
+        .dark .cal-0 .cal-text { color: #666; }
+        .dark .cal-1 .cal-text { color: #ccc; }
+        .dark .cal-4 .cal-text { color: #111; }
     </style>
 </head>
-<body class="h-full bg-white text-wl-black">
+<body class="h-full bg-white dark:bg-wl-black text-wl-black dark:text-wl-light">
     <div class="min-h-full">
-        <header class="border-b border-wl-border">
+        <header class="border-b border-wl-border dark:border-wl-dark">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="flex h-16 sm:h-20 items-center justify-between">
                     <a href="/" class="text-xl sm:text-2xl font-serif tracking-widest uppercase">WatchLog</a>
                     <!-- Mobile menu button -->
-                    <button onclick="document.getElementById('mobile-nav').classList.toggle('hidden')" class="lg:hidden p-2 text-wl-dark">
+                    <button onclick="document.getElementById('mobile-nav').classList.toggle('hidden')" class="lg:hidden p-2">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
                     </button>
                     <!-- Desktop nav -->
                     <nav class="hidden lg:flex items-center gap-6 xl:gap-8">
-                        <a href="/shows" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
-                        <a href="/movies" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
-                        <a href="/upcoming" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
-                        <a href="/lists" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.lists"}}{{else}}Listas{{end}}</a>
-                        <a href="/stats" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.stats"}}{{else}}Stats{{end}}</a>
-                        <a href="/search" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
-                        <a href="/add" class="nav-link text-xs uppercase tracking-widest text-wl-dark">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
-                        <a href="/settings" class="nav-link text-xs uppercase tracking-widest text-wl-dark">⚙</a>
+                        <a href="/shows" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
+                        <a href="/movies" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
+                        <a href="/upcoming" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
+                        <a href="/lists" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.lists"}}{{else}}Listas{{end}}</a>
+                        <a href="/stats" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.stats"}}{{else}}Stats{{end}}</a>
+                        <a href="/search" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
+                        <a href="/add" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
+                        <a href="/settings" class="nav-link text-xs uppercase tracking-widest">⚙</a>
                     </nav>
                 </div>
             </div>
             <!-- Mobile nav -->
-            <nav id="mobile-nav" class="hidden lg:hidden border-t border-wl-border">
+            <nav id="mobile-nav" class="hidden lg:hidden border-t border-wl-border dark:border-wl-dark">
                 <div class="mx-auto max-w-7xl px-4 py-4 grid grid-cols-2 gap-3">
-                    <a href="/shows" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
-                    <a href="/movies" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
-                    <a href="/upcoming" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
-                    <a href="/lists" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.lists"}}{{else}}Listas{{end}}</a>
-                    <a href="/stats" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.stats"}}{{else}}Stats{{end}}</a>
-                    <a href="/search" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
-                    <a href="/add" class="text-xs uppercase tracking-widest text-wl-dark py-2">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
-                    <a href="/settings" class="text-xs uppercase tracking-widest text-wl-dark py-2">⚙</a>
+                    <a href="/shows" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.shows"}}{{else}}Series{{end}}</a>
+                    <a href="/movies" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.movies"}}{{else}}Películas{{end}}</a>
+                    <a href="/upcoming" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
+                    <a href="/lists" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.lists"}}{{else}}Listas{{end}}</a>
+                    <a href="/stats" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.stats"}}{{else}}Stats{{end}}</a>
+                    <a href="/search" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
+                    <a href="/add" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
+                    <a href="/settings" class="text-xs uppercase tracking-widest py-2">⚙</a>
                 </div>
             </nav>
         </header>
@@ -110,7 +153,7 @@
 
 {{define "foot"}}
         </main>
-        <footer class="border-t border-wl-border mt-16 sm:mt-24">
+        <footer class="border-t border-wl-border dark:border-wl-dark mt-16 sm:mt-24">
             <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
                 <p class="text-xs text-wl-gray tracking-wide">{{if .}}{{T .Lang "footer.tagline"}}{{else}}WatchLog — Tu seguimiento personal de series y películas{{end}}</p>
             </div>

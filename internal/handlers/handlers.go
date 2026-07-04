@@ -183,6 +183,16 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	h.LoginLimiter.Reset(ip)
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)
+	// Set theme cookie for client-side dark mode
+	theme := h.DB.GetUserTheme(user.ID)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "theme",
+		Value:    theme,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+	})
 	log.Printf("ACTION: login user=%q", username)
 	// If setup incomplete, redirect to continue setup
 	if h.DB.GetSetting("setup_complete") != "true" {
@@ -1251,8 +1261,10 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
 	user, _ := h.DB.GetUserByID(userID)
+	theme := h.DB.GetUserTheme(userID)
 	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
 		"Lang":    lang,
+		"Theme":   theme,
 		"IsAdmin": userID == 1,
 		"Email":   user.Email,
 	})
@@ -1267,6 +1279,19 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		lang = "es"
 	}
 	h.DB.SetUserLang(userID, lang)
+	theme := r.FormValue("theme")
+	if theme != "light" && theme != "dark" && theme != "system" {
+		theme = "system"
+	}
+	h.DB.SetUserTheme(userID, theme)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "theme",
+		Value:    theme,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		HttpOnly: false, // JS needs to read it
+		SameSite: http.SameSiteLaxMode,
+	})
 	email := strings.TrimSpace(r.FormValue("email"))
 	h.DB.UpdateUserEmail(userID, email)
 	http.Redirect(w, r, "/settings", http.StatusFound)

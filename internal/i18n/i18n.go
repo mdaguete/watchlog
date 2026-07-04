@@ -176,6 +176,10 @@ var translations = map[string]map[string]string{
 	// Settings
 	"settings.title":    {"es": "Ajustes", "en": "Settings"},
 	"settings.language": {"es": "Idioma", "en": "Language"},
+	"settings.theme":          {"es": "Tema", "en": "Theme"},
+	"settings.theme.system":   {"es": "Sistema", "en": "System"},
+	"settings.theme.light":    {"es": "Claro", "en": "Light"},
+	"settings.theme.dark":     {"es": "Oscuro", "en": "Dark"},
 	"settings.save":     {"es": "Guardar", "en": "Save"},
 	"settings.saved":           {"es": "Guardado", "en": "Saved"},
 	"settings.current_key":     {"es": "Clave actual", "en": "Current key"},
