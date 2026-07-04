@@ -611,6 +611,20 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	movie, err := h.DB.GetMovie(id)
+	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	lang := h.getLang(r, userID)
+	h.Templates.ExecuteTemplate(w, "movie.html", map[string]any{
+		"Lang":  lang,
+		"Movie": movie,
+	})
+}
+
 func (h *Handler) PageLists(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }

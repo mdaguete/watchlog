@@ -547,6 +547,13 @@ func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 	return id, nil
 }
 
+func (db *DB) GetMovie(id int64) (models.Movie, error) {
+	var m models.Movie
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime FROM movies WHERE id = ?", id).
+		Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime)
+	return m, err
+}
+
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
 		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedAt)

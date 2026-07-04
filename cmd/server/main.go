@@ -251,6 +251,7 @@ func main() {
 	mux.HandleFunc("GET /shows", h.PageShows)
 	mux.HandleFunc("GET /shows/{id}", h.PageShow)
 	mux.HandleFunc("GET /movies", h.PageMovies)
+	mux.HandleFunc("GET /movies/{id}", h.PageMovie)
 	mux.HandleFunc("GET /lists", h.PageLists)
 	mux.HandleFunc("GET /lists/{id}", h.PageList)
 	mux.HandleFunc("GET /stats", h.PageStats)
