@@ -12,7 +12,19 @@
         {{end}}
         <div class="space-y-6">
             <div>
-                <h1 class="font-serif text-4xl md:text-5xl leading-tight">{{LocName .Lang .Show.Name .Show.NameES .Show.NameEN}}</h1>
+                <div class="flex items-baseline justify-between gap-4">
+                    <h1 class="font-serif text-4xl md:text-5xl leading-tight">{{LocName .Lang .Show.Name .Show.NameES .Show.NameEN}}</h1>
+                    <div class="flex gap-2 shrink-0">
+                        <button hx-post="/api/shows/{{.Show.ID}}/favorite" hx-swap="outerHTML"
+                            class="px-3 py-1.5 text-xs uppercase tracking-widest border {{if .Show.IsFavorited}}bg-black text-white border-black{{else}}bg-white text-black border-wl-border hover:border-black{{end}} transition-colors">
+                            {{if .Show.IsFavorited}}★{{else}}☆{{end}}
+                        </button>
+                        <button hx-post="/api/shows/{{.Show.ID}}/archive" hx-swap="outerHTML"
+                            class="px-3 py-1.5 text-xs uppercase tracking-widest border {{if .Show.IsArchived}}bg-black text-white border-black{{else}}bg-white text-black border-wl-border hover:border-black{{end}} transition-colors">
+                            {{T .Lang "show.archive"}}
+                        </button>
+                    </div>
+                </div>
                 {{if .Show.Genres}}<p class="mt-3 text-sm text-wl-gray">{{LocGenres .Lang .Show.Genres .Show.GenresEN}}</p>{{end}}
                 {{if .Show.Status}}<p class="mt-1 text-xs uppercase tracking-widest text-wl-gray">{{.Show.Status}}</p>{{end}}
             </div>
@@ -26,32 +38,12 @@
                     <div class="text-2xl font-light">{{.Show.EpisodesSeen}}</div>
                     <div class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "show.episodes_watched"}}</div>
                 </div>
-                {{if .Show.TotalSeasons}}
+                {{if .Seasons}}
                 <div>
-                    <div class="text-2xl font-light">{{.Show.TotalSeasons}}</div>
+                    <div class="text-2xl font-light">{{len .Seasons}}</div>
                     <div class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "show.seasons"}}</div>
                 </div>
                 {{end}}
-            </div>
-
-            <!-- Next Episode Button -->
-            <div class="pt-4" id="next-episode-section">
-            </div>
-
-            <!-- Actions -->
-            <div class="flex gap-3 pt-4">
-                <button hx-post="/api/shows/{{.Show.ID}}/follow" hx-swap="none"
-                    class="px-5 py-2.5 text-xs uppercase tracking-widest border {{if .Show.IsFollowed}}bg-black text-white border-black{{else}}bg-white text-black border-wl-border hover:border-black{{end}} transition-colors">
-                    {{if .Show.IsFollowed}}{{T .Lang "show.following"}}{{else}}{{T .Lang "show.follow"}}{{end}}
-                </button>
-                <button hx-post="/api/shows/{{.Show.ID}}/favorite" hx-swap="none"
-                    class="px-5 py-2.5 text-xs uppercase tracking-widest border {{if .Show.IsFavorited}}bg-black text-white border-black{{else}}bg-white text-black border-wl-border hover:border-black{{end}} transition-colors">
-                    {{if .Show.IsFavorited}}★ {{T .Lang "show.favorite"}}{{else}}{{T .Lang "show.favorite"}}{{end}}
-                </button>
-                <button hx-post="/api/shows/{{.Show.ID}}/archive" hx-swap="none"
-                    class="px-5 py-2.5 text-xs uppercase tracking-widest border {{if .Show.IsArchived}}bg-black text-white border-black{{else}}bg-white text-black border-wl-border hover:border-black{{end}} transition-colors">
-                    {{T .Lang "show.archive"}}
-                </button>
             </div>
         </div>
     </div>
@@ -87,61 +79,10 @@ watched.add("{{.SeasonNumber}}-{{.EpisodeNumber}}");
 {{end}}
 
 const seasons = { {{range $season, $count := .Seasons}} {{$season}}: {{$count}}, {{end}} };
-const episodeNames = { {{range .EpisodeDetails}} '{{.SeasonNumber}}-{{.EpisodeNumber}}': '{{.Name}}', {{end}} };
+const episodeNames = { {{range .EpisodeDetails}} '{{.SeasonNumber}}-{{.EpisodeNumber}}': '{{js .Name}}', {{end}} };
 const sortedSeasons = Object.keys(seasons).map(Number).sort((a, b) => a - b);
-const labelMarkNext = '{{T .Lang "show.mark_next"}}';
-const labelMark = '{{T .Lang "show.mark"}}';
 
 function pad(n) { return String(n).padStart(2, '0'); }
-
-// Find the first unwatched episode across all seasons
-function findNextEpisode() {
-    for (const season of sortedSeasons) {
-        const count = seasons[season];
-        for (let ep = 1; ep <= count; ep++) {
-            if (!watched.has(season + '-' + ep)) {
-                return {season, episode: ep};
-            }
-        }
-    }
-    return null; // all watched
-}
-
-function updateNextButton() {
-    const section = document.getElementById('next-episode-section');
-    const next = findNextEpisode();
-    if (!next) {
-        section.innerHTML = '<p class="text-xs text-wl-gray">✓</p>';
-        return;
-    }
-    section.innerHTML = `
-        <button onclick="markNextEpisode()"
-            class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
-            ${labelMarkNext} — S${pad(next.season)}E${pad(next.episode)}
-        </button>
-        <div id="next-result" class="mt-3 text-xs text-wl-gray"></div>`;
-}
-
-function markNextEpisode() {
-    const next = findNextEpisode();
-    if (!next) return;
-    const btn = document.getElementById('ep-' + next.season + '-' + next.episode);
-    if (btn) {
-        markSingle(next.season, next.episode, btn);
-    } else {
-        // Button might not exist in DOM (season not rendered), do fetch directly
-        fetch('/api/shows/{{.Show.ID}}/episodes/watched', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({season: next.season, episode: next.episode})
-        }).then(r => {
-            if (r.ok) {
-                watched.add(next.season + '-' + next.episode);
-                updateNextButton();
-            }
-        });
-    }
-}
 
 // Render episode grids
 Object.entries(seasons).forEach(([season, count]) => {
@@ -181,7 +122,6 @@ function markSingle(season, episode, btn) {
             btn.disabled = false;
             btn.onclick = () => unmarkSingle(season, episode, btn);
             watched.add(season + '-' + episode);
-            updateNextButton();
         }
     });
 }
@@ -200,7 +140,6 @@ function unmarkSingle(season, episode, btn) {
             btn.disabled = false;
             btn.onclick = () => markSingle(season, episode, btn);
             watched.delete(season + '-' + episode);
-            updateNextButton();
         }
     });
 }
@@ -230,7 +169,6 @@ function markFullSeason(season) {
                         watched.delete(season + '-' + ep);
                     });
                 }
-                updateNextButton();
             }
         });
     } else {
@@ -250,14 +188,11 @@ function markFullSeason(season) {
                         watched.add(season + '-' + ep);
                     });
                 }
-                updateNextButton();
             }
         });
     }
 }
 
-// Initialize next button
-updateNextButton();
 </script>
 {{template "foot" .}}
 {{end}}

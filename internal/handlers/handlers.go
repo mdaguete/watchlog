@@ -702,7 +702,20 @@ func (h *Handler) APIToggleFavorite(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.parsePathID(w, r, "id")
 	if !ok { return }
 	h.DB.ToggleUserShowFavorite(userID, id)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	var isFav bool
+	h.DB.GetUserShowField(userID, id, "is_favorited", &isFav)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		star := "☆"
+		cls := "px-3 py-1.5 text-xs uppercase tracking-widest border bg-white text-black border-wl-border hover:border-black transition-colors"
+		if isFav {
+			star = "★"
+			cls = "px-3 py-1.5 text-xs uppercase tracking-widest border bg-black text-white border-black transition-colors"
+		}
+		fmt.Fprintf(w, `<button hx-post="/api/shows/%d/favorite" hx-swap="outerHTML" class="%s">%s</button>`, id, cls, star)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "is_favorited": isFav})
 }
 
 func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
@@ -711,7 +724,20 @@ func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.parsePathID(w, r, "id")
 	if !ok { return }
 	h.DB.ToggleUserShowArchive(userID, id)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	var isArchived bool
+	h.DB.GetUserShowField(userID, id, "is_archived", &isArchived)
+	lang := h.getLang(r, userID)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		label := i18n.T(lang, "show.archive")
+		cls := "px-3 py-1.5 text-xs uppercase tracking-widest border bg-white text-black border-wl-border hover:border-black transition-colors"
+		if isArchived {
+			cls = "px-3 py-1.5 text-xs uppercase tracking-widest border bg-black text-white border-black transition-colors"
+		}
+		fmt.Fprintf(w, `<button hx-post="/api/shows/%d/archive" hx-swap="outerHTML" class="%s">%s</button>`, id, cls, label)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "is_archived": isArchived})
 }
 
 func (h *Handler) APIGetEpisodes(w http.ResponseWriter, r *http.Request) {
