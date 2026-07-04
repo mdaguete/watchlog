@@ -138,6 +138,10 @@ func (db *DB) GetShow(id int64) (models.Show, error) {
 	return s, err
 }
 
+func (db *DB) GetShowByTMDBID(tmdbID int, id *int64) {
+	db.conn.QueryRow("SELECT id FROM shows WHERE tmdb_id = ?", tmdbID).Scan(id)
+}
+
 func (db *DB) UpdateShowTMDB(id int64, tmdbID int, posterURL, backdropURL, overview, genres, status string, totalSeasons int) error {
 	_, err := db.conn.Exec(`UPDATE shows SET tmdb_id=?, poster_url=?, backdrop_url=?, overview=?, genres=?, status=?, total_seasons=? WHERE id=?`,
 		tmdbID, posterURL, backdropURL, overview, genres, status, totalSeasons, id)

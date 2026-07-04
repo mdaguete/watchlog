@@ -9,18 +9,20 @@ import (
 	"strings"
 
 	"github.com/mdaguete/watchlog/internal/db"
+	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Server wraps the MCP server with WatchLog integration.
 type Server struct {
 	db     *db.DB
+	tmdb   *tmdb.Client
 	server *mcp.Server
 }
 
 // New creates a new MCP server with all available tools.
-func New(database *db.DB) *Server {
-	s := &Server{db: database}
+func New(database *db.DB, tmdbClient *tmdb.Client) *Server {
+	s := &Server{db: database, tmdb: tmdbClient}
 	s.server = mcp.NewServer(
 		&mcp.Implementation{Name: "watchlog", Version: "0.12.0"},
 		&mcp.ServerOptions{

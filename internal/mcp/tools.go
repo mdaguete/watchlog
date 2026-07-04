@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/mdaguete/watchlog/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -56,6 +57,17 @@ func (s *Server) registerTools() {
 		Name:        "snooze_show",
 		Description: "Snooze a show from continue watching until next episode is marked",
 	}, s.toolSnoozeShow)
+
+	// Write tools
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "search_shows",
+		Description: "Search TMDB for TV shows by name. Returns matches with tmdb_id to use with add_show.",
+	}, s.toolSearchShows)
+
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "add_show",
+		Description: "Add a TV show from TMDB to your library by its tmdb_id",
+	}, s.toolAddShow)
 }
 
 // --- Read tools ---
@@ -230,5 +242,105 @@ func (s *Server) toolSnoozeShow(ctx context.Context, req *mcp.CallToolRequest, a
 	s.db.SnoozeShow(userID, args.ShowID, time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC))
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: "Show snoozed"}},
+	}, nil, nil
+}
+
+// --- Write tools ---
+
+type searchArgs struct {
+	Query string `json:"query"`
+}
+
+type addShowArgs struct {
+	TMDBID int `json:"tmdb_id"`
+}
+
+func (s *Server) toolSearchShows(ctx context.Context, req *mcp.CallToolRequest, args searchArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=search_shows user=%d query=%q", getUserID(ctx), args.Query)
+	if !hasScope(ctx, "write") {
+		return errNoScope("write")
+	}
+	if s.tmdb == nil || !s.tmdb.Enabled() {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "TMDB not configured"}},
+			IsError: true,
+		}, nil, nil
+	}
+	results, err := s.tmdb.SearchTV(args.Query)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("search error: %v", err)}},
+			IsError: true,
+		}, nil, nil
+	}
+
+	type result struct {
+		TMDBID   int    `json:"tmdb_id"`
+		Name     string `json:"name"`
+		Year     string `json:"year"`
+		Overview string `json:"overview"`
+	}
+	var matches []result
+	for i, r := range results {
+		if i >= 5 {
+			break
+		}
+		year := ""
+		if len(r.FirstAirDate) >= 4 {
+			year = r.FirstAirDate[:4]
+		}
+		overview := r.Overview
+		if len(overview) > 100 {
+			overview = overview[:100] + "..."
+		}
+		matches = append(matches, result{TMDBID: r.ID, Name: r.Name, Year: year, Overview: overview})
+	}
+	return jsonText(matches), nil, nil
+}
+
+func (s *Server) toolAddShow(ctx context.Context, req *mcp.CallToolRequest, args addShowArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=add_show user=%d tmdb_id=%d", getUserID(ctx), args.TMDBID)
+	if !hasScope(ctx, "write") {
+		return errNoScope("write")
+	}
+	if s.tmdb == nil || !s.tmdb.Enabled() {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "TMDB not configured"}},
+			IsError: true,
+		}, nil, nil
+	}
+	userID := getUserID(ctx)
+
+	// Fetch show details from TMDB
+	show, err := s.tmdb.GetTVShow(args.TMDBID)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("TMDB error: %v", err)}},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Upsert show in catalog
+	showID, _ := s.db.UpsertShow(models.Show{
+		ExternalID: int64(show.ID),
+		Name:       show.Name,
+		TMDBID:     show.ID,
+	})
+	if showID == 0 {
+		// Already exists, get ID
+		s.db.GetShowByTMDBID(show.ID, &showID)
+	}
+	if showID == 0 {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "failed to add show"}},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Follow the show
+	s.db.FollowShow(userID, showID)
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Added '%s' (id=%d)", show.Name, showID)}},
 	}, nil, nil
 }

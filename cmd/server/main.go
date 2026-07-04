@@ -317,7 +317,7 @@ func main() {
 	mux.HandleFunc("DELETE /api/keys/{id}", h.APIDeleteKey)
 
 	// MCP endpoint
-	mcpSrv := mcpserver.New(database)
+	mcpSrv := mcpserver.New(database, tmdbClient)
 	mux.Handle("POST /mcp", mcpSrv.Handler())
 	mux.Handle("GET /mcp", mcpSrv.Handler())
 
