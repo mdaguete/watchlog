@@ -11,20 +11,16 @@
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "movies.watchlist"}}</h2>
         <div class="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 snap-x">
             {{range .Unwatched}}
-            <div class="flex-none w-32 snap-start" id="movie-{{.ID}}">
-                <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-1.5 relative group">
+            <a href="/movies/{{.ID}}" class="flex-none w-32 snap-start group" id="movie-{{.ID}}">
+                <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-1.5">
                     {{if .PosterURL}}
-                    <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover">
+                    <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                     {{else}}
                     <div class="w-full h-full flex items-center justify-center text-wl-gray text-xs uppercase tracking-widest">{{T $.Lang "shows.no_image"}}</div>
                     {{end}}
-                    <button onclick="markMovieWatched({{.ID}}, this)"
-                        class="absolute inset-0 bg-black/0 group-hover:bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                        <span class="text-white text-xs uppercase tracking-widest">{{T $.Lang "movies.mark_watched"}}</span>
-                    </button>
                 </div>
                 <h3 class="text-xs font-normal leading-tight truncate">{{LocName $.Lang .Name .NameES .NameEN}}</h3>
-            </div>
+            </a>
             {{end}}
         </div>
     </div>
@@ -38,7 +34,7 @@
 
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
         {{range .Movies}}
-        <div class="group">
+        <a href="/movies/{{.ID}}" class="group">
             <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
                 {{if .PosterURL}}
                 <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
@@ -48,27 +44,10 @@
             </div>
             <h3 class="text-sm font-normal leading-tight">{{LocName $.Lang .Name .NameES .NameEN}}</h3>
             {{if .Genres}}<p class="text-xs text-wl-gray mt-1">{{LocGenres $.Lang .Genres .GenresEN}}</p>{{end}}
-        </div>
+        </a>
         {{end}}
     </div>
 </div>
 
-<script>
-function markMovieWatched(movieId, btn) {
-    fetch('/api/movies/' + movieId + '/watched', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'}
-    }).then(r => {
-        if (r.ok) {
-            const card = document.getElementById('movie-' + movieId);
-            if (card) {
-                card.style.opacity = '0.3';
-                card.style.transition = 'opacity 0.3s';
-                setTimeout(() => card.remove(), 300);
-            }
-        }
-    });
-}
-</script>
 {{template "foot" .}}
 {{end}}

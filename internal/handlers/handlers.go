@@ -619,9 +619,11 @@ func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 	movie, err := h.DB.GetMovie(id)
 	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
 	lang := h.getLang(r, userID)
+	watched := h.DB.IsMovieWatched(userID, id)
 	h.Templates.ExecuteTemplate(w, "movie.html", map[string]any{
-		"Lang":  lang,
-		"Movie": movie,
+		"Lang":    lang,
+		"Movie":   movie,
+		"Watched": watched,
 	})
 }
 

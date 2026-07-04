@@ -19,8 +19,33 @@
             {{if .Movie.Overview}}
             <p class="text-sm leading-relaxed text-wl-dark max-w-lg">{{Loc .Lang .Movie.Overview .Movie.OverviewEN}}</p>
             {{end}}
+
+            <div class="pt-4" id="movie-action">
+                {{if .Watched}}
+                <button onclick="toggleMovieWatched({{.Movie.ID}}, false)"
+                    class="px-5 py-2.5 text-xs uppercase tracking-widest border bg-black text-white border-black transition-colors">
+                    ✓ {{T .Lang "movies.watched"}}
+                </button>
+                {{else}}
+                <button onclick="toggleMovieWatched({{.Movie.ID}}, true)"
+                    class="px-5 py-2.5 text-xs uppercase tracking-widest border border-wl-border text-black hover:bg-black hover:text-white transition-colors">
+                    {{T .Lang "movies.mark_watched"}}
+                </button>
+                {{end}}
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+function toggleMovieWatched(movieId, mark) {
+    fetch('/api/movies/' + movieId + '/watched', {
+        method: mark ? 'POST' : 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    }).then(r => {
+        if (r.ok) { location.reload(); }
+    });
+}
+</script>
 {{template "foot" .}}
 {{end}}

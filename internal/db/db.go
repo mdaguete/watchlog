@@ -554,6 +554,12 @@ func (db *DB) GetMovie(id int64) (models.Movie, error) {
 	return m, err
 }
 
+func (db *DB) IsMovieWatched(userID, movieID int64) bool {
+	var watchedAt *string
+	db.conn.QueryRow("SELECT watched_at FROM user_movies WHERE user_id = ? AND movie_id = ?", userID, movieID).Scan(&watchedAt)
+	return watchedAt != nil
+}
+
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
 		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedAt)
