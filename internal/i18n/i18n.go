@@ -78,6 +78,7 @@ var translations = map[string]map[string]string{
 	"movies.watchlist":     {"es": "Pendientes", "en": "Watchlist"},
 	"movies.watched_count": {"es": "vistas", "en": "watched"},
 	"movies.mark_watched":  {"es": "Vista", "en": "Watched"},
+	"movies.watched":       {"es": "Vista", "en": "Watched"},
 
 	// Stats
 	"stats.title":     {"es": "Estadísticas", "en": "Statistics"},
