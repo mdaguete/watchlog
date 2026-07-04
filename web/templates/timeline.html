@@ -76,19 +76,40 @@
 
         <!-- Older periods (collapsed) -->
         {{if .Periods}}
-        <div class="space-y-2 mt-8">
-            {{range .Periods}}
-            <div class="border border-wl-border">
-                <button hx-get="/api/timeline?from={{.From}}&to={{.To}}" hx-target="next .timeline-expand" hx-swap="innerHTML"
-                    onclick="this.nextElementSibling.classList.toggle('hidden')"
-                    class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-wl-light transition-colors">
-                    <span class="text-sm">{{.Label}}</span>
-                    <span class="text-xs text-wl-gray">{{.Count}} {{T $.Lang "timeline.items"}}</span>
-                </button>
-                <div class="timeline-expand hidden px-4 pb-4"></div>
+        {{$dayCount := len .Days}}
+        {{range $i, $period := .Periods}}
+        <div class="relative flex items-stretch mb-8 {{if eq (mod (add $dayCount $i) 2) 0}}md:flex-row{{else}}md:flex-row-reverse{{end}}">
+            <!-- Period box (desktop) -->
+            <div class="hidden md:block md:w-5/12">
+                <div class="border border-wl-border p-4">
+                    <button hx-get="/api/timeline?from={{$period.From}}&to={{$period.To}}" hx-target="next .timeline-period-expand" hx-swap="innerHTML"
+                        onclick="this.nextElementSibling.classList.toggle('hidden')"
+                        class="w-full flex items-center justify-between text-left">
+                        <span class="text-xs uppercase tracking-widest text-wl-gray">{{$period.Label}}</span>
+                        <span class="text-xs text-wl-gray">{{$period.Count}} {{T $.Lang "timeline.items"}}</span>
+                    </button>
+                    <div class="timeline-period-expand hidden mt-3 border-t border-wl-border pt-3"></div>
+                </div>
             </div>
-            {{end}}
+            <!-- Center: connector line + dot -->
+            <div class="hidden md:flex w-2/12 relative" style="align-items:start;padding-top:1.25rem;">
+                <div class="absolute {{if eq (mod (add $dayCount $i) 2) 0}}left-0 right-1/2{{else}}left-1/2 right-0{{end}} h-px bg-wl-border" style="top:calc(1.25rem + 6px);"></div>
+                <div class="w-3 h-3 rounded-full bg-wl-gray mx-auto relative z-10"></div>
+            </div>
+            <!-- Empty side -->
+            <div class="hidden md:block md:w-5/12"></div>
+            <!-- Mobile -->
+            <div class="md:hidden border border-wl-border p-3 w-full">
+                <button hx-get="/api/timeline?from={{$period.From}}&to={{$period.To}}" hx-target="next .timeline-period-expand-m" hx-swap="innerHTML"
+                    onclick="this.nextElementSibling.classList.toggle('hidden')"
+                    class="w-full flex items-center justify-between text-left">
+                    <span class="text-xs uppercase tracking-widest text-wl-gray">{{$period.Label}}</span>
+                    <span class="text-xs text-wl-gray">{{$period.Count}} {{T $.Lang "timeline.items"}}</span>
+                </button>
+                <div class="timeline-period-expand-m hidden mt-2 border-t border-wl-border pt-2"></div>
+            </div>
         </div>
+        {{end}}
         {{end}}
     </div>
 </div>
