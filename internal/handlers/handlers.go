@@ -651,13 +651,31 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 	// Last 15 days: show daily items
 	cutoff := time.Now().AddDate(0, 0, -15).Format("2006-01-02")
 	items, _ := h.DB.GetTimelineItemsForRange(userID, cutoff, time.Now().Format("2006-01-02"))
+	// Group by day
+	days := groupByDay(items)
 	// Older periods: collapsed
 	periods, _ := h.DB.GetTimelinePeriods(userID, cutoff)
 	h.Templates.ExecuteTemplate(w, "timeline.html", map[string]any{
 		"Lang":    lang,
-		"Items":   items,
+		"Days":    days,
 		"Periods": periods,
 	})
+}
+
+type timelineDay struct {
+	Date  string
+	Items []db.TimelineItem
+}
+
+func groupByDay(items []db.TimelineItem) []timelineDay {
+	var days []timelineDay
+	for _, item := range items {
+		if len(days) == 0 || days[len(days)-1].Date != item.Date {
+			days = append(days, timelineDay{Date: item.Date})
+		}
+		days[len(days)-1].Items = append(days[len(days)-1].Items, item)
+	}
+	return days
 }
 
 func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {

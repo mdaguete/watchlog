@@ -6,10 +6,64 @@
     </div>
 
     <div class="relative" id="timeline-container">
+        <!-- Center line -->
         <div class="absolute left-1/2 top-0 bottom-0 w-px bg-wl-border hidden md:block"></div>
 
-        <!-- Recent items (last 15 days) -->
-        {{template "timeline_content" .}}
+        <!-- Recent days -->
+        {{range $i, $day := .Days}}
+        <div class="relative flex items-start mb-8 {{if eq (mod $i 2) 0}}md:flex-row{{else}}md:flex-row-reverse{{end}}">
+            <!-- Content box (desktop) -->
+            <div class="hidden md:block md:w-5/12 {{if eq (mod $i 2) 0}}pr-6{{else}}pl-6{{end}}">
+                <div class="border border-wl-border p-4 relative">
+                    <!-- Connector line -->
+                    <div class="absolute top-5 {{if eq (mod $i 2) 0}}-right-6 w-6{{else}}-left-6 w-6{{end}} h-px bg-wl-border"></div>
+                    <!-- Date -->
+                    <div class="text-xs uppercase tracking-widest text-wl-gray mb-3 border-b border-wl-border pb-2">{{$day.Date}}</div>
+                    <!-- Items -->
+                    <div class="space-y-2">
+                        {{range $day.Items}}
+                        <div class="flex items-center gap-3">
+                            {{if .PosterURL}}<img src="{{ImgURL .PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
+                            <div>
+                                <p class="text-sm">{{.ShowName}}</p>
+                                {{if eq .Type "episode"}}
+                                <p class="text-xs text-wl-gray">S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}{{if .EpName}} — {{.EpName}}{{end}}</p>
+                                {{else}}
+                                <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
+                                {{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+            <!-- Center dot -->
+            <div class="hidden md:flex w-2/12 justify-center pt-5">
+                <div class="w-3 h-3 rounded-full bg-black"></div>
+            </div>
+            <!-- Empty side -->
+            <div class="hidden md:block md:w-5/12"></div>
+            <!-- Mobile -->
+            <div class="md:hidden border border-wl-border p-3 w-full">
+                <div class="text-xs uppercase tracking-widest text-wl-gray mb-2 border-b border-wl-border pb-1.5">{{$day.Date}}</div>
+                <div class="space-y-2">
+                    {{range $day.Items}}
+                    <div class="flex items-center gap-3">
+                        {{if .PosterURL}}<img src="{{ImgURL .PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
+                        <div>
+                            <p class="text-sm">{{.ShowName}}</p>
+                            {{if eq .Type "episode"}}
+                            <p class="text-xs text-wl-gray">S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}{{if .EpName}} — {{.EpName}}{{end}}</p>
+                            {{else}}
+                            <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
 
         <!-- Older periods (collapsed) -->
         {{if .Periods}}
@@ -30,51 +84,4 @@
     </div>
 </div>
 {{template "foot" .}}
-{{end}}
-
-{{define "timeline_content"}}
-{{$prevDate := ""}}
-{{range $i, $item := .Items}}
-    {{if ne $item.Date $prevDate}}
-        {{$prevDate = $item.Date}}
-        <div class="text-center my-6">
-            <span class="inline-block bg-black text-white text-xs uppercase tracking-widest px-4 py-2">{{$item.Date}}</span>
-        </div>
-    {{end}}
-    <div class="flex items-center mb-3 {{if eq (mod $i 2) 0}}md:flex-row{{else}}md:flex-row-reverse{{end}}">
-        <div class="hidden md:block md:w-5/12 {{if eq (mod $i 2) 0}}text-right pr-8{{else}}text-left pl-8{{end}}">
-            <div class="inline-flex items-center gap-3 {{if eq (mod $i 2) 0}}flex-row-reverse{{end}}">
-                {{if $item.PosterURL}}
-                <img src="{{ImgURL $item.PosterURL}}" alt="" class="w-10 h-14 object-cover shrink-0">
-                {{end}}
-                <div>
-                    <p class="text-sm">{{$item.ShowName}}</p>
-                    {{if eq $item.Type "episode"}}
-                    <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{$item.EpName}}{{end}}</p>
-                    {{else}}
-                    <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
-                    {{end}}
-                </div>
-            </div>
-        </div>
-        <div class="hidden md:flex w-2/12 justify-center">
-            <div class="w-2.5 h-2.5 rounded-full bg-black"></div>
-        </div>
-        <div class="hidden md:block md:w-5/12"></div>
-        <!-- Mobile -->
-        <div class="md:hidden flex items-center gap-3 w-full">
-            {{if $item.PosterURL}}
-            <img src="{{ImgURL $item.PosterURL}}" alt="" class="w-10 h-14 object-cover shrink-0">
-            {{end}}
-            <div>
-                <p class="text-sm">{{$item.ShowName}}</p>
-                {{if eq $item.Type "episode"}}
-                <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{$item.EpName}}{{end}}</p>
-                {{else}}
-                <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
-                {{end}}
-            </div>
-        </div>
-    </div>
-{{end}}
 {{end}}
