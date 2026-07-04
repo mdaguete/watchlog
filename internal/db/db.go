@@ -80,6 +80,20 @@ func (db *DB) SetUserLang(userID int64, lang string) error {
 	return err
 }
 
+func (db *DB) GetUserTheme(userID int64) string {
+	var theme string
+	err := db.conn.QueryRow("SELECT theme FROM users WHERE id = ?", userID).Scan(&theme)
+	if err != nil || theme == "" {
+		return "system"
+	}
+	return theme
+}
+
+func (db *DB) SetUserTheme(userID int64, theme string) error {
+	_, err := db.conn.Exec("UPDATE users SET theme = ? WHERE id = ?", theme, userID)
+	return err
+}
+
 // --- Settings (key-value store) ---
 
 func (db *DB) GetSetting(key string) string {

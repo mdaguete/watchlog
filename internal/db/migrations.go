@@ -28,6 +28,7 @@ var migrations = []Migration{
 	{Version: 5, Description: "episode details table", Up: migrateV5, NeedsTMDBRefresh: true},
 	{Version: 6, Description: "episode still image URL", Up: migrateV6, NeedsTMDBRefresh: true},
 	{Version: 7, Description: "snooze shows from continue watching", Up: migrateV7},
+	{Version: 8, Description: "user theme preference", Up: migrateV8},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -360,6 +361,11 @@ func migrateV6(tx *sql.Tx) error {
 
 func migrateV7(tx *sql.Tx) error {
 	_, err := tx.Exec("ALTER TABLE user_shows ADD COLUMN snoozed_until DATETIME")
+	return err
+}
+
+func migrateV8(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'")
 	return err
 }
 

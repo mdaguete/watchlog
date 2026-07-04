@@ -11,13 +11,34 @@
             <div class="flex gap-4">
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="lang" value="es" {{if eq .Lang "es"}}checked{{end}}
-                        class="accent-black">
+                        class="accent-black dark:accent-white">
                     <span class="text-sm">Español</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="lang" value="en" {{if eq .Lang "en"}}checked{{end}}
-                        class="accent-black">
+                        class="accent-black dark:accent-white">
                     <span class="text-sm">English</span>
+                </label>
+            </div>
+        </div>
+
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "settings.theme"}}</label>
+            <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="theme" value="system" {{if eq .Theme "system"}}checked{{end}}
+                        class="accent-black dark:accent-white">
+                    <span class="text-sm">{{T .Lang "settings.theme.system"}}</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="theme" value="light" {{if eq .Theme "light"}}checked{{end}}
+                        class="accent-black dark:accent-white">
+                    <span class="text-sm">{{T .Lang "settings.theme.light"}}</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="theme" value="dark" {{if eq .Theme "dark"}}checked{{end}}
+                        class="accent-black dark:accent-white">
+                    <span class="text-sm">{{T .Lang "settings.theme.dark"}}</span>
                 </label>
             </div>
         </div>
@@ -25,7 +46,7 @@
         <div>
             <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "settings.email"}}</label>
             <input type="email" name="email" value="{{.Email}}" placeholder="{{T .Lang "settings.email_placeholder"}}"
-                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black dark:focus:border-white">
             <p class="text-xs text-wl-gray mt-2">{{T .Lang "settings.email_help"}}</p>
         </div>
 

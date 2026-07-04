@@ -52,6 +52,15 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Dashboard shows "Continue Watching" cards (no stats/navigation clutter)
 - Movies page has stats header (total count + runtime)
 
+### Dark Mode
+- Tailwind `darkMode: 'class'` strategy
+- User preference stored in DB (`users.theme`: `system`, `light`, `dark`)
+- Theme cookie set on login and settings save (JS reads it before render)
+- CSS overrides in `<style>` block invert key utility colors for dark
+- Calendar heatmap uses dedicated `cal-*` classes for both modes
+- No flash: theme script in `<head>` runs before body paint
+- Settings page: Sistema / Claro / Oscuro radio selector
+
 ### PWA (Progressive Web App)
 - Installable on iOS (Add to Home Screen) and Android (native install prompt)
 - Web App Manifest: standalone display, theme color black, orientation portrait
@@ -226,5 +235,4 @@ Download from GoReleaser releases or build with `make`. Run the `server` binary 
 ## What It Does NOT Have (potential additions)
 
 - Push notifications for new episodes
-- Dark mode
 - CSRF tokens (mitigated by SameSite=Lax cookie)
