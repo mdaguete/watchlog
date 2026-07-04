@@ -611,6 +611,22 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	movie, err := h.DB.GetMovie(id)
+	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	lang := h.getLang(r, userID)
+	watched := h.DB.IsMovieWatched(userID, id)
+	h.Templates.ExecuteTemplate(w, "movie.html", map[string]any{
+		"Lang":    lang,
+		"Movie":   movie,
+		"Watched": watched,
+	})
+}
+
 func (h *Handler) PageLists(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
@@ -641,6 +657,76 @@ func (h *Handler) PageStats(w http.ResponseWriter, r *http.Request) {
 		"WatchStats": stats,
 		"Dashboard":  dashboard,
 		"Runtime":    importer.FormatRuntime(dashboard.TotalRuntime),
+	})
+}
+
+func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	items, _ := h.DB.GetTimelineItems(userID, "", 100)
+	days := groupByDay(items)
+	if len(days) > 10 {
+		days = days[:10]
+	}
+	lastDate := ""
+	if len(days) > 0 {
+		lastDate = days[len(days)-1].Date
+	}
+	years, _ := h.DB.GetTimelineYears(userID)
+	h.Templates.ExecuteTemplate(w, "timeline.html", map[string]any{
+		"Lang":     lang,
+		"Days":     days,
+		"LastDate": lastDate,
+		"HasMore":  len(days) == 10,
+		"Years":    years,
+	})
+}
+
+type timelineDay struct {
+	Date  string
+	Items []db.TimelineItem
+}
+
+func groupByDay(items []db.TimelineItem) []timelineDay {
+	var days []timelineDay
+	for _, item := range items {
+		if len(days) == 0 || days[len(days)-1].Date != item.Date {
+			days = append(days, timelineDay{Date: item.Date})
+		}
+		days[len(days)-1].Items = append(days[len(days)-1].Items, item)
+	}
+	return days
+}
+
+func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	before := r.URL.Query().Get("before")
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+
+	var items []db.TimelineItem
+	if from != "" && to != "" {
+		items, _ = h.DB.GetTimelineItemsForRange(userID, from, to)
+	} else if before != "" {
+		items, _ = h.DB.GetTimelineItems(userID, before, 100)
+	}
+
+	days := groupByDay(items)
+	if from == "" && len(days) > 10 {
+		days = days[:10]
+	}
+	lastDate := ""
+	if len(days) > 0 {
+		lastDate = days[len(days)-1].Date
+	}
+	h.Templates.ExecuteTemplate(w, "timeline_items.html", map[string]any{
+		"Lang":     lang,
+		"Days":     days,
+		"LastDate": lastDate,
+		"HasMore":  from == "" && len(days) == 10,
 	})
 }
 

@@ -9,6 +9,7 @@ var translations = map[string]map[string]string{
 	"nav.upcoming": {"es": "Próximos", "en": "Upcoming"},
 	"nav.lists":    {"es": "Listas", "en": "Lists"},
 	"nav.stats":    {"es": "Stats", "en": "Stats"},
+	"nav.timeline": {"es": "Historial", "en": "Timeline"},
 	"nav.search":   {"es": "Buscar", "en": "Search"},
 	"nav.add":      {"es": "+ Añadir", "en": "+ Add"},
 
@@ -77,6 +78,7 @@ var translations = map[string]map[string]string{
 	"movies.watchlist":     {"es": "Pendientes", "en": "Watchlist"},
 	"movies.watched_count": {"es": "vistas", "en": "watched"},
 	"movies.mark_watched":  {"es": "Vista", "en": "Watched"},
+	"movies.watched":       {"es": "Vista", "en": "Watched"},
 
 	// Stats
 	"stats.title":     {"es": "Estadísticas", "en": "Statistics"},
@@ -87,6 +89,15 @@ var translations = map[string]map[string]string{
 	"stats.calendar":  {"es": "Calendario de actividad", "en": "Activity calendar"},
 	"stats.less":      {"es": "Menos", "en": "Less"},
 	"stats.more":      {"es": "Más", "en": "More"},
+
+	// Timeline
+	"timeline.title": {"es": "Historial", "en": "Timeline"},
+	"timeline.movie": {"es": "Película", "en": "Movie"},
+	"timeline.items": {"es": "episodios", "en": "episodes"},
+	"timeline.more":     {"es": "más", "en": "more"},
+	"timeline.collapse": {"es": "Menos", "en": "Less"},
+	"timeline.jump":     {"es": "Ir a:", "en": "Jump to:"},
+	"timeline.today":    {"es": "Hoy", "en": "Today"},
 
 	// Lists
 	"lists.title":       {"es": "Listas", "en": "Lists"},
