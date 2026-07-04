@@ -1702,3 +1702,87 @@ func (db *DB) GetTimelineYears(userID int64) ([]string, error) {
 	}
 	return years, nil
 }
+
+// --- CLI Admin Methods ---
+
+// CLIUser is a user record for CLI display.
+type CLIUser struct {
+	ID       int64
+	Username string
+	Email    string
+	Blocked  bool
+}
+
+func (db *DB) ListAllUsers() ([]CLIUser, error) {
+	rows, err := db.conn.Query("SELECT id, username, email, COALESCE(blocked, 0) FROM users ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []CLIUser
+	for rows.Next() {
+		var u CLIUser
+		var blocked int
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &blocked); err != nil {
+			return nil, err
+		}
+		u.Blocked = blocked == 1
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func (db *DB) SetUserBlocked(userID int64, blocked bool) {
+	val := 0
+	if blocked {
+		val = 1
+	}
+	db.conn.Exec("UPDATE users SET blocked = ? WHERE id = ?", val, userID)
+}
+
+func (db *DB) IsUserBlocked(userID int64) bool {
+	var blocked int
+	db.conn.QueryRow("SELECT COALESCE(blocked, 0) FROM users WHERE id = ?", userID).Scan(&blocked)
+	return blocked == 1
+}
+
+func (db *DB) DeleteUser(userID int64) {
+	db.conn.Exec("DELETE FROM episodes WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM user_movies WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM user_shows WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM show_progress WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM watch_stats WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM lists WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM magic_links WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM api_keys WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM users WHERE id = ?", userID)
+}
+
+type Setting struct {
+	Key   string
+	Value string
+}
+
+func (db *DB) ListSettings() ([]Setting, error) {
+	rows, err := db.conn.Query("SELECT key, value FROM settings ORDER BY key")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var settings []Setting
+	for rows.Next() {
+		var s Setting
+		rows.Scan(&s.Key, &s.Value)
+		settings = append(settings, s)
+	}
+	return settings, nil
+}
+
+func (db *DB) CurrentVersion() int {
+	return db.currentVersion()
+}
+
+func (db *DB) Vacuum() {
+	db.conn.Exec("VACUUM")
+}

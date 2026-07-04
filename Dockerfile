@@ -19,6 +19,11 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -o watchlog ./cmd/server/
 
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -ldflags="-w -s" \
+    -trimpath \
+    -o watchdog ./cmd/watchdog/
+
 # Create data directory for the final image
 RUN mkdir -p /data && chown 65532:65532 /data
 
@@ -27,6 +32,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 # Copy binary and templates
 COPY --from=builder /app/watchlog /usr/local/bin/
+COPY --from=builder /app/watchdog /usr/local/bin/
 COPY --from=builder /app/web /usr/local/share/watchlog/web
 COPY --from=builder --chown=nonroot:nonroot /data /data
 
