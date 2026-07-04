@@ -549,8 +549,38 @@ func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
-		ON CONFLICT(user_id, movie_id) DO NOTHING`, userID, movieID, watchedAt)
+		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedAt)
 	return err
+}
+
+func (db *DB) AddMovieToLibrary(userID, movieID int64) error {
+	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id) VALUES (?, ?)
+		ON CONFLICT(user_id, movie_id) DO NOTHING`, userID, movieID)
+	return err
+}
+
+func (db *DB) UnmarkMovieWatched(userID, movieID int64) error {
+	_, err := db.conn.Exec(`UPDATE user_movies SET watched_at = NULL WHERE user_id = ? AND movie_id = ?`, userID, movieID)
+	return err
+}
+
+func (db *DB) GetUserMoviesUnwatched(userID int64) ([]models.UserMovie, error) {
+	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime
+		FROM user_movies um JOIN movies m ON m.id = um.movie_id
+		WHERE um.user_id = ? AND um.watched_at IS NULL ORDER BY m.name ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var movies []models.UserMovie
+	for rows.Next() {
+		var um models.UserMovie
+		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime); err != nil {
+			return nil, err
+		}
+		movies = append(movies, um)
+	}
+	return movies, nil
 }
 
 func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie, error) {
@@ -564,7 +594,7 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 
 	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime, um.watched_at
 		FROM user_movies um JOIN movies m ON m.id = um.movie_id
-		WHERE um.user_id = ? `+orderClause, userID)
+		WHERE um.user_id = ? AND um.watched_at IS NOT NULL `+orderClause, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1010,7 +1040,7 @@ type MovieStats struct {
 
 func (db *DB) GetMovieStats(userID int64) (MovieStats, error) {
 	var s MovieStats
-	db.conn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(m.runtime), 0) FROM user_movies um JOIN movies m ON m.id = um.movie_id WHERE um.user_id = ?`, userID).Scan(&s.TotalMovies, &s.TotalRuntime)
+	db.conn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(m.runtime), 0) FROM user_movies um JOIN movies m ON m.id = um.movie_id WHERE um.user_id = ? AND um.watched_at IS NOT NULL`, userID).Scan(&s.TotalMovies, &s.TotalRuntime)
 	return s, nil
 }
 

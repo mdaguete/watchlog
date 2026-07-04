@@ -74,6 +74,9 @@ var translations = map[string]map[string]string{
 	"movies.sort.name":   {"es": "A–Z", "en": "A–Z"},
 	"movies.total":       {"es": "Películas vistas", "en": "Movies watched"},
 	"movies.runtime":     {"es": "Tiempo total", "en": "Total runtime"},
+	"movies.watchlist":     {"es": "Pendientes", "en": "Watchlist"},
+	"movies.watched_count": {"es": "vistas", "en": "watched"},
+	"movies.mark_watched":  {"es": "Vista", "en": "Watched"},
 
 	// Stats
 	"stats.title":     {"es": "Estadísticas", "en": "Statistics"},

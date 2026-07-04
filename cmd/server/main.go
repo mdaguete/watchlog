@@ -278,6 +278,8 @@ func main() {
 
 	// API: Movies
 	mux.HandleFunc("GET /api/movies", h.APIGetMovies)
+	mux.HandleFunc("POST /api/movies/{id}/watched", h.APIMarkMovieWatched)
+	mux.HandleFunc("DELETE /api/movies/{id}/watched", h.APIUnmarkMovieWatched)
 
 	// API: Lists
 	mux.HandleFunc("GET /api/lists", h.APIGetLists)
