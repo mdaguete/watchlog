@@ -35,7 +35,7 @@
             </div>
             <!-- Center: connector line + dot -->
             <div class="hidden md:flex w-2/12 relative" style="align-items:start;padding-top:1.25rem;">
-                <div class="absolute top-5 {{if eq (mod $i 2) 0}}left-0 right-1/2{{else}}left-1/2 right-0{{end}} h-px bg-wl-border"></div>
+                <div class="absolute {{if eq (mod $i 2) 0}}left-0 right-1/2{{else}}left-1/2 right-0{{end}} h-px bg-wl-border" style="top:calc(1.25rem + 6px);"></div>
                 <div class="w-3 h-3 rounded-full bg-black mx-auto relative z-10"></div>
             </div>
             <!-- Empty side -->
