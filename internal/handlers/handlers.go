@@ -599,13 +599,15 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	if sort == "" { sort = "recent" }
 	movies, _ := h.DB.GetUserMoviesSorted(userID, sort)
+	unwatched, _ := h.DB.GetUserMoviesUnwatched(userID)
 	stats, _ := h.DB.GetMovieStats(userID)
 	h.Templates.ExecuteTemplate(w, "movies.html", map[string]any{
-		"Lang":    lang,
-		"Movies":  movies,
-		"Sort":    sort,
-		"Stats":   stats,
-		"Runtime": importer.FormatRuntime(stats.TotalRuntime),
+		"Lang":      lang,
+		"Movies":    movies,
+		"Unwatched": unwatched,
+		"Sort":      sort,
+		"Stats":     stats,
+		"Runtime":   importer.FormatRuntime(stats.TotalRuntime),
 	})
 }
 
@@ -885,6 +887,26 @@ func (h *Handler) APIGetMovies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, movies)
 }
 
+func (h *Handler) APIMarkMovieWatched(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok { return }
+	h.DB.MarkMovieWatched(userID, id, time.Now())
+	log.Printf("ACTION: user=%d mark movie watched id=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) APIUnmarkMovieWatched(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok { return }
+	h.DB.UnmarkMovieWatched(userID, id)
+	log.Printf("ACTION: user=%d unmark movie watched id=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *Handler) APIGetLists(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
@@ -1112,7 +1134,7 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	if err != nil { writeError(w, http.StatusNotFound, "not found"); return }
 	genres := extractGenreNames(movie.Genres)
 	id, _ := h.DB.AddMovieFromTMDB(movie.ID, movie.Title, tmdb.PosterURL(movie.PosterPath, "w342"), movie.Overview, genres, movie.Runtime)
-	h.DB.MarkMovieWatched(userID, id, time.Now())
+	h.DB.AddMovieToLibrary(userID, id)
 	log.Printf("ACTION: user=%d add movie %q tmdb_id=%d", userID, movie.Title, movie.ID)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)

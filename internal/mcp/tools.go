@@ -76,8 +76,13 @@ func (s *Server) registerTools() {
 
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "add_movie",
-		Description: "Add a movie from TMDB and mark it as watched",
+		Description: "Add a movie from TMDB to your watchlist (does not mark as watched)",
 	}, s.toolAddMovie)
+
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "mark_movie_watched",
+		Description: "Mark a movie as watched",
+	}, s.toolMarkMovieWatched)
 }
 
 // --- Read tools ---
@@ -436,9 +441,25 @@ func (s *Server) toolAddMovie(ctx context.Context, req *mcp.CallToolRequest, arg
 	}
 
 	id, _ := s.db.AddMovieFromTMDB(movie.ID, movie.Title, "", movie.Overview, genreStr, movie.Runtime)
-	s.db.MarkMovieWatched(userID, id, time.Now())
+	s.db.AddMovieToLibrary(userID, id)
 
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Added and marked as watched: '%s'", movie.Title)}},
+		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Added to watchlist: '%s' (id=%d)", movie.Title, id)}},
+	}, nil, nil
+}
+
+type movieIDArgs struct {
+	MovieID int64 `json:"movie_id"`
+}
+
+func (s *Server) toolMarkMovieWatched(ctx context.Context, req *mcp.CallToolRequest, args movieIDArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=mark_movie_watched user=%d movie_id=%d", getUserID(ctx), args.MovieID)
+	if !hasScope(ctx, "mark") {
+		return errNoScope("mark")
+	}
+	userID := getUserID(ctx)
+	s.db.MarkMovieWatched(userID, args.MovieID, time.Now())
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: "Movie marked as watched"}},
 	}, nil, nil
 }
