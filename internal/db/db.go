@@ -1112,59 +1112,100 @@ type ContinueWatchingItem struct {
 	DaysSinceLast int
 }
 
-// GetContinueWatching returns the next unwatched episode for the N most recently active shows.
+// GetContinueWatching returns the next unwatched episode for shows the user is mid-season on.
+// It excludes shows where the next episode is in a new (unwatched) season — those go to GetNewSeasons.
 func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]ContinueWatchingItem, error) {
 	off := 0
 	if len(offset) > 0 {
 		off = offset[0]
 	}
-	// Get the most recently active shows (by latest watched episode)
+	all, err := db.getContinueWatchingCandidates(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []ContinueWatchingItem
+	skipped := 0
+	for _, item := range all {
+		if len(items) >= limit {
+			break
+		}
+		if item.isNewSeason {
+			continue
+		}
+		if skipped < off {
+			skipped++
+			continue
+		}
+		items = append(items, item.ContinueWatchingItem)
+	}
+	return items, nil
+}
+
+// GetNewSeasons returns shows where the user completed previous seasons and a new season is now available.
+func (db *DB) GetNewSeasons(userID int64) ([]ContinueWatchingItem, error) {
+	all, err := db.getContinueWatchingCandidates(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []ContinueWatchingItem
+	for _, item := range all {
+		if item.isNewSeason {
+			items = append(items, item.ContinueWatchingItem)
+		}
+	}
+	return items, nil
+}
+
+type candidateItem struct {
+	ContinueWatchingItem
+	isNewSeason bool
+}
+
+func (db *DB) getContinueWatchingCandidates(userID int64) ([]candidateItem, error) {
 	rows, err := db.conn.Query(`
-		SELECT e.show_id, s.name, s.name_es, s.name_en, s.poster_url, MAX(e.watched_at) as last_watched
-		FROM episodes e
-		JOIN shows s ON s.id = e.show_id
-		JOIN user_shows us ON us.show_id = e.show_id AND us.user_id = e.user_id
-		WHERE e.user_id = ? AND (us.snoozed_until IS NULL OR us.snoozed_until < ?)
-		GROUP BY e.show_id
-		ORDER BY last_watched DESC
-		LIMIT ? OFFSET ?`, userID, time.Now(), limit*3, off*3) // fetch extra in case some are fully watched
+		SELECT us.show_id, s.name, s.name_es, s.name_en, s.poster_url,
+			COALESCE((SELECT MAX(e.watched_at) FROM episodes e WHERE e.user_id = us.user_id AND e.show_id = us.show_id), us.followed_at) as last_activity
+		FROM user_shows us
+		JOIN shows s ON s.id = us.show_id
+		WHERE us.user_id = ? AND us.is_followed = 1 AND us.is_archived = 0
+			AND (us.snoozed_until IS NULL OR us.snoozed_until < ?)
+		ORDER BY last_activity DESC`, userID, time.Now())
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	type recentShow struct {
-		id          int64
-		name        string
-		nameES      string
-		nameEN      string
-		poster      string
-		lastWatched string
+	type candidateShow struct {
+		id           int64
+		name         string
+		nameES       string
+		nameEN       string
+		poster       string
+		lastActivity string
 	}
-	var recent []recentShow
+	var candidates []candidateShow
 	for rows.Next() {
-		var rs recentShow
-		if err := rows.Scan(&rs.id, &rs.name, &rs.nameES, &rs.nameEN, &rs.poster, &rs.lastWatched); err != nil {
+		var c candidateShow
+		if err := rows.Scan(&c.id, &c.name, &c.nameES, &c.nameEN, &c.poster, &c.lastActivity); err != nil {
 			return nil, err
 		}
-		recent = append(recent, rs)
+		candidates = append(candidates, c)
 	}
 
-	var items []ContinueWatchingItem
-	for _, rs := range recent {
-		if len(items) >= limit {
-			break
-		}
-
+	var items []candidateItem
+	for _, c := range candidates {
 		// Get all season/episode counts for this show
-		seasons, _ := db.GetSeasonEpisodes(rs.id)
+		seasons, _ := db.GetSeasonEpisodes(c.id)
 		if len(seasons) == 0 {
 			continue
 		}
 
 		// Get watched episodes for this user/show
 		watchedSet := make(map[string]bool)
-		wRows, err := db.conn.Query("SELECT season_number, episode_number FROM episodes WHERE user_id = ? AND show_id = ?", userID, rs.id)
+		maxWatchedSeason := 0
+		wRows, err := db.conn.Query("SELECT season_number, episode_number FROM episodes WHERE user_id = ? AND show_id = ?", userID, c.id)
 		if err != nil {
 			continue
 		}
@@ -1172,13 +1213,15 @@ func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]Con
 			var sn, en int
 			wRows.Scan(&sn, &en)
 			watchedSet[fmt.Sprintf("%d-%d", sn, en)] = true
+			if sn > maxWatchedSeason {
+				maxWatchedSeason = sn
+			}
 		}
 		wRows.Close()
 
 		// Find first unwatched episode
 		var foundSeason, foundEpisode int
 		found := false
-		// Sort seasons
 		sortedSeasons := make([]int, 0, len(seasons))
 		for sn := range seasons {
 			sortedSeasons = append(sortedSeasons, sn)
@@ -1203,31 +1246,35 @@ func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]Con
 		}
 
 		// Get episode details
-		var item ContinueWatchingItem
-		item.ShowID = rs.id
-		item.ShowName = rs.name
-		item.ShowNameES = rs.nameES
-		item.ShowNameEN = rs.nameEN
-		item.PosterURL = rs.poster
+		var item candidateItem
+		item.ShowID = c.id
+		item.ShowName = c.name
+		item.ShowNameES = c.nameES
+		item.ShowNameEN = c.nameEN
+		item.PosterURL = c.poster
 		item.SeasonNumber = foundSeason
 		item.EpisodeNumber = foundEpisode
 
 		var airDate string
 		err = db.conn.QueryRow(`SELECT name, name_en, overview, overview_en, still_url, air_date
 			FROM episode_details WHERE show_id = ? AND season_number = ? AND episode_number = ?`,
-			rs.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL, &airDate)
+			c.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL, &airDate)
 		if err != nil {
-			// No details available, still show the item
 			item.EpName = fmt.Sprintf("S%02dE%02d", foundSeason, foundEpisode)
 		} else if airDate == "" || airDate > time.Now().Format("2006-01-02") {
-			// Episode not yet aired — skip this show
+			// Episode not yet aired — skip
 			continue
 		}
 
-		// Calculate days since last watched
-		if t, err := time.Parse("2006-01-02 15:04:05", rs.lastWatched[:19]); err == nil {
-			item.DaysSinceLast = int(time.Since(t).Hours() / 24)
+		// Calculate days since last activity
+		if len(c.lastActivity) >= 19 {
+			if t, err := time.Parse("2006-01-02 15:04:05", c.lastActivity[:19]); err == nil {
+				item.DaysSinceLast = int(time.Since(t).Hours() / 24)
+			}
 		}
+
+		// Determine if this is a new season: first unwatched is in a season beyond what user has watched
+		item.isNewSeason = foundSeason > maxWatchedSeason && maxWatchedSeason > 0
 
 		items = append(items, item)
 	}
