@@ -56,7 +56,7 @@
             {{range $season, $count := .Seasons}}
             <div>
                 <div class="flex items-center justify-between mb-3">
-                    <span class="text-sm">{{T $.Lang "show.season"}} {{$season}}</span>
+                    <span class="text-sm">{{T $.Lang "show.season"}} {{$season}} <span class="text-xs text-wl-gray">({{$count}})</span></span>
                     <button onclick="markFullSeason({{$season}})"
                         class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
                         {{T $.Lang "show.mark_all"}}
