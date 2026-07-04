@@ -95,6 +95,7 @@ var translations = map[string]map[string]string{
 	"timeline.items": {"es": "episodios", "en": "episodes"},
 	"timeline.more":     {"es": "más", "en": "more"},
 	"timeline.collapse": {"es": "Menos", "en": "Less"},
+	"timeline.jump":     {"es": "Ir a:", "en": "Jump to:"},
 
 	// Lists
 	"lists.title":       {"es": "Listas", "en": "Lists"},

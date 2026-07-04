@@ -1661,3 +1661,26 @@ func getWeekLabel(date string) string {
 	weekNum := (day - 1) / 7
 	return fmt.Sprintf("%s-w%d", date[:7], weekNum)
 }
+
+// GetTimelineYears returns distinct years that have watched activity.
+func (db *DB) GetTimelineYears(userID int64) ([]string, error) {
+	rows, err := db.conn.Query(`
+		SELECT DISTINCT year FROM (
+			SELECT substr(watched_at, 1, 4) as year FROM episodes WHERE user_id = ? AND watched_at != ''
+			UNION
+			SELECT substr(watched_at, 1, 4) as year FROM user_movies WHERE user_id = ? AND watched_at IS NOT NULL
+		) ORDER BY year DESC`, userID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var years []string
+	for rows.Next() {
+		var y string
+		rows.Scan(&y)
+		if y != "" {
+			years = append(years, y)
+		}
+	}
+	return years, nil
+}

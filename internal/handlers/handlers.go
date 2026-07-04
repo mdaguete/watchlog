@@ -648,17 +648,22 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	// Last 15 days: show daily items
-	cutoff := time.Now().AddDate(0, 0, -15).Format("2006-01-02")
-	items, _ := h.DB.GetTimelineItemsForRange(userID, cutoff, time.Now().Format("2006-01-02"))
-	// Group by day
+	items, _ := h.DB.GetTimelineItems(userID, "", 100)
 	days := groupByDay(items)
-	// Older periods: collapsed
-	periods, _ := h.DB.GetTimelinePeriods(userID, cutoff)
+	if len(days) > 10 {
+		days = days[:10]
+	}
+	lastDate := ""
+	if len(days) > 0 {
+		lastDate = days[len(days)-1].Date
+	}
+	years, _ := h.DB.GetTimelineYears(userID)
 	h.Templates.ExecuteTemplate(w, "timeline.html", map[string]any{
-		"Lang":    lang,
-		"Days":    days,
-		"Periods": periods,
+		"Lang":     lang,
+		"Days":     days,
+		"LastDate": lastDate,
+		"HasMore":  len(days) == 10,
+		"Years":    years,
 	})
 }
 
@@ -682,15 +687,30 @@ func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
+	before := r.URL.Query().Get("before")
 	from := r.URL.Query().Get("from")
 	to := r.URL.Query().Get("to")
-	if from == "" || to == "" {
-		writeError(w, http.StatusBadRequest, "from and to required"); return
+
+	var items []db.TimelineItem
+	if from != "" && to != "" {
+		items, _ = h.DB.GetTimelineItemsForRange(userID, from, to)
+	} else if before != "" {
+		items, _ = h.DB.GetTimelineItems(userID, before, 100)
 	}
-	items, _ := h.DB.GetTimelineItemsForRange(userID, from, to)
+
+	days := groupByDay(items)
+	if from == "" && len(days) > 10 {
+		days = days[:10]
+	}
+	lastDate := ""
+	if len(days) > 0 {
+		lastDate = days[len(days)-1].Date
+	}
 	h.Templates.ExecuteTemplate(w, "timeline_items.html", map[string]any{
-		"Lang":  lang,
-		"Items": items,
+		"Lang":     lang,
+		"Days":     days,
+		"LastDate": lastDate,
+		"HasMore":  from == "" && len(days) == 10,
 	})
 }
 
