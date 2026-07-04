@@ -210,6 +210,9 @@ func main() {
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"mod": func(a, b int) int {
+			return a % b
+		},
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("web/templates/*.html")
 	if err != nil {
@@ -251,6 +254,8 @@ func main() {
 	mux.HandleFunc("GET /lists", h.PageLists)
 	mux.HandleFunc("GET /lists/{id}", h.PageList)
 	mux.HandleFunc("GET /stats", h.PageStats)
+	mux.HandleFunc("GET /timeline", h.PageTimeline)
+	mux.HandleFunc("GET /api/timeline", h.APITimelineItems)
 	mux.HandleFunc("GET /search", h.PageSearch)
 	mux.HandleFunc("GET /search/results", h.SearchResults)
 	mux.HandleFunc("GET /add", h.PageAddShow)

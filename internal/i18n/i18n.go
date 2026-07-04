@@ -9,6 +9,7 @@ var translations = map[string]map[string]string{
 	"nav.upcoming": {"es": "Próximos", "en": "Upcoming"},
 	"nav.lists":    {"es": "Listas", "en": "Lists"},
 	"nav.stats":    {"es": "Stats", "en": "Stats"},
+	"nav.timeline": {"es": "Historial", "en": "Timeline"},
 	"nav.search":   {"es": "Buscar", "en": "Search"},
 	"nav.add":      {"es": "+ Añadir", "en": "+ Add"},
 
@@ -87,6 +88,10 @@ var translations = map[string]map[string]string{
 	"stats.calendar":  {"es": "Calendario de actividad", "en": "Activity calendar"},
 	"stats.less":      {"es": "Menos", "en": "Less"},
 	"stats.more":      {"es": "Más", "en": "More"},
+
+	// Timeline
+	"timeline.title": {"es": "Historial", "en": "Timeline"},
+	"timeline.movie": {"es": "Película", "en": "Movie"},
 
 	// Lists
 	"lists.title":       {"es": "Listas", "en": "Lists"},

@@ -1417,3 +1417,67 @@ func (db *DB) DeleteAPIKey(userID, keyID int64) error {
 	_, err := db.conn.Exec(`DELETE FROM api_keys WHERE id = ? AND user_id = ?`, keyID, userID)
 	return err
 }
+
+// --- Timeline ---
+
+// TimelineItem represents a watched episode or movie in the timeline.
+type TimelineItem struct {
+	Type          string // "episode" or "movie"
+	ShowID        int64
+	ShowName      string
+	PosterURL     string
+	SeasonNumber  int
+	EpisodeNumber int
+	EpName        string
+	MovieName     string
+	WatchedAt     string
+	Date          string // YYYY-MM-DD
+}
+
+// GetTimelineItems returns watched items (episodes + movies) ordered by date, paginated.
+func (db *DB) GetTimelineItems(userID int64, before string, limit int) ([]TimelineItem, error) {
+	var beforeClause string
+	var args []any
+	args = append(args, userID, userID)
+	if before != "" {
+		beforeClause = "HAVING date < ?"
+		args = append(args, before)
+	}
+
+	query := `
+		SELECT type, show_id, show_name, poster_url, season_number, episode_number, ep_name, date FROM (
+			SELECT 'episode' as type, e.show_id, s.name as show_name, s.poster_url,
+				e.season_number, e.episode_number,
+				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				substr(e.watched_at, 1, 10) as date
+			FROM episodes e JOIN shows s ON s.id = e.show_id
+			WHERE e.user_id = ? AND e.watched_at != ''
+			UNION ALL
+			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.poster_url,
+				0 as season_number, 0 as episode_number, '' as ep_name,
+				substr(um.watched_at, 1, 10) as date
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL
+		) items
+		GROUP BY type, show_id, season_number, episode_number
+		` + beforeClause + `
+		ORDER BY date DESC, show_name ASC
+		LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []TimelineItem
+	for rows.Next() {
+		var item TimelineItem
+		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.Date); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}

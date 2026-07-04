@@ -644,6 +644,41 @@ func (h *Handler) PageStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	items, _ := h.DB.GetTimelineItems(userID, "", 50)
+	lastDate := ""
+	if len(items) > 0 {
+		lastDate = items[len(items)-1].Date
+	}
+	h.Templates.ExecuteTemplate(w, "timeline.html", map[string]any{
+		"Lang":     lang,
+		"Items":    items,
+		"LastDate": lastDate,
+		"HasMore":  len(items) == 50,
+	})
+}
+
+func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	before := r.URL.Query().Get("before")
+	items, _ := h.DB.GetTimelineItems(userID, before, 50)
+	lastDate := ""
+	if len(items) > 0 {
+		lastDate = items[len(items)-1].Date
+	}
+	h.Templates.ExecuteTemplate(w, "timeline_items.html", map[string]any{
+		"Lang":     lang,
+		"Items":    items,
+		"LastDate": lastDate,
+		"HasMore":  len(items) == 50,
+	})
+}
+
 func (h *Handler) PageSearch(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }

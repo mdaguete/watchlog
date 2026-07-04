@@ -40,6 +40,7 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b },
 		"add": func(a, b int) int { return a + b },
+		"mod": func(a, b int) int { return a % b },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1322,7 +1323,7 @@ func TestSetupWizard_Step1_EmptyUsername(t *testing.T) {
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
-		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b },
+		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1348,7 +1349,7 @@ func TestSetupWizard_Step1_PasswordMismatch(t *testing.T) {
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
-		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b },
+		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1374,7 +1375,7 @@ func TestSetupWizard_Step1_Success(t *testing.T) {
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
-		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b },
+		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
