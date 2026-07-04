@@ -1721,7 +1721,7 @@ func (h *Handler) APICreateKey(w http.ResponseWriter, r *http.Request) {
 	// Return the key once (won't be shown again)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<div class="border border-wl-border p-4 my-4"><p class="text-xs uppercase tracking-widest text-wl-gray mb-2">API Key (copy now, won't be shown again):</p><code class="text-sm break-all select-all">%s</code></div>`, html.EscapeString(key))
+		fmt.Fprintf(w, `<div class="border border-wl-border p-4 my-4"><p class="text-xs uppercase tracking-widest text-wl-gray mb-2">API Key (copy now, won't be shown again):</p><div class="flex items-center gap-2"><code class="text-sm break-all select-all flex-1" id="api-key-value">%s</code><button onclick="navigator.clipboard.writeText(document.getElementById('api-key-value').textContent).then(()=>{this.textContent='✓'});setTimeout(()=>{this.textContent='Copy'},1500)" class="px-3 py-1 text-xs uppercase tracking-widest border border-wl-border hover:bg-black hover:text-white transition-colors shrink-0">Copy</button></div></div>`, html.EscapeString(key))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"key": key})
