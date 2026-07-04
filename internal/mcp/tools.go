@@ -72,12 +72,28 @@ func (s *Server) toolGetContinueWatching(ctx context.Context, req *mcp.CallToolR
 		return errNoScope("read")
 	}
 	userID := getUserID(ctx)
-	items, _ := s.db.GetContinueWatching(userID, 10)
+	items, _ := s.db.GetContinueWatching(userID, 5)
 	newSeasons, _ := s.db.GetNewSeasons(userID)
 
+	type epSummary struct {
+		ShowID   int64  `json:"show_id"`
+		ShowName string `json:"show_name"`
+		Season   int    `json:"season"`
+		Episode  int    `json:"episode"`
+		EpName   string `json:"episode_name"`
+	}
+	var cw []epSummary
+	for _, item := range items {
+		cw = append(cw, epSummary{ShowID: item.ShowID, ShowName: item.ShowName, Season: item.SeasonNumber, Episode: item.EpisodeNumber, EpName: item.EpName})
+	}
+	var ns []epSummary
+	for _, item := range newSeasons {
+		ns = append(ns, epSummary{ShowID: item.ShowID, ShowName: item.ShowName, Season: item.SeasonNumber, Episode: item.EpisodeNumber, EpName: item.EpName})
+	}
+
 	result := map[string]any{
-		"continue_watching": items,
-		"new_seasons":       newSeasons,
+		"continue_watching": cw,
+		"new_seasons":       ns,
 	}
 	return jsonText(result), nil, nil
 }
@@ -91,19 +107,13 @@ func (s *Server) toolGetShows(ctx context.Context, req *mcp.CallToolRequest, arg
 	shows, _ := s.db.GetUserShowsFiltered(userID, "name", "")
 
 	type showSummary struct {
-		ID       int64  `json:"id"`
-		Name     string `json:"name"`
-		Status   string `json:"status"`
-		Episodes int    `json:"episodes_seen"`
-		Favorite bool   `json:"favorite"`
-		Archived bool   `json:"archived"`
+		ID     int64  `json:"id"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
 	}
 	var summaries []showSummary
 	for _, show := range shows {
-		summaries = append(summaries, showSummary{
-			ID: show.ID, Name: show.Name, Status: show.Status,
-			Episodes: show.EpisodesSeen, Favorite: show.IsFavorited, Archived: show.IsArchived,
-		})
+		summaries = append(summaries, showSummary{ID: show.ID, Name: show.Name, Status: show.Status})
 	}
 	return jsonText(summaries), nil, nil
 }
@@ -133,14 +143,12 @@ func (s *Server) toolGetMovies(ctx context.Context, req *mcp.CallToolRequest, ar
 	movies, _ := s.db.GetUserMoviesSorted(userID, "name")
 
 	type movieSummary struct {
-		ID      int64  `json:"id"`
-		Name    string `json:"name"`
-		Genres  string `json:"genres"`
-		Runtime int    `json:"runtime"`
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
 	}
 	var summaries []movieSummary
 	for _, m := range movies {
-		summaries = append(summaries, movieSummary{ID: m.ID, Name: m.Name, Genres: m.Genres, Runtime: m.Runtime})
+		summaries = append(summaries, movieSummary{ID: m.ID, Name: m.Name})
 	}
 	return jsonText(summaries), nil, nil
 }
