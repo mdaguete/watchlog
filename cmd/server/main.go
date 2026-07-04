@@ -20,6 +20,7 @@ import (
 	"github.com/mdaguete/watchlog/internal/db"
 	"github.com/mdaguete/watchlog/internal/handlers"
 	"github.com/mdaguete/watchlog/internal/i18n"
+	mcpserver "github.com/mdaguete/watchlog/internal/mcp"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/mdaguete/watchlog/internal/worker"
 )
@@ -310,6 +311,14 @@ func main() {
 	})
 	// Cached images
 	mux.Handle("GET /static/cache/images/", http.StripPrefix("/static/cache/images/", http.FileServer(http.Dir(cacheDir))))
+
+	// API Keys
+	mux.HandleFunc("POST /api/keys", h.APICreateKey)
+	mux.HandleFunc("DELETE /api/keys/{id}", h.APIDeleteKey)
+
+	// MCP endpoint
+	mcpSrv := mcpserver.New(database)
+	mux.Handle("/mcp", mcpSrv.Handler())
 
 	log.Printf("Listening on http://localhost%s", *addr)
 

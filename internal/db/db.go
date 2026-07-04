@@ -1325,3 +1325,61 @@ func sortInts(s []int) {
 	}
 }
 
+
+// --- API Keys ---
+
+// APIKey represents a user's API key metadata.
+type APIKey struct {
+	ID         int64
+	Name       string
+	Scopes     string
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+}
+
+func (db *DB) CreateAPIKey(userID int64, keyHash, name, scopes string) (int64, error) {
+	res, err := db.conn.Exec(`INSERT INTO api_keys (user_id, key_hash, name, scopes) VALUES (?, ?, ?, ?)`,
+		userID, keyHash, name, scopes)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (db *DB) ValidateAPIKey(keyHash string) (int64, string, bool) {
+	var userID int64
+	var scopes string
+	err := db.conn.QueryRow(`SELECT user_id, scopes FROM api_keys WHERE key_hash = ?`, keyHash).Scan(&userID, &scopes)
+	if err != nil {
+		return 0, "", false
+	}
+	// Update last_used_at
+	db.conn.Exec(`UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?`, time.Now(), keyHash)
+	return userID, scopes, true
+}
+
+func (db *DB) GetUserAPIKeys(userID int64) ([]APIKey, error) {
+	rows, err := db.conn.Query(`SELECT id, name, scopes, created_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []APIKey
+	for rows.Next() {
+		var k APIKey
+		var lastUsed sql.NullTime
+		if err := rows.Scan(&k.ID, &k.Name, &k.Scopes, &k.CreatedAt, &lastUsed); err != nil {
+			return nil, err
+		}
+		if lastUsed.Valid {
+			k.LastUsedAt = lastUsed.Time
+		}
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+func (db *DB) DeleteAPIKey(userID, keyID int64) error {
+	_, err := db.conn.Exec(`DELETE FROM api_keys WHERE id = ? AND user_id = ?`, keyID, userID)
+	return err
+}

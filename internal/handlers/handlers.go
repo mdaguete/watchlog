@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"archive/zip"
+	crypto_rand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -1688,4 +1689,55 @@ func extractZip(zipPath, destDir string) error {
 		outFile.Close()
 	}
 	return nil
+}
+
+// --- API Keys ---
+
+func (h *Handler) APICreateKey(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("key_name"))
+	if name == "" {
+		name = "default"
+	}
+	scopes := r.FormValue("scopes")
+	if scopes == "" {
+		scopes = "read"
+	}
+
+	// Generate random API key
+	keyBytes := make([]byte, 32)
+	crypto_rand.Read(keyBytes)
+	key := fmt.Sprintf("wl_%x", keyBytes)
+
+	// Store key (the key itself is the lookup token since it's cryptographically random)
+	h.DB.CreateAPIKey(userID, key, name, scopes)
+
+	// Return the key once (won't be shown again)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<div class="border border-wl-border p-4 my-4"><p class="text-xs uppercase tracking-widest text-wl-gray mb-2">API Key (copy now, won't be shown again):</p><code class="text-sm break-all select-all">%s</code></div>`, html.EscapeString(key))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"key": key})
+}
+
+func (h *Handler) APIDeleteKey(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	h.DB.DeleteAPIKey(userID, id)
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
