@@ -32,10 +32,16 @@
                         {{end}}
                     </div>
                     {{if gt (len $day.Items) 1}}
-                    <button onclick="this.parentElement.querySelectorAll('.timeline-day-item').forEach(e=>e.classList.remove('hidden'));this.remove()"
-                        class="mt-2 text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
-                        +{{add (len $day.Items) -1}} {{T $.Lang "timeline.more"}}
-                    </button>
+                    <div class="mt-2">
+                        <button onclick="this.parentElement.parentElement.querySelectorAll('.timeline-day-item').forEach(e=>e.classList.remove('hidden'));this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')"
+                            class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                            +{{add (len $day.Items) -1}} {{T $.Lang "timeline.more"}}
+                        </button>
+                        <button onclick="this.parentElement.parentElement.querySelectorAll('.timeline-day-item').forEach(e=>e.classList.add('hidden'));this.classList.add('hidden');this.previousElementSibling.classList.remove('hidden')"
+                            class="hidden text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                            {{T $.Lang "timeline.collapse"}}
+                        </button>
+                    </div>
                     {{end}}
                 </div>
             </div>
@@ -65,10 +71,16 @@
                     {{end}}
                 </div>
                 {{if gt (len $day.Items) 1}}
-                <button onclick="this.parentElement.querySelectorAll('.timeline-day-item-m').forEach(e=>e.classList.remove('hidden'));this.remove()"
-                    class="mt-2 text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
-                    +{{add (len $day.Items) -1}} {{T $.Lang "timeline.more"}}
-                </button>
+                <div class="mt-2">
+                    <button onclick="this.parentElement.parentElement.querySelectorAll('.timeline-day-item-m').forEach(e=>e.classList.remove('hidden'));this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')"
+                        class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                        +{{add (len $day.Items) -1}} {{T $.Lang "timeline.more"}}
+                    </button>
+                    <button onclick="this.parentElement.parentElement.querySelectorAll('.timeline-day-item-m').forEach(e=>e.classList.add('hidden'));this.classList.add('hidden');this.previousElementSibling.classList.remove('hidden')"
+                        class="hidden text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                        {{T $.Lang "timeline.collapse"}}
+                    </button>
+                </div>
                 {{end}}
             </div>
         </div>
