@@ -282,6 +282,65 @@ func (db *DB) GetUserShowField(userID, showID int64, field string, dest *bool) {
 	*dest = val == 1
 }
 
+// AutoArchiveIfComplete archives a show if it's ended/canceled and fully watched.
+func (db *DB) AutoArchiveIfComplete(userID, showID int64) bool {
+	// Check if show is ended or canceled
+	var status string
+	db.conn.QueryRow("SELECT status FROM shows WHERE id = ?", showID).Scan(&status)
+	if status != "Ended" && status != "Canceled" {
+		return false
+	}
+
+	// Get total episodes from season_episodes
+	var totalEpisodes int
+	db.conn.QueryRow("SELECT COALESCE(SUM(episode_count), 0) FROM season_episodes WHERE show_id = ?", showID).Scan(&totalEpisodes)
+	if totalEpisodes == 0 {
+		return false
+	}
+
+	// Count watched episodes
+	var watchedCount int
+	db.conn.QueryRow("SELECT COUNT(*) FROM episodes WHERE user_id = ? AND show_id = ?", userID, showID).Scan(&watchedCount)
+
+	if watchedCount >= totalEpisodes {
+		db.conn.Exec("UPDATE user_shows SET is_archived = 1, updated_at = ? WHERE user_id = ? AND show_id = ?", time.Now(), userID, showID)
+		return true
+	}
+	return false
+}
+
+// AutoUnarchiveIfIncomplete unarchives a show if it was auto-archived but is no longer fully watched.
+func (db *DB) AutoUnarchiveIfIncomplete(userID, showID int64) bool {
+	// Only unarchive if currently archived
+	var isArchived int
+	db.conn.QueryRow("SELECT is_archived FROM user_shows WHERE user_id = ? AND show_id = ?", userID, showID).Scan(&isArchived)
+	if isArchived != 1 {
+		return false
+	}
+
+	// Check if show is ended or canceled (only auto-unarchive these)
+	var status string
+	db.conn.QueryRow("SELECT status FROM shows WHERE id = ?", showID).Scan(&status)
+	if status != "Ended" && status != "Canceled" {
+		return false
+	}
+
+	db.conn.Exec("UPDATE user_shows SET is_archived = 0, updated_at = ? WHERE user_id = ? AND show_id = ?", time.Now(), userID, showID)
+	return true
+}
+
+// SnoozeShow sets a snooze-until date for a show (hides from continue watching).
+func (db *DB) SnoozeShow(userID, showID int64, until time.Time) error {
+	_, err := db.conn.Exec("UPDATE user_shows SET snoozed_until = ? WHERE user_id = ? AND show_id = ?", until, userID, showID)
+	return err
+}
+
+// UnsnoozeShow clears the snooze for a show.
+func (db *DB) UnsnoozeShow(userID, showID int64) error {
+	_, err := db.conn.Exec("UPDATE user_shows SET snoozed_until = NULL WHERE user_id = ? AND show_id = ?", userID, showID)
+	return err
+}
+
 func (db *DB) FollowShow(userID, showID int64) error {
 	_, err := db.conn.Exec(`INSERT INTO user_shows (user_id, show_id, is_followed, followed_at, updated_at) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT(user_id, show_id) DO UPDATE SET is_followed=1, updated_at=excluded.updated_at`,
@@ -1004,21 +1063,22 @@ type EpisodeDetail struct {
 	OverviewEN    string
 	AirDate       string
 	Runtime       int
+	StillURL      string
 }
 
 func (db *DB) UpsertEpisodeDetail(d EpisodeDetail) error {
-	_, err := db.conn.Exec(`INSERT INTO episode_details (show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := db.conn.Exec(`INSERT INTO episode_details (show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime, still_url)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
 			name=excluded.name, name_en=excluded.name_en,
 			overview=excluded.overview, overview_en=excluded.overview_en,
-			air_date=excluded.air_date, runtime=excluded.runtime`,
-		d.ShowID, d.SeasonNumber, d.EpisodeNumber, d.Name, d.NameEN, d.Overview, d.OverviewEN, d.AirDate, d.Runtime)
+			air_date=excluded.air_date, runtime=excluded.runtime, still_url=excluded.still_url`,
+		d.ShowID, d.SeasonNumber, d.EpisodeNumber, d.Name, d.NameEN, d.Overview, d.OverviewEN, d.AirDate, d.Runtime, d.StillURL)
 	return err
 }
 
 func (db *DB) GetEpisodeDetails(showID int64) ([]EpisodeDetail, error) {
-	rows, err := db.conn.Query(`SELECT show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime
+	rows, err := db.conn.Query(`SELECT show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime, still_url
 		FROM episode_details WHERE show_id = ? ORDER BY season_number, episode_number`, showID)
 	if err != nil {
 		return nil, err
@@ -1027,10 +1087,162 @@ func (db *DB) GetEpisodeDetails(showID int64) ([]EpisodeDetail, error) {
 	var details []EpisodeDetail
 	for rows.Next() {
 		var d EpisodeDetail
-		if err := rows.Scan(&d.ShowID, &d.SeasonNumber, &d.EpisodeNumber, &d.Name, &d.NameEN, &d.Overview, &d.OverviewEN, &d.AirDate, &d.Runtime); err != nil {
+		if err := rows.Scan(&d.ShowID, &d.SeasonNumber, &d.EpisodeNumber, &d.Name, &d.NameEN, &d.Overview, &d.OverviewEN, &d.AirDate, &d.Runtime, &d.StillURL); err != nil {
 			return nil, err
 		}
 		details = append(details, d)
 	}
 	return details, nil
 }
+
+// ContinueWatchingItem represents the next unwatched episode for a show.
+type ContinueWatchingItem struct {
+	ShowID        int64
+	ShowName      string
+	ShowNameES    string
+	ShowNameEN    string
+	PosterURL     string
+	SeasonNumber  int
+	EpisodeNumber int
+	EpName        string
+	EpNameEN      string
+	EpOverview    string
+	EpOverviewEN  string
+	StillURL      string
+	DaysSinceLast int
+}
+
+// GetContinueWatching returns the next unwatched episode for the N most recently active shows.
+func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]ContinueWatchingItem, error) {
+	off := 0
+	if len(offset) > 0 {
+		off = offset[0]
+	}
+	// Get the most recently active shows (by latest watched episode)
+	rows, err := db.conn.Query(`
+		SELECT e.show_id, s.name, s.name_es, s.name_en, s.poster_url, MAX(e.watched_at) as last_watched
+		FROM episodes e
+		JOIN shows s ON s.id = e.show_id
+		JOIN user_shows us ON us.show_id = e.show_id AND us.user_id = e.user_id
+		WHERE e.user_id = ? AND (us.snoozed_until IS NULL OR us.snoozed_until < ?)
+		GROUP BY e.show_id
+		ORDER BY last_watched DESC
+		LIMIT ? OFFSET ?`, userID, time.Now(), limit*3, off*3) // fetch extra in case some are fully watched
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type recentShow struct {
+		id          int64
+		name        string
+		nameES      string
+		nameEN      string
+		poster      string
+		lastWatched string
+	}
+	var recent []recentShow
+	for rows.Next() {
+		var rs recentShow
+		if err := rows.Scan(&rs.id, &rs.name, &rs.nameES, &rs.nameEN, &rs.poster, &rs.lastWatched); err != nil {
+			return nil, err
+		}
+		recent = append(recent, rs)
+	}
+
+	var items []ContinueWatchingItem
+	for _, rs := range recent {
+		if len(items) >= limit {
+			break
+		}
+
+		// Get all season/episode counts for this show
+		seasons, _ := db.GetSeasonEpisodes(rs.id)
+		if len(seasons) == 0 {
+			continue
+		}
+
+		// Get watched episodes for this user/show
+		watchedSet := make(map[string]bool)
+		wRows, err := db.conn.Query("SELECT season_number, episode_number FROM episodes WHERE user_id = ? AND show_id = ?", userID, rs.id)
+		if err != nil {
+			continue
+		}
+		for wRows.Next() {
+			var sn, en int
+			wRows.Scan(&sn, &en)
+			watchedSet[fmt.Sprintf("%d-%d", sn, en)] = true
+		}
+		wRows.Close()
+
+		// Find first unwatched episode
+		var foundSeason, foundEpisode int
+		found := false
+		// Sort seasons
+		sortedSeasons := make([]int, 0, len(seasons))
+		for sn := range seasons {
+			sortedSeasons = append(sortedSeasons, sn)
+		}
+		sortInts(sortedSeasons)
+		for _, sn := range sortedSeasons {
+			count := seasons[sn]
+			for ep := 1; ep <= count; ep++ {
+				if !watchedSet[fmt.Sprintf("%d-%d", sn, ep)] {
+					foundSeason = sn
+					foundEpisode = ep
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			continue // fully watched
+		}
+
+		// Get episode details
+		var item ContinueWatchingItem
+		item.ShowID = rs.id
+		item.ShowName = rs.name
+		item.ShowNameES = rs.nameES
+		item.ShowNameEN = rs.nameEN
+		item.PosterURL = rs.poster
+		item.SeasonNumber = foundSeason
+		item.EpisodeNumber = foundEpisode
+
+		var airDate string
+		err = db.conn.QueryRow(`SELECT name, name_en, overview, overview_en, still_url, air_date
+			FROM episode_details WHERE show_id = ? AND season_number = ? AND episode_number = ?`,
+			rs.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL, &airDate)
+		if err != nil {
+			// No details available, still show the item
+			item.EpName = fmt.Sprintf("S%02dE%02d", foundSeason, foundEpisode)
+		} else if airDate == "" || airDate > time.Now().Format("2006-01-02") {
+			// Episode not yet aired — skip this show
+			continue
+		}
+
+		// Calculate days since last watched
+		if t, err := time.Parse("2006-01-02 15:04:05", rs.lastWatched[:19]); err == nil {
+			item.DaysSinceLast = int(time.Since(t).Hours() / 24)
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+// sortInts sorts a slice of ints in ascending order.
+func sortInts(s []int) {
+	for i := range s {
+		for j := i + 1; j < len(s); j++ {
+			if s[j] < s[i] {
+				s[i], s[j] = s[j], s[i]
+			}
+		}
+	}
+}
+

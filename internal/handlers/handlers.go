@@ -485,10 +485,30 @@ func (h *Handler) PageDashboard(w http.ResponseWriter, r *http.Request) {
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
 	stats, _ := h.DB.GetDashboardStats(userID)
+	continueWatching, _ := h.DB.GetContinueWatching(userID, 5)
 	h.Templates.ExecuteTemplate(w, "dashboard.html", map[string]any{
-		"Lang":    lang,
-		"Stats":   stats,
-		"Runtime": importer.FormatRuntime(stats.TotalRuntime),
+		"Lang":             lang,
+		"Stats":            stats,
+		"Runtime":          importer.FormatRuntime(stats.TotalRuntime),
+		"ContinueWatching": continueWatching,
+		"Page":             1,
+		"HasMore":          len(continueWatching) == 5,
+	})
+}
+
+func (h *Handler) APIContinueWatching(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	lang := h.getLang(r, userID)
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 { page = 1 }
+	offset := (page - 1) * 5
+	items, _ := h.DB.GetContinueWatching(userID, 5, offset)
+	h.Templates.ExecuteTemplate(w, "continue_watching_items.html", map[string]any{
+		"Lang":             lang,
+		"ContinueWatching": items,
+		"Page":             page,
+		"HasMore":          len(items) == 5,
 	})
 }
 
@@ -740,6 +760,18 @@ func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "is_archived": isArchived})
 }
 
+func (h *Handler) APISnoozeShow(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok { return }
+	// Snooze indefinitely — only unsnoozes when user marks an episode
+	until := time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+	h.DB.SnoozeShow(userID, id, until)
+	log.Printf("ACTION: user=%d snooze show=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *Handler) APIGetEpisodes(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
@@ -760,13 +792,15 @@ func (h *Handler) APIMarkEpisodeWatched(w http.ResponseWriter, r *http.Request) 
 	}
 	h.DB.MarkEpisodeWatched(userID, showID, req.Season, req.Episode)
 	h.DB.IncrementWatchStats(userID, 1)
+	h.DB.UnsnoozeShow(userID, showID)
+	archived := h.DB.AutoArchiveIfComplete(userID, showID)
 	log.Printf("ACTION: user=%d mark watched show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ S%02dE%02d</span>`, req.Season, req.Episode)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "archived": archived})
 }
 
 func (h *Handler) APIUnmarkEpisodeWatched(w http.ResponseWriter, r *http.Request) {
@@ -779,8 +813,9 @@ func (h *Handler) APIUnmarkEpisodeWatched(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid body"); return
 	}
 	h.DB.UnmarkEpisodeWatched(userID, showID, req.Season, req.Episode)
+	unarchived := h.DB.AutoUnarchiveIfIncomplete(userID, showID)
 	log.Printf("ACTION: user=%d unmark watched show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "unarchived": unarchived})
 }
 
 func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
@@ -804,6 +839,7 @@ func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 	if marked > 0 {
 		h.DB.IncrementWatchStats(userID, marked)
 	}
+	archived := h.DB.AutoArchiveIfComplete(userID, showID)
 	log.Printf("ACTION: user=%d mark season show=%d S%02d (%d eps)", userID, showID, req.Season, marked)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
@@ -811,7 +847,7 @@ func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">✓ `+i18n.T(lang, "tmdb.season_marked")+`</span>`, req.Season, marked)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "marked": marked})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "marked": marked, "archived": archived})
 }
 
 func (h *Handler) APIUnmarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
@@ -824,8 +860,9 @@ func (h *Handler) APIUnmarkSeasonWatched(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid body"); return
 	}
 	removed, _ := h.DB.UnmarkSeasonWatched(userID, showID, req.Season)
+	unarchived := h.DB.AutoUnarchiveIfIncomplete(userID, showID)
 	log.Printf("ACTION: user=%d unmark season show=%d S%02d (%d eps)", userID, showID, req.Season, removed)
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "removed": removed})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "removed": removed, "unarchived": unarchived})
 }
 
 func (h *Handler) APIGetMovies(w http.ResponseWriter, r *http.Request) {
@@ -1146,6 +1183,7 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 					Overview:      ep.Overview,
 					AirDate:       ep.AirDate,
 					Runtime:       ep.Runtime,
+					StillURL:      tmdb.BackdropURL(ep.StillPath, "w300"),
 				}
 				// Fill English data if available
 				if seasonEN != nil {

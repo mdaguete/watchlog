@@ -12,9 +12,10 @@ import (
 
 // Migration represents a single database migration step.
 type Migration struct {
-	Version     int
-	Description string
-	Up          func(tx *sql.Tx) error
+	Version          int
+	Description      string
+	Up               func(tx *sql.Tx) error
+	NeedsTMDBRefresh bool // if true, a TMDB refresh is needed after this migration
 }
 
 // migrations is the ordered list of all database migrations.
@@ -24,7 +25,9 @@ var migrations = []Migration{
 	{Version: 2, Description: "i18n columns for shows and movies", Up: migrateV2},
 	{Version: 3, Description: "email column on users", Up: migrateV3},
 	{Version: 4, Description: "season episodes cache table", Up: migrateV4},
-	{Version: 5, Description: "episode details table", Up: migrateV5},
+	{Version: 5, Description: "episode details table", Up: migrateV5, NeedsTMDBRefresh: true},
+	{Version: 6, Description: "episode still image URL", Up: migrateV6, NeedsTMDBRefresh: true},
+	{Version: 7, Description: "snooze shows from continue watching", Up: migrateV7},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -67,6 +70,7 @@ func (db *DB) runMigrations() error {
 		log.Printf("DB: WARNING: backup failed: %v (proceeding with migration)", err)
 	}
 
+	needsRefresh := false
 	for _, m := range migrations {
 		if m.Version <= current {
 			continue
@@ -91,6 +95,15 @@ func (db *DB) runMigrations() error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration v%d: %w", m.Version, err)
 		}
+
+		if m.NeedsTMDBRefresh {
+			needsRefresh = true
+		}
+	}
+
+	if needsRefresh {
+		db.SetSetting("tmdb_refresh_pending", "1")
+		log.Printf("DB: TMDB refresh scheduled (migration requires data update)")
 	}
 
 	log.Printf("DB: migration complete, now at version %d", latest)
@@ -338,6 +351,26 @@ CREATE TABLE IF NOT EXISTS episode_details (
 	PRIMARY KEY (show_id, season_number, episode_number)
 )`)
 	return err
+}
+
+func migrateV6(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE episode_details ADD COLUMN still_url TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+func migrateV7(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE user_shows ADD COLUMN snoozed_until DATETIME")
+	return err
+}
+
+// TMDBRefreshPending returns true if a migration flagged a TMDB refresh as needed.
+func (db *DB) TMDBRefreshPending() bool {
+	return db.GetSetting("tmdb_refresh_pending") == "1"
+}
+
+// ClearTMDBRefreshPending clears the pending refresh flag.
+func (db *DB) ClearTMDBRefreshPending() {
+	db.SetSetting("tmdb_refresh_pending", "0")
 }
 
 // backupBeforeMigration copies the database file to a backups/ folder next to the DB.

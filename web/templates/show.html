@@ -117,11 +117,14 @@ function markSingle(season, episode, btn) {
         body: JSON.stringify({season: season, episode: episode})
     }).then(r => {
         if (r.ok) {
-            btn.className = 'w-9 h-9 text-xs bg-black text-white border border-black';
-            btn.textContent = episode;
-            btn.disabled = false;
-            btn.onclick = () => unmarkSingle(season, episode, btn);
-            watched.add(season + '-' + episode);
+            return r.json().then(data => {
+                btn.className = 'w-9 h-9 text-xs bg-black text-white border border-black';
+                btn.textContent = episode;
+                btn.disabled = false;
+                btn.onclick = () => unmarkSingle(season, episode, btn);
+                watched.add(season + '-' + episode);
+                if (data.archived) { location.reload(); }
+            });
         }
     });
 }
@@ -135,11 +138,14 @@ function unmarkSingle(season, episode, btn) {
         body: JSON.stringify({season: season, episode: episode})
     }).then(r => {
         if (r.ok) {
-            btn.className = 'w-9 h-9 text-xs border border-wl-border text-wl-gray hover:border-black hover:text-black transition-colors';
-            btn.textContent = episode;
-            btn.disabled = false;
-            btn.onclick = () => markSingle(season, episode, btn);
-            watched.delete(season + '-' + episode);
+            return r.json().then(data => {
+                btn.className = 'w-9 h-9 text-xs border border-wl-border text-wl-gray hover:border-black hover:text-black transition-colors';
+                btn.textContent = episode;
+                btn.disabled = false;
+                btn.onclick = () => markSingle(season, episode, btn);
+                watched.delete(season + '-' + episode);
+                if (data.unarchived) { location.reload(); }
+            });
         }
     });
 }
@@ -160,15 +166,18 @@ function markFullSeason(season) {
             body: JSON.stringify({season: season})
         }).then(r => {
             if (r.ok) {
-                const grid = document.getElementById('season-' + season + '-grid');
-                if (grid) {
-                    grid.querySelectorAll('button').forEach(btn => {
-                        const ep = parseInt(btn.textContent);
-                        btn.className = 'w-9 h-9 text-xs border border-wl-border text-wl-gray hover:border-black hover:text-black transition-colors';
-                        btn.onclick = () => markSingle(season, ep, btn);
-                        watched.delete(season + '-' + ep);
-                    });
-                }
+                return r.json().then(data => {
+                    const grid = document.getElementById('season-' + season + '-grid');
+                    if (grid) {
+                        grid.querySelectorAll('button').forEach(btn => {
+                            const ep = parseInt(btn.textContent);
+                            btn.className = 'w-9 h-9 text-xs border border-wl-border text-wl-gray hover:border-black hover:text-black transition-colors';
+                            btn.onclick = () => markSingle(season, ep, btn);
+                            watched.delete(season + '-' + ep);
+                        });
+                    }
+                    if (data.unarchived) { location.reload(); }
+                });
             }
         });
     } else {
@@ -179,15 +188,18 @@ function markFullSeason(season) {
             body: JSON.stringify({season: season, episodes: 0})
         }).then(r => {
             if (r.ok) {
-                const grid = document.getElementById('season-' + season + '-grid');
-                if (grid) {
-                    grid.querySelectorAll('button').forEach(btn => {
-                        const ep = parseInt(btn.textContent);
-                        btn.className = 'w-9 h-9 text-xs bg-black text-white border border-black';
-                        btn.onclick = () => unmarkSingle(season, ep, btn);
-                        watched.add(season + '-' + ep);
-                    });
-                }
+                return r.json().then(data => {
+                    const grid = document.getElementById('season-' + season + '-grid');
+                    if (grid) {
+                        grid.querySelectorAll('button').forEach(btn => {
+                            const ep = parseInt(btn.textContent);
+                            btn.className = 'w-9 h-9 text-xs bg-black text-white border border-black';
+                            btn.onclick = () => unmarkSingle(season, ep, btn);
+                            watched.add(season + '-' + ep);
+                        });
+                    }
+                    if (data.archived) { location.reload(); }
+                });
             }
         });
     }

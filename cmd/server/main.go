@@ -148,6 +148,16 @@ func main() {
 	defer cancel()
 	worker.StartUpcomingRefresher(ctx, database, tmdbClient)
 
+	// Run pending TMDB refresh if a migration flagged it
+	if database.TMDBRefreshPending() && tmdbClient.Enabled() {
+		go func() {
+			log.Println("TMDB: running post-migration refresh...")
+			worker.RunTMDBRefresh(database, tmdbClient)
+			database.ClearTMDBRefreshPending()
+			log.Println("TMDB: post-migration refresh complete")
+		}()
+	}
+
 	// Image cache directory (relative to DB path)
 	cacheDir := filepath.Join(*dataDir, "cache", "images")
 	imgCache, err := cache.NewImageCache(cacheDir)
@@ -233,6 +243,7 @@ func main() {
 
 	// Web pages
 	mux.HandleFunc("GET /", h.PageDashboard)
+	mux.HandleFunc("GET /api/continue-watching", h.APIContinueWatching)
 	mux.HandleFunc("GET /shows", h.PageShows)
 	mux.HandleFunc("GET /shows/{id}", h.PageShow)
 	mux.HandleFunc("GET /movies", h.PageMovies)
@@ -255,6 +266,7 @@ func main() {
 	mux.HandleFunc("POST /api/shows/{id}/follow", h.APIToggleFollow)
 	mux.HandleFunc("POST /api/shows/{id}/favorite", h.APIToggleFavorite)
 	mux.HandleFunc("POST /api/shows/{id}/archive", h.APIToggleArchive)
+	mux.HandleFunc("POST /api/shows/{id}/snooze", h.APISnoozeShow)
 
 	// API: Episodes
 	mux.HandleFunc("GET /api/shows/{id}/episodes", h.APIGetEpisodes)

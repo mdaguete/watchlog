@@ -36,6 +36,8 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Automatic migrations on startup via `schema_migrations` table
 - Each migration is a Go function that runs in a transaction (rollback on failure)
 - Detects pre-existing databases and bootstraps version without re-running migrations
+- **Backup before migration**: copies DB file to `backups/` folder before applying pending migrations
+- **Post-migration TMDB refresh**: migrations can flag `NeedsTMDBRefresh: true`; on startup, if pending, a background goroutine runs a full TMDB refresh automatically
 - Episode UNIQUE constraint is `(user_id, show_id, season_number, episode_number)` — an episode is recorded once per user
 
 ### Frontend
@@ -45,7 +47,10 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - No emojis or saturated colors in UI
 - Templates use `{{template "head" .}}` at start and `{{template "foot" .}}` at end (NOT layout/content pattern)
 - Episode grids use vanilla JS with `fetch()` for mark/unmark — not htmx (htmx.ajax doesn't send JSON body correctly)
-- "Mark next" button is fully dynamic (JS), recalculated after every mark/unmark action
+- Infinite scroll on dashboard via HTMX `hx-trigger="revealed"` + partial templates
+- Favorite/archive buttons on show detail use HTMX `hx-swap="outerHTML"` for in-place toggle
+- Dashboard shows "Continue Watching" cards (no stats/navigation clutter)
+- Movies page has stats header (total count + runtime)
 
 ### Security
 - bcrypt password hashing (DefaultCost)
@@ -79,7 +84,10 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Metadata cached in SQLite (poster_url, overview, genres, status)
 - Show search strips `(YYYY)` suffix from name if no results found
 - `fetch-all` processes all shows/movies without tmdb_id, logs individual progress
+- `refresh-all` updates metadata for all shows/movies with tmdb_id (both es + en)
 - Season episode counts fetched from TMDB for show detail page grids
+- **Episode details**: name, synopsis, air_date, runtime, still image per episode (both es + en)
+- Episode still images stored as `still_url` (TMDB w300 size)
 - HTTP client with 10s timeout
 
 ### CSV Importer
@@ -96,11 +104,32 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - "Mark all" button on a season toggles: marks all if any unwatched, unmarks all if all watched
 - Episode count per season comes from TMDB (fallback: max episode number seen)
 - Watch stats (`watch_stats` table) are incremented in real-time when marking episodes via web
+- **Auto-archive**: when all episodes are watched and show status is "Ended"/"Canceled", the show is automatically archived
+- **Auto-unarchive**: unmarking an episode on a completed+archived show unarchives it
+- Page reloads automatically when archive state changes
+
+### Continue Watching (Dashboard)
+- Shows next unwatched episode for the 5 most recently active shows
+- Cards display: episode still image, show name, episode title, synopsis
+- "Mark as watched" button fades out the card without page reload
+- Infinite scroll via HTMX `hx-trigger="revealed"` (5 items per page)
+- Skips episodes with no `air_date` or future air dates (not yet available)
+
+### Movies
+- Movies page shows stats header: total movies watched + total runtime
+- Stats use `importer.FormatRuntime` for human-readable time format
 
 ### Worker
 - Background goroutine refreshes upcoming episodes cache daily
 - Accepts `context.Context` for graceful cancellation
 - Only processes shows with status != "Ended"/"Canceled" and tmdb_id > 0
+- `RunTMDBRefresh`: full metadata refresh callable programmatically (used by post-migration hook)
+
+### Email
+- HTML email template wrapper (`wrapEmailHTML`) for consistent branding
+- Inline CSS (email clients don't support external stylesheets)
+- Table-based layout: WatchLog header, content area, gray footer
+- Used for magic links and password reset emails
 
 ## Key Files
 
@@ -117,6 +146,7 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 | `internal/ratelimit/ratelimit.go` | Login rate limiting (per-IP) |
 | `internal/mail/mail.go` | SMTP email sending, URL config parsing |
 | `internal/worker/upcoming.go` | Background worker for upcoming episode cache |
+| `internal/worker/refresh.go` | Full TMDB metadata refresh (used by post-migration hook) |
 | `web/templates/layout.html` | `head` and `foot` (nav + footer) |
 | `web/templates/*.html` | One template per page |
 | `web/templates/settings.html` | Language preference page |
