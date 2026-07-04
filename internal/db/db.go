@@ -12,6 +12,7 @@ import (
 
 type DB struct {
 	conn *sql.DB
+	path string
 }
 
 func New(path string) (*DB, error) {
@@ -20,7 +21,7 @@ func New(path string) (*DB, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	conn.SetMaxOpenConns(1)
-	db := &DB{conn: conn}
+	db := &DB{conn: conn, path: path}
 	if err := db.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -189,6 +190,10 @@ func (db *DB) UpsertUserShow(userID, showID int64, isFollowed, isFavorited, isAr
 }
 
 func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, error) {
+	return db.GetUserShowsFiltered(userID, sort, "")
+}
+
+func (db *DB) GetUserShowsFiltered(userID int64, sort, filter string) ([]models.UserShow, error) {
 	var orderClause string
 	var joinClause string
 	switch sort {
@@ -203,13 +208,23 @@ func (db *DB) GetUserShowsSorted(userID int64, sort string) ([]models.UserShow, 
 		orderClause = `ORDER BY COALESCE(ew.last_watched, sp.updated_at, us.followed_at) DESC, s.name ASC`
 	}
 
+	var filterClause string
+	switch filter {
+	case "favorites":
+		filterClause = "AND us.is_favorited = 1"
+	case "archived":
+		filterClause = "AND us.is_archived = 1"
+	default:
+		filterClause = "AND us.is_archived = 0" // hide archived by default
+	}
+
 	query := `SELECT s.id, s.external_id, s.name, s.name_es, s.name_en, s.tmdb_id, s.poster_url, s.backdrop_url, s.overview, s.genres, s.status, s.total_seasons,
 		us.is_followed, us.is_favorited, us.is_archived, us.episodes_seen, us.followed_at, us.updated_at
 		FROM user_shows us
 		JOIN shows s ON s.id = us.show_id
 		LEFT JOIN show_progress sp ON sp.show_id = s.id AND sp.user_id = us.user_id
 		` + joinClause + `
-		WHERE us.user_id = ? AND us.is_followed = 1 ` + orderClause
+		WHERE us.user_id = ? AND us.is_followed = 1 ` + filterClause + ` ` + orderClause
 
 	var rows *sql.Rows
 	var err error
@@ -259,6 +274,12 @@ func (db *DB) ToggleUserShowFavorite(userID, showID int64) error {
 func (db *DB) ToggleUserShowArchive(userID, showID int64) error {
 	_, err := db.conn.Exec("UPDATE user_shows SET is_archived = NOT is_archived, updated_at = ? WHERE user_id = ? AND show_id = ?", time.Now(), userID, showID)
 	return err
+}
+
+func (db *DB) GetUserShowField(userID, showID int64, field string, dest *bool) {
+	var val int
+	db.conn.QueryRow("SELECT "+field+" FROM user_shows WHERE user_id = ? AND show_id = ?", userID, showID).Scan(&val)
+	*dest = val == 1
 }
 
 func (db *DB) FollowShow(userID, showID int64) error {
@@ -886,6 +907,18 @@ func (db *DB) GetActiveShowsWithTMDB() ([]models.Show, error) {
 	return shows, nil
 }
 
+// MovieStats holds aggregate movie statistics for a user.
+type MovieStats struct {
+	TotalMovies  int
+	TotalRuntime int
+}
+
+func (db *DB) GetMovieStats(userID int64) (MovieStats, error) {
+	var s MovieStats
+	db.conn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(m.runtime), 0) FROM user_movies um JOIN movies m ON m.id = um.movie_id WHERE um.user_id = ?`, userID).Scan(&s.TotalMovies, &s.TotalRuntime)
+	return s, nil
+}
+
 // --- Sessions ---
 
 func (db *DB) CreateSession(token string, userID int64, expiresAt time.Time) error {
@@ -956,4 +989,48 @@ func (db *DB) DeleteMagicLink(token string) error {
 func (db *DB) CleanExpiredMagicLinks() error {
 	_, err := db.conn.Exec(`DELETE FROM magic_links WHERE expires_at <= ?`, time.Now())
 	return err
+}
+
+// --- Episode Details ---
+
+// EpisodeDetail holds metadata for a single episode from TMDB.
+type EpisodeDetail struct {
+	ShowID        int64
+	SeasonNumber  int
+	EpisodeNumber int
+	Name          string
+	NameEN        string
+	Overview      string
+	OverviewEN    string
+	AirDate       string
+	Runtime       int
+}
+
+func (db *DB) UpsertEpisodeDetail(d EpisodeDetail) error {
+	_, err := db.conn.Exec(`INSERT INTO episode_details (show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
+			name=excluded.name, name_en=excluded.name_en,
+			overview=excluded.overview, overview_en=excluded.overview_en,
+			air_date=excluded.air_date, runtime=excluded.runtime`,
+		d.ShowID, d.SeasonNumber, d.EpisodeNumber, d.Name, d.NameEN, d.Overview, d.OverviewEN, d.AirDate, d.Runtime)
+	return err
+}
+
+func (db *DB) GetEpisodeDetails(showID int64) ([]EpisodeDetail, error) {
+	rows, err := db.conn.Query(`SELECT show_id, season_number, episode_number, name, name_en, overview, overview_en, air_date, runtime
+		FROM episode_details WHERE show_id = ? ORDER BY season_number, episode_number`, showID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var details []EpisodeDetail
+	for rows.Next() {
+		var d EpisodeDetail
+		if err := rows.Scan(&d.ShowID, &d.SeasonNumber, &d.EpisodeNumber, &d.Name, &d.NameEN, &d.Overview, &d.OverviewEN, &d.AirDate, &d.Runtime); err != nil {
+			return nil, err
+		}
+		details = append(details, d)
+	}
+	return details, nil
 }

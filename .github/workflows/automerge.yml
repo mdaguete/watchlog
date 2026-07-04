@@ -1,0 +1,59 @@
+name: Auto-merge to develop
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Merge PR to develop
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Find the PR associated with this workflow run
+            const headBranch = context.payload.workflow_run.head_branch;
+            const headSha = context.payload.workflow_run.head_sha;
+
+            const pulls = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              base: 'develop',
+            });
+
+            const pr = pulls.data.find(p => p.head.sha === headSha);
+            if (!pr) {
+              console.log(`No open PR to develop found for ${headBranch} (${headSha})`);
+              return;
+            }
+
+            console.log(`Auto-merging PR #${pr.number}: ${pr.title}`);
+            await github.rest.pulls.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              merge_method: 'merge',
+            });
+
+            // Delete the branch after merge
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${headBranch}`,
+              });
+              console.log(`Deleted branch ${headBranch}`);
+            } catch (e) {
+              console.log(`Could not delete branch: ${e.message}`);
+            }

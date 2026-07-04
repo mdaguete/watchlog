@@ -498,11 +498,13 @@ func (h *Handler) PageShows(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, userID)
 	sort := r.URL.Query().Get("sort")
 	if sort == "" { sort = "recent" }
-	shows, _ := h.DB.GetUserShowsSorted(userID, sort)
+	filter := r.URL.Query().Get("filter")
+	shows, _ := h.DB.GetUserShowsFiltered(userID, sort, filter)
 	h.Templates.ExecuteTemplate(w, "shows.html", map[string]any{
-		"Lang":  lang,
-		"Shows": shows,
-		"Sort":  sort,
+		"Lang":   lang,
+		"Shows":  shows,
+		"Sort":   sort,
+		"Filter": filter,
 	})
 }
 
@@ -546,12 +548,14 @@ func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	episodeDetails, _ := h.DB.GetEpisodeDetails(id)
 	h.Templates.ExecuteTemplate(w, "show.html", map[string]any{
-		"Lang":     h.getLang(r, userID),
-		"Show":     show,
-		"Episodes": episodes,
-		"Progress": progress,
-		"Seasons":  seasons,
+		"Lang":           h.getLang(r, userID),
+		"Show":           show,
+		"Episodes":       episodes,
+		"Progress":       progress,
+		"Seasons":        seasons,
+		"EpisodeDetails": episodeDetails,
 	})
 }
 
@@ -562,10 +566,13 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	if sort == "" { sort = "recent" }
 	movies, _ := h.DB.GetUserMoviesSorted(userID, sort)
+	stats, _ := h.DB.GetMovieStats(userID)
 	h.Templates.ExecuteTemplate(w, "movies.html", map[string]any{
-		"Lang":   lang,
-		"Movies": movies,
-		"Sort":   sort,
+		"Lang":    lang,
+		"Movies":  movies,
+		"Sort":    sort,
+		"Stats":   stats,
+		"Runtime": importer.FormatRuntime(stats.TotalRuntime),
 	})
 }
 
@@ -695,7 +702,20 @@ func (h *Handler) APIToggleFavorite(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.parsePathID(w, r, "id")
 	if !ok { return }
 	h.DB.ToggleUserShowFavorite(userID, id)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	var isFav bool
+	h.DB.GetUserShowField(userID, id, "is_favorited", &isFav)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		star := "☆"
+		cls := "px-3 py-1.5 text-xs uppercase tracking-widest border bg-white text-black border-wl-border hover:border-black transition-colors"
+		if isFav {
+			star = "★"
+			cls = "px-3 py-1.5 text-xs uppercase tracking-widest border bg-black text-white border-black transition-colors"
+		}
+		fmt.Fprintf(w, `<button hx-post="/api/shows/%d/favorite" hx-swap="outerHTML" class="%s">%s</button>`, id, cls, star)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "is_favorited": isFav})
 }
 
 func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
@@ -704,7 +724,20 @@ func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.parsePathID(w, r, "id")
 	if !ok { return }
 	h.DB.ToggleUserShowArchive(userID, id)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	var isArchived bool
+	h.DB.GetUserShowField(userID, id, "is_archived", &isArchived)
+	lang := h.getLang(r, userID)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html")
+		label := i18n.T(lang, "show.archive")
+		cls := "px-3 py-1.5 text-xs uppercase tracking-widest border bg-white text-black border-wl-border hover:border-black transition-colors"
+		if isArchived {
+			cls = "px-3 py-1.5 text-xs uppercase tracking-widest border bg-black text-white border-black transition-colors"
+		}
+		fmt.Fprintf(w, `<button hx-post="/api/shows/%d/archive" hx-swap="outerHTML" class="%s">%s</button>`, id, cls, label)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "is_archived": isArchived})
 }
 
 func (h *Handler) APIGetEpisodes(w http.ResponseWriter, r *http.Request) {
@@ -1092,6 +1125,39 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 		for _, s := range result.Seasons {
 			if s.SeasonNumber > 0 {
 				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
+			}
+		}
+		// Fetch episode details per season
+		for _, s := range result.Seasons {
+			if s.SeasonNumber == 0 {
+				continue
+			}
+			seasonES, err := h.TMDB.GetSeasonLang(show.TMDBID, s.SeasonNumber, "es-ES")
+			if err != nil {
+				continue
+			}
+			seasonEN, _ := h.TMDB.GetSeasonLang(show.TMDBID, s.SeasonNumber, "en-US")
+			for _, ep := range seasonES.Episodes {
+				d := db.EpisodeDetail{
+					ShowID:        show.ID,
+					SeasonNumber:  ep.SeasonNumber,
+					EpisodeNumber: ep.EpisodeNumber,
+					Name:          ep.Name,
+					Overview:      ep.Overview,
+					AirDate:       ep.AirDate,
+					Runtime:       ep.Runtime,
+				}
+				// Fill English data if available
+				if seasonEN != nil {
+					for _, epEN := range seasonEN.Episodes {
+						if epEN.EpisodeNumber == ep.EpisodeNumber {
+							d.NameEN = epEN.Name
+							d.OverviewEN = epEN.Overview
+							break
+						}
+					}
+				}
+				h.DB.UpsertEpisodeDetail(d)
 			}
 		}
 		updated++
