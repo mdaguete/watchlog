@@ -25,6 +25,8 @@ var translations = map[string]map[string]string{
 	"dashboard.shows_link":     {"es": "Series →", "en": "Shows →"},
 	"dashboard.movies_link":    {"es": "Películas →", "en": "Movies →"},
 	"dashboard.upcoming_link":  {"es": "Próximos →", "en": "Upcoming →"},
+	"dashboard.continue":       {"es": "Continuar viendo", "en": "Continue watching"},
+	"dashboard.mark_watched":   {"es": "Marcar como visto", "en": "Mark as watched"},
 
 	// Shows
 	"shows.title":         {"es": "Series", "en": "Shows"},
