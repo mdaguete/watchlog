@@ -486,11 +486,13 @@ func (h *Handler) PageDashboard(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, userID)
 	stats, _ := h.DB.GetDashboardStats(userID)
 	continueWatching, _ := h.DB.GetContinueWatching(userID, 5)
+	newSeasons, _ := h.DB.GetNewSeasons(userID)
 	h.Templates.ExecuteTemplate(w, "dashboard.html", map[string]any{
 		"Lang":             lang,
 		"Stats":            stats,
 		"Runtime":          importer.FormatRuntime(stats.TotalRuntime),
 		"ContinueWatching": continueWatching,
+		"NewSeasons":       newSeasons,
 		"Page":             1,
 		"HasMore":          len(continueWatching) == 5,
 	})

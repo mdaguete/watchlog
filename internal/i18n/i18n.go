@@ -26,6 +26,8 @@ var translations = map[string]map[string]string{
 	"dashboard.movies_link":    {"es": "Películas →", "en": "Movies →"},
 	"dashboard.upcoming_link":  {"es": "Próximos →", "en": "Upcoming →"},
 	"dashboard.continue":       {"es": "Continuar viendo", "en": "Continue watching"},
+	"dashboard.new_seasons":    {"es": "Novedades", "en": "New seasons"},
+	"dashboard.new_season_label": {"es": "Nueva temporada", "en": "New season"},
 	"dashboard.mark_watched":   {"es": "Marcar como visto", "en": "Mark as watched"},
 	"dashboard.snooze":         {"es": "Posponer", "en": "Snooze"},
 
