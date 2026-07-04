@@ -78,30 +78,6 @@
         <div id="season-action-result" class="mt-4 text-xs text-wl-gray"></div>
     </div>
     {{end}}
-
-    <!-- Manual mark (collapsed) -->
-    <div class="border-t border-wl-border pt-12">
-        <details>
-            <summary class="text-xs uppercase tracking-widest text-wl-gray cursor-pointer hover:text-black">{{T .Lang "show.mark_manually"}}</summary>
-            <div class="mt-6 flex items-end gap-4">
-                <div>
-                    <label class="text-xs text-wl-gray block mb-2">{{T .Lang "show.season"}}</label>
-                    <input type="number" min="1" value="1" id="mark-season"
-                        class="w-20 border border-wl-border px-3 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-                <div>
-                    <label class="text-xs text-wl-gray block mb-2">Episode</label>
-                    <input type="number" min="1" value="1" id="mark-episode"
-                        class="w-20 border border-wl-border px-3 py-2 text-sm focus:outline-none focus:border-black">
-                </div>
-                <button onclick="markEpisode()"
-                    class="px-5 py-2 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
-                    {{T .Lang "show.mark"}}
-                </button>
-            </div>
-            <div id="watch-result" class="mt-3 text-xs text-wl-gray"></div>
-        </details>
-    </div>
 </div>
 
 <script>
@@ -111,6 +87,7 @@ watched.add("{{.SeasonNumber}}-{{.EpisodeNumber}}");
 {{end}}
 
 const seasons = { {{range $season, $count := .Seasons}} {{$season}}: {{$count}}, {{end}} };
+const episodeNames = { {{range .EpisodeDetails}} '{{.SeasonNumber}}-{{.EpisodeNumber}}': '{{.Name}}', {{end}} };
 const sortedSeasons = Object.keys(seasons).map(Number).sort((a, b) => a - b);
 const labelMarkNext = '{{T .Lang "show.mark_next"}}';
 const labelMark = '{{T .Lang "show.mark"}}';
@@ -178,7 +155,8 @@ Object.entries(seasons).forEach(([season, count]) => {
             ? 'w-9 h-9 text-xs bg-black text-white border border-black'
             : 'w-9 h-9 text-xs border border-wl-border text-wl-gray hover:border-black hover:text-black transition-colors';
         btn.textContent = ep;
-        btn.title = 'S' + String(season).padStart(2,'0') + 'E' + String(ep).padStart(2,'0');
+        const epName = episodeNames[season + '-' + ep] || '';
+        btn.title = 'S' + String(season).padStart(2,'0') + 'E' + String(ep).padStart(2,'0') + (epName ? ' — ' + epName : '');
         btn.id = 'ep-' + season + '-' + ep;
         if (isWatched) {
             btn.onclick = () => unmarkSingle(parseInt(season), ep, btn);
@@ -276,27 +254,6 @@ function markFullSeason(season) {
             }
         });
     }
-}
-
-function markEpisode() {
-    const s = parseInt(document.getElementById('mark-season').value);
-    const e = parseInt(document.getElementById('mark-episode').value);
-    fetch('/api/shows/{{.Show.ID}}/episodes/watched', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({season: s, episode: e})
-    }).then(r => {
-        if (r.ok) {
-            document.getElementById('watch-result').innerHTML = '<span>✓ S' + pad(s) + 'E' + pad(e) + '</span>';
-            const btn = document.getElementById('ep-' + s + '-' + e);
-            if (btn) {
-                btn.className = 'w-9 h-9 text-xs bg-black text-white border border-black';
-                btn.onclick = () => unmarkSingle(s, e, btn);
-            }
-            watched.add(s + '-' + e);
-            updateNextButton();
-        }
-    });
 }
 
 // Initialize next button

@@ -3,7 +3,10 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -21,6 +24,7 @@ var migrations = []Migration{
 	{Version: 2, Description: "i18n columns for shows and movies", Up: migrateV2},
 	{Version: 3, Description: "email column on users", Up: migrateV3},
 	{Version: 4, Description: "season episodes cache table", Up: migrateV4},
+	{Version: 5, Description: "episode details table", Up: migrateV5},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -57,6 +61,11 @@ func (db *DB) runMigrations() error {
 	}
 
 	log.Printf("DB: migrating from version %d to %d...", current, latest)
+
+	// Backup database before applying migrations
+	if err := db.backupBeforeMigration(current); err != nil {
+		log.Printf("DB: WARNING: backup failed: %v (proceeding with migration)", err)
+	}
 
 	for _, m := range migrations {
 		if m.Version <= current {
@@ -312,4 +321,57 @@ CREATE TABLE IF NOT EXISTS season_episodes (
 	PRIMARY KEY (show_id, season_number)
 )`)
 	return err
+}
+
+func migrateV5(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS episode_details (
+	show_id INTEGER NOT NULL REFERENCES shows(id),
+	season_number INTEGER NOT NULL,
+	episode_number INTEGER NOT NULL,
+	name TEXT NOT NULL DEFAULT '',
+	name_en TEXT NOT NULL DEFAULT '',
+	overview TEXT NOT NULL DEFAULT '',
+	overview_en TEXT NOT NULL DEFAULT '',
+	air_date TEXT NOT NULL DEFAULT '',
+	runtime INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (show_id, season_number, episode_number)
+)`)
+	return err
+}
+
+// backupBeforeMigration copies the database file to a backups/ folder next to the DB.
+func (db *DB) backupBeforeMigration(currentVersion int) error {
+	if db.path == "" {
+		return fmt.Errorf("database path not set")
+	}
+
+	backupDir := filepath.Join(filepath.Dir(db.path), "backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return fmt.Errorf("create backup dir: %w", err)
+	}
+
+	baseName := filepath.Base(db.path)
+	timestamp := time.Now().Format("20060102-150405")
+	backupName := fmt.Sprintf("%s.v%d.%s.bak", baseName, currentVersion, timestamp)
+	backupPath := filepath.Join(backupDir, backupName)
+
+	src, err := os.Open(db.path)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	defer src.Close()
+
+	dst, err := os.Create(backupPath)
+	if err != nil {
+		return fmt.Errorf("create backup: %w", err)
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		return fmt.Errorf("copy: %w", err)
+	}
+
+	log.Printf("DB: backup created at %s", backupPath)
+	return nil
 }

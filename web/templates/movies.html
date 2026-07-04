@@ -6,6 +6,17 @@
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{len .Movies}} {{T .Lang "shows.titles_count"}}</span>
     </div>
 
+    <div class="grid grid-cols-2 gap-px bg-wl-border border border-wl-border">
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Stats.TotalMovies}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "movies.total"}}</div>
+        </div>
+        <div class="bg-white p-8 text-center">
+            <div class="text-3xl font-light">{{.Runtime}}</div>
+            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "movies.runtime"}}</div>
+        </div>
+    </div>
+
     <div class="flex items-center gap-6">
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "movies.sort"}}</span>
         <a href="/movies?sort=recent" class="text-xs uppercase tracking-widest {{if eq .Sort "recent"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "movies.sort.recent"}}</a>

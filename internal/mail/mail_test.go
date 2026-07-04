@@ -1,6 +1,9 @@
 package mail
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseURL_Full(t *testing.T) {
 	cfg, err := ParseURL("smtps://user:pass123@smtp.example.com:465/noreply@example.com")
@@ -83,4 +86,20 @@ func TestConfigured(t *testing.T) {
 
 	cfg = Config{Host: "h", Port: "25", From: "f@x"}
 	if !cfg.Configured() { t.Error("should be configured") }
+}
+
+func TestWrapEmailHTML(t *testing.T) {
+	result := wrapEmailHTML("Test Subject", "<p>Hello World</p>")
+	if !strings.Contains(result, "<!DOCTYPE html>") {
+		t.Error("missing DOCTYPE")
+	}
+	if !strings.Contains(result, "<title>Test Subject</title>") {
+		t.Error("missing title")
+	}
+	if !strings.Contains(result, "<p>Hello World</p>") {
+		t.Error("missing body content")
+	}
+	if !strings.Contains(result, "WatchLog") {
+		t.Error("missing WatchLog header")
+	}
 }
