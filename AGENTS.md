@@ -146,6 +146,15 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Only processes shows with status != "Ended"/"Canceled" and tmdb_id > 0
 - `RunTMDBRefresh`: full metadata refresh callable programmatically (used by post-migration hook)
 
+### MCP (Model Context Protocol)
+- Streamable HTTP transport at `/mcp` endpoint
+- Bearer token auth via user-generated API keys
+- Scopes: `read`, `mark`, `write`, `lists`, `admin`
+- Tools filtered by key scopes at runtime
+- SDK: `github.com/modelcontextprotocol/go-sdk`
+- API keys stored hashed in `api_keys` table, prefixed `wl_`
+- See `docs/MCP.md` for agent configuration
+
 ### Email
 - HTML email template wrapper (`wrapEmailHTML`) for consistent branding
 - Inline CSS (email clients don't support external stylesheets)
