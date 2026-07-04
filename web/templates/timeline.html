@@ -70,9 +70,9 @@ function jumpTo(year, month) {
                 <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies{{end}}" class="{{if gt $j 0}}hidden timeline-day-item{{end}} flex items-center gap-3 hover:bg-wl-light -mx-2 px-2 py-1 rounded transition-colors">
                     {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
                     <div>
-                        <p class="text-sm">{{$item.ShowName}}</p>
+                        <p class="text-sm">{{LocName $.Lang $item.ShowName $item.ShowNameES $item.ShowNameEN}}</p>
                         {{if eq $item.Type "episode"}}
-                        <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{$item.EpName}}{{end}}</p>
+                        <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{LocName $.Lang $item.EpName $item.EpName $item.EpNameEN}}{{end}}</p>
                         {{else}}
                         <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
                         {{end}}
@@ -109,9 +109,9 @@ function jumpTo(year, month) {
             <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies{{end}}" class="{{if gt $j 0}}hidden timeline-day-item-m{{end}} flex items-center gap-3 hover:bg-wl-light -mx-1 px-1 py-1 rounded transition-colors">
                 {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
                 <div>
-                    <p class="text-sm">{{$item.ShowName}}</p>
+                    <p class="text-sm">{{LocName $.Lang $item.ShowName $item.ShowNameES $item.ShowNameEN}}</p>
                     {{if eq $item.Type "episode"}}
-                    <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{$item.EpName}}{{end}}</p>
+                    <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{LocName $.Lang $item.EpName $item.EpName $item.EpNameEN}}{{end}}</p>
                     {{else}}
                     <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
                     {{end}}

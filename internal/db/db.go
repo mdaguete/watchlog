@@ -1425,10 +1425,13 @@ type TimelineItem struct {
 	Type          string // "episode" or "movie"
 	ShowID        int64
 	ShowName      string
+	ShowNameES    string
+	ShowNameEN    string
 	PosterURL     string
 	SeasonNumber  int
 	EpisodeNumber int
 	EpName        string
+	EpNameEN      string
 	MovieName     string
 	WatchedAt     string
 	Date          string // YYYY-MM-DD
@@ -1445,16 +1448,17 @@ func (db *DB) GetTimelineItems(userID int64, before string, limit int) ([]Timeli
 	}
 
 	query := `
-		SELECT type, show_id, show_name, poster_url, season_number, episode_number, ep_name, date FROM (
-			SELECT 'episode' as type, e.show_id, s.name as show_name, s.poster_url,
+		SELECT type, show_id, show_name, show_name_es, show_name_en, poster_url, season_number, episode_number, ep_name, ep_name_en, date FROM (
+			SELECT 'episode' as type, e.show_id, s.name as show_name, s.name_es as show_name_es, s.name_en as show_name_en, s.poster_url,
 				e.season_number, e.episode_number,
 				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				COALESCE((SELECT ed.name_en FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name_en,
 				substr(e.watched_at, 1, 10) as date
 			FROM episodes e JOIN shows s ON s.id = e.show_id
 			WHERE e.user_id = ? AND e.watched_at != ''
 			UNION ALL
-			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.poster_url,
-				0 as season_number, 0 as episode_number, '' as ep_name,
+			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.name_es as show_name_es, m.name_en as show_name_en, m.poster_url,
+				0 as season_number, 0 as episode_number, '' as ep_name, '' as ep_name_en,
 				substr(um.watched_at, 1, 10) as date
 			FROM user_movies um JOIN movies m ON m.id = um.movie_id
 			WHERE um.user_id = ? AND um.watched_at IS NOT NULL
@@ -1474,7 +1478,7 @@ func (db *DB) GetTimelineItems(userID int64, before string, limit int) ([]Timeli
 	var items []TimelineItem
 	for rows.Next() {
 		var item TimelineItem
-		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.Date); err != nil {
+		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.ShowNameES, &item.ShowNameEN, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.EpNameEN, &item.Date); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -1613,16 +1617,17 @@ func (db *DB) GetTimelinePeriods(userID int64, olderThan string) ([]TimelinePeri
 // GetTimelineItemsForRange returns items between two dates.
 func (db *DB) GetTimelineItemsForRange(userID int64, from, to string) ([]TimelineItem, error) {
 	query := `
-		SELECT type, show_id, show_name, poster_url, season_number, episode_number, ep_name, date FROM (
-			SELECT 'episode' as type, e.show_id, s.name as show_name, s.poster_url,
+		SELECT type, show_id, show_name, show_name_es, show_name_en, poster_url, season_number, episode_number, ep_name, ep_name_en, date FROM (
+			SELECT 'episode' as type, e.show_id, s.name as show_name, s.name_es as show_name_es, s.name_en as show_name_en, s.poster_url,
 				e.season_number, e.episode_number,
 				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				COALESCE((SELECT ed.name_en FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name_en,
 				substr(e.watched_at, 1, 10) as date
 			FROM episodes e JOIN shows s ON s.id = e.show_id
 			WHERE e.user_id = ? AND e.watched_at != '' AND substr(e.watched_at, 1, 10) >= ? AND substr(e.watched_at, 1, 10) <= ?
 			UNION ALL
-			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.poster_url,
-				0 as season_number, 0 as episode_number, '' as ep_name,
+			SELECT 'movie' as type, m.id as show_id, m.name as show_name, m.name_es as show_name_es, m.name_en as show_name_en, m.poster_url,
+				0 as season_number, 0 as episode_number, '' as ep_name, '' as ep_name_en,
 				substr(um.watched_at, 1, 10) as date
 			FROM user_movies um JOIN movies m ON m.id = um.movie_id
 			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 10) >= ? AND substr(um.watched_at, 1, 10) <= ?
@@ -1638,7 +1643,7 @@ func (db *DB) GetTimelineItemsForRange(userID int64, from, to string) ([]Timelin
 	var items []TimelineItem
 	for rows.Next() {
 		var item TimelineItem
-		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.Date); err != nil {
+		if err := rows.Scan(&item.Type, &item.ShowID, &item.ShowName, &item.ShowNameES, &item.ShowNameEN, &item.PosterURL, &item.SeasonNumber, &item.EpisodeNumber, &item.EpName, &item.EpNameEN, &item.Date); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
