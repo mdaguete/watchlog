@@ -485,10 +485,12 @@ func (h *Handler) PageDashboard(w http.ResponseWriter, r *http.Request) {
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
 	stats, _ := h.DB.GetDashboardStats(userID)
+	continueWatching, _ := h.DB.GetContinueWatching(userID, 5)
 	h.Templates.ExecuteTemplate(w, "dashboard.html", map[string]any{
-		"Lang":    lang,
-		"Stats":   stats,
-		"Runtime": importer.FormatRuntime(stats.TotalRuntime),
+		"Lang":             lang,
+		"Stats":            stats,
+		"Runtime":          importer.FormatRuntime(stats.TotalRuntime),
+		"ContinueWatching": continueWatching,
 	})
 }
 
@@ -1146,6 +1148,7 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 					Overview:      ep.Overview,
 					AirDate:       ep.AirDate,
 					Runtime:       ep.Runtime,
+					StillURL:      tmdb.BackdropURL(ep.StillPath, "w300"),
 				}
 				// Fill English data if available
 				if seasonEN != nil {

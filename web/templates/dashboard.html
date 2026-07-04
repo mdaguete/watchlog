@@ -6,6 +6,48 @@
         <p class="mt-4 text-sm text-wl-gray tracking-wide uppercase">{{T .Lang "dashboard.subtitle"}}</p>
     </div>
 
+    {{if .ContinueWatching}}
+    <div>
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-8">{{T .Lang "dashboard.continue"}}</h2>
+        <div class="space-y-6">
+            {{range .ContinueWatching}}
+            <div class="border border-wl-border" id="cw-{{.ShowID}}">
+                <div class="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-0">
+                    {{if .StillURL}}
+                    <div class="aspect-video md:aspect-auto md:h-full bg-wl-light overflow-hidden">
+                        <img src="{{ImgURL .StillURL}}" alt="" class="w-full h-full object-cover">
+                    </div>
+                    {{else if .PosterURL}}
+                    <div class="aspect-video md:aspect-auto md:h-full bg-wl-light overflow-hidden">
+                        <img src="{{ImgURL .PosterURL}}" alt="" class="w-full h-full object-cover">
+                    </div>
+                    {{else}}
+                    <div class="aspect-video md:aspect-auto md:h-full bg-wl-light flex items-center justify-center">
+                        <span class="text-xs text-wl-gray uppercase tracking-widest">{{T $.Lang "shows.no_image"}}</span>
+                    </div>
+                    {{end}}
+                    <div class="p-6 flex flex-col justify-between">
+                        <div>
+                            <a href="/shows/{{.ShowID}}" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">{{LocName $.Lang .ShowName .ShowNameES .ShowNameEN}}</a>
+                            <h3 class="mt-2 text-lg font-serif">S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}} — {{LocName $.Lang .EpName .EpName .EpNameEN}}</h3>
+                            {{if .EpOverview}}
+                            <p class="mt-2 text-sm text-wl-dark leading-relaxed line-clamp-3">{{Loc $.Lang .EpOverview .EpOverviewEN}}</p>
+                            {{end}}
+                        </div>
+                        <div class="mt-4">
+                            <button onclick="markEpisodeWatched({{.ShowID}}, {{.SeasonNumber}}, {{.EpisodeNumber}}, this)"
+                                class="px-5 py-2 text-xs uppercase tracking-widest border border-wl-border text-black hover:bg-black hover:text-white transition-colors">
+                                {{T $.Lang "dashboard.mark_watched"}}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
     <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-wl-border">
         <div class="bg-white p-8 text-center">
             <div class="text-3xl font-light">{{.Stats.FollowedShows}}</div>
@@ -37,5 +79,29 @@
         </a>
     </div>
 </div>
+
+<script>
+function markEpisodeWatched(showId, season, episode, btn) {
+    btn.disabled = true;
+    btn.textContent = '···';
+    fetch('/api/shows/' + showId + '/episodes/watched', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({season: season, episode: episode})
+    }).then(r => {
+        if (r.ok) {
+            const card = document.getElementById('cw-' + showId);
+            if (card) {
+                card.style.opacity = '0.3';
+                card.style.transition = 'opacity 0.3s';
+                setTimeout(() => card.remove(), 300);
+            }
+        } else {
+            btn.disabled = false;
+            btn.textContent = '{{T .Lang "dashboard.mark_watched"}}';
+        }
+    });
+}
+</script>
 {{template "foot" .}}
 {{end}}
