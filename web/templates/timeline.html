@@ -9,6 +9,7 @@
     {{if .Years}}
     <div class="flex flex-wrap items-center gap-3">
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "timeline.jump"}}</span>
+        <a href="/timeline" class="text-xs uppercase tracking-widest text-black border border-black px-2 py-1">{{T .Lang "timeline.today"}}</a>
         {{range .Years}}
         <button onclick="toggleYear(this, '{{.}}')" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black border border-wl-border px-2 py-1 transition-colors">{{.}}</button>
         {{end}}
