@@ -1705,7 +1705,7 @@ func (h *Handler) APICreateKey(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "default"
 	}
-	scopes := r.FormValue("scopes")
+	scopes := strings.Join(r.Form["scopes"], ",")
 	if scopes == "" {
 		scopes = "read"
 	}

@@ -93,13 +93,28 @@
             </div>
             <div>
                 <label class="text-xs text-wl-gray block mb-1">{{T .Lang "settings.key_scopes"}}</label>
-                <select name="scopes" class="border-b border-wl-border bg-transparent px-0 py-1 text-sm focus:outline-none">
-                    <option value="read">read</option>
-                    <option value="read,mark">read, mark</option>
-                    <option value="read,mark,write">read, mark, write</option>
-                    <option value="read,mark,write,lists">read, mark, write, lists</option>
-                    <option value="read,mark,write,lists,admin">all</option>
-                </select>
+                <div class="flex flex-wrap gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" name="scopes" value="read" checked class="accent-black dark:accent-white">
+                        <span class="text-sm">read</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" name="scopes" value="mark" class="accent-black dark:accent-white">
+                        <span class="text-sm">mark</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" name="scopes" value="write" class="accent-black dark:accent-white">
+                        <span class="text-sm">write</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" name="scopes" value="lists" class="accent-black dark:accent-white">
+                        <span class="text-sm">lists</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" name="scopes" value="admin" class="accent-black dark:accent-white">
+                        <span class="text-sm">admin</span>
+                    </label>
+                </div>
             </div>
             <button type="submit"
                 class="px-4 py-2 text-xs uppercase tracking-widest border border-wl-border hover:bg-black hover:text-white transition-colors">
