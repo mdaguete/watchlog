@@ -760,6 +760,18 @@ func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "is_archived": isArchived})
 }
 
+func (h *Handler) APISnoozeShow(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 { return }
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok { return }
+	// Snooze indefinitely — only unsnoozes when user marks an episode
+	until := time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+	h.DB.SnoozeShow(userID, id, until)
+	log.Printf("ACTION: user=%d snooze show=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *Handler) APIGetEpisodes(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
@@ -780,6 +792,7 @@ func (h *Handler) APIMarkEpisodeWatched(w http.ResponseWriter, r *http.Request) 
 	}
 	h.DB.MarkEpisodeWatched(userID, showID, req.Season, req.Episode)
 	h.DB.IncrementWatchStats(userID, 1)
+	h.DB.UnsnoozeShow(userID, showID)
 	archived := h.DB.AutoArchiveIfComplete(userID, showID)
 	log.Printf("ACTION: user=%d mark watched show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
 	if r.Header.Get("HX-Request") == "true" {

@@ -266,6 +266,7 @@ func main() {
 	mux.HandleFunc("POST /api/shows/{id}/follow", h.APIToggleFollow)
 	mux.HandleFunc("POST /api/shows/{id}/favorite", h.APIToggleFavorite)
 	mux.HandleFunc("POST /api/shows/{id}/archive", h.APIToggleArchive)
+	mux.HandleFunc("POST /api/shows/{id}/snooze", h.APISnoozeShow)
 
 	// API: Episodes
 	mux.HandleFunc("GET /api/shows/{id}/episodes", h.APIGetEpisodes)
