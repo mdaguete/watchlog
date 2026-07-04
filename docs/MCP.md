@@ -50,6 +50,8 @@ Authorization: Bearer wl_your_api_key_here
 |------|-------------|------------|
 | `search_shows` | Search TMDB for TV shows | `query` |
 | `add_show` | Add a show from TMDB to your library | `tmdb_id` |
+| `search_movies` | Search TMDB for movies | `query` |
+| `add_movie` | Add a movie and mark as watched | `tmdb_id` |
 
 ## Agent Configuration
 

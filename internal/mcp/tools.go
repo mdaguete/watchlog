@@ -68,6 +68,16 @@ func (s *Server) registerTools() {
 		Name:        "add_show",
 		Description: "Add a TV show from TMDB to your library by its tmdb_id",
 	}, s.toolAddShow)
+
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "search_movies",
+		Description: "Search TMDB for movies by name. Returns matches with tmdb_id to use with add_movie.",
+	}, s.toolSearchMovies)
+
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "add_movie",
+		Description: "Add a movie from TMDB and mark it as watched",
+	}, s.toolAddMovie)
 }
 
 // --- Read tools ---
@@ -342,5 +352,93 @@ func (s *Server) toolAddShow(ctx context.Context, req *mcp.CallToolRequest, args
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Added '%s' (id=%d)", show.Name, showID)}},
+	}, nil, nil
+}
+
+func (s *Server) toolSearchMovies(ctx context.Context, req *mcp.CallToolRequest, args searchArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=search_movies user=%d query=%q", getUserID(ctx), args.Query)
+	if !hasScope(ctx, "write") {
+		return errNoScope("write")
+	}
+	if s.tmdb == nil || !s.tmdb.Enabled() {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "TMDB not configured"}},
+			IsError: true,
+		}, nil, nil
+	}
+	results, err := s.tmdb.SearchMovie(args.Query)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("search error: %v", err)}},
+			IsError: true,
+		}, nil, nil
+	}
+
+	type result struct {
+		TMDBID   int    `json:"tmdb_id"`
+		Title    string `json:"title"`
+		Year     string `json:"year"`
+		Overview string `json:"overview"`
+	}
+	var matches []result
+	for i, r := range results {
+		if i >= 5 {
+			break
+		}
+		year := ""
+		if len(r.ReleaseDate) >= 4 {
+			year = r.ReleaseDate[:4]
+		}
+		overview := r.Overview
+		if len(overview) > 100 {
+			overview = overview[:100] + "..."
+		}
+		matches = append(matches, result{TMDBID: r.ID, Title: r.Title, Year: year, Overview: overview})
+	}
+	return jsonText(matches), nil, nil
+}
+
+type addMovieArgs struct {
+	TMDBID int `json:"tmdb_id"`
+}
+
+func (s *Server) toolAddMovie(ctx context.Context, req *mcp.CallToolRequest, args addMovieArgs) (*mcp.CallToolResult, any, error) {
+	log.Printf("MCP: tool=add_movie user=%d tmdb_id=%d", getUserID(ctx), args.TMDBID)
+	if !hasScope(ctx, "write") {
+		return errNoScope("write")
+	}
+	if s.tmdb == nil || !s.tmdb.Enabled() {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "TMDB not configured"}},
+			IsError: true,
+		}, nil, nil
+	}
+	userID := getUserID(ctx)
+
+	movie, err := s.tmdb.GetMovie(args.TMDBID)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("TMDB error: %v", err)}},
+			IsError: true,
+		}, nil, nil
+	}
+
+	genres := make([]string, len(movie.Genres))
+	for i, g := range movie.Genres {
+		genres[i] = g.Name
+	}
+	genreStr := ""
+	if len(genres) > 0 {
+		genreStr = genres[0]
+		for _, g := range genres[1:] {
+			genreStr += ", " + g
+		}
+	}
+
+	id, _ := s.db.AddMovieFromTMDB(movie.ID, movie.Title, "", movie.Overview, genreStr, movie.Runtime)
+	s.db.MarkMovieWatched(userID, id, time.Now())
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Added and marked as watched: '%s'", movie.Title)}},
 	}, nil, nil
 }
