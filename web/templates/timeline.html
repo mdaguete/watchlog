@@ -11,15 +11,11 @@
 
         <!-- Recent days -->
         {{range $i, $day := .Days}}
-        <div class="relative flex items-start mb-8 {{if eq (mod $i 2) 0}}md:flex-row{{else}}md:flex-row-reverse{{end}}">
+        <div class="relative flex items-stretch mb-8 {{if eq (mod $i 2) 0}}md:flex-row{{else}}md:flex-row-reverse{{end}}">
             <!-- Content box (desktop) -->
-            <div class="hidden md:block md:w-5/12 {{if eq (mod $i 2) 0}}pr-6{{else}}pl-6{{end}}">
-                <div class="border border-wl-border p-4 relative">
-                    <!-- Connector line -->
-                    <div class="absolute top-5 {{if eq (mod $i 2) 0}}-right-6 w-6{{else}}-left-6 w-6{{end}} h-px bg-wl-border"></div>
-                    <!-- Date -->
+            <div class="hidden md:block md:w-5/12">
+                <div class="border border-wl-border p-4">
                     <div class="text-xs uppercase tracking-widest text-wl-gray mb-3 border-b border-wl-border pb-2">{{$day.Date}}</div>
-                    <!-- Items -->
                     <div class="space-y-2">
                         {{range $day.Items}}
                         <div class="flex items-center gap-3">
@@ -37,9 +33,10 @@
                     </div>
                 </div>
             </div>
-            <!-- Center dot -->
-            <div class="hidden md:flex w-2/12 justify-center pt-5">
-                <div class="w-3 h-3 rounded-full bg-black"></div>
+            <!-- Center: connector line + dot -->
+            <div class="hidden md:flex w-2/12 items-center justify-center relative">
+                <div class="absolute top-5 left-0 right-0 h-px bg-wl-border"></div>
+                <div class="w-3 h-3 rounded-full bg-black relative z-10"></div>
             </div>
             <!-- Empty side -->
             <div class="hidden md:block md:w-5/12"></div>
