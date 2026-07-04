@@ -565,7 +565,7 @@ func (db *DB) UnmarkMovieWatched(userID, movieID int64) error {
 }
 
 func (db *DB) GetUserMoviesUnwatched(userID int64) ([]models.UserMovie, error) {
-	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime, um.watched_at
+	rows, err := db.conn.Query(`SELECT m.id, m.external_id, m.name, m.name_es, m.name_en, m.tmdb_id, m.poster_url, m.overview, m.overview_en, m.genres, m.genres_en, m.runtime
 		FROM user_movies um JOIN movies m ON m.id = um.movie_id
 		WHERE um.user_id = ? AND um.watched_at IS NULL ORDER BY m.name ASC`, userID)
 	if err != nil {
@@ -575,7 +575,7 @@ func (db *DB) GetUserMoviesUnwatched(userID int64) ([]models.UserMovie, error) {
 	var movies []models.UserMovie
 	for rows.Next() {
 		var um models.UserMovie
-		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime, &um.WatchedAt); err != nil {
+		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime); err != nil {
 			return nil, err
 		}
 		movies = append(movies, um)
