@@ -282,6 +282,53 @@ func (db *DB) GetUserShowField(userID, showID int64, field string, dest *bool) {
 	*dest = val == 1
 }
 
+// AutoArchiveIfComplete archives a show if it's ended/canceled and fully watched.
+func (db *DB) AutoArchiveIfComplete(userID, showID int64) bool {
+	// Check if show is ended or canceled
+	var status string
+	db.conn.QueryRow("SELECT status FROM shows WHERE id = ?", showID).Scan(&status)
+	if status != "Ended" && status != "Canceled" {
+		return false
+	}
+
+	// Get total episodes from season_episodes
+	var totalEpisodes int
+	db.conn.QueryRow("SELECT COALESCE(SUM(episode_count), 0) FROM season_episodes WHERE show_id = ?", showID).Scan(&totalEpisodes)
+	if totalEpisodes == 0 {
+		return false
+	}
+
+	// Count watched episodes
+	var watchedCount int
+	db.conn.QueryRow("SELECT COUNT(*) FROM episodes WHERE user_id = ? AND show_id = ?", userID, showID).Scan(&watchedCount)
+
+	if watchedCount >= totalEpisodes {
+		db.conn.Exec("UPDATE user_shows SET is_archived = 1, updated_at = ? WHERE user_id = ? AND show_id = ?", time.Now(), userID, showID)
+		return true
+	}
+	return false
+}
+
+// AutoUnarchiveIfIncomplete unarchives a show if it was auto-archived but is no longer fully watched.
+func (db *DB) AutoUnarchiveIfIncomplete(userID, showID int64) bool {
+	// Only unarchive if currently archived
+	var isArchived int
+	db.conn.QueryRow("SELECT is_archived FROM user_shows WHERE user_id = ? AND show_id = ?", userID, showID).Scan(&isArchived)
+	if isArchived != 1 {
+		return false
+	}
+
+	// Check if show is ended or canceled (only auto-unarchive these)
+	var status string
+	db.conn.QueryRow("SELECT status FROM shows WHERE id = ?", showID).Scan(&status)
+	if status != "Ended" && status != "Canceled" {
+		return false
+	}
+
+	db.conn.Exec("UPDATE user_shows SET is_archived = 0, updated_at = ? WHERE user_id = ? AND show_id = ?", time.Now(), userID, showID)
+	return true
+}
+
 func (db *DB) FollowShow(userID, showID int64) error {
 	_, err := db.conn.Exec(`INSERT INTO user_shows (user_id, show_id, is_followed, followed_at, updated_at) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT(user_id, show_id) DO UPDATE SET is_followed=1, updated_at=excluded.updated_at`,
@@ -1053,7 +1100,11 @@ type ContinueWatchingItem struct {
 }
 
 // GetContinueWatching returns the next unwatched episode for the N most recently active shows.
-func (db *DB) GetContinueWatching(userID int64, limit int) ([]ContinueWatchingItem, error) {
+func (db *DB) GetContinueWatching(userID int64, limit int, offset ...int) ([]ContinueWatchingItem, error) {
+	off := 0
+	if len(offset) > 0 {
+		off = offset[0]
+	}
 	// Get the most recently active shows (by latest watched episode)
 	rows, err := db.conn.Query(`
 		SELECT e.show_id, s.name, s.name_es, s.name_en, s.poster_url, MAX(e.watched_at) as last_watched
@@ -1062,7 +1113,7 @@ func (db *DB) GetContinueWatching(userID int64, limit int) ([]ContinueWatchingIt
 		WHERE e.user_id = ?
 		GROUP BY e.show_id
 		ORDER BY last_watched DESC
-		LIMIT ?`, userID, limit*2) // fetch extra in case some are fully watched
+		LIMIT ? OFFSET ?`, userID, limit*3, off*3) // fetch extra in case some are fully watched
 	if err != nil {
 		return nil, err
 	}
@@ -1147,12 +1198,16 @@ func (db *DB) GetContinueWatching(userID int64, limit int) ([]ContinueWatchingIt
 		item.SeasonNumber = foundSeason
 		item.EpisodeNumber = foundEpisode
 
-		err = db.conn.QueryRow(`SELECT name, name_en, overview, overview_en, still_url
+		var airDate string
+		err = db.conn.QueryRow(`SELECT name, name_en, overview, overview_en, still_url, air_date
 			FROM episode_details WHERE show_id = ? AND season_number = ? AND episode_number = ?`,
-			rs.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL)
+			rs.id, foundSeason, foundEpisode).Scan(&item.EpName, &item.EpNameEN, &item.EpOverview, &item.EpOverviewEN, &item.StillURL, &airDate)
 		if err != nil {
 			// No details available, still show the item
 			item.EpName = fmt.Sprintf("S%02dE%02d", foundSeason, foundEpisode)
+		} else if airDate == "" || airDate > time.Now().Format("2006-01-02") {
+			// Episode not yet aired — skip this show
+			continue
 		}
 
 		items = append(items, item)

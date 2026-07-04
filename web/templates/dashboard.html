@@ -1,15 +1,11 @@
 {{define "dashboard.html"}}
 {{template "head" .}}
 <div class="space-y-16">
-    <div class="text-center py-12">
-        <h1 class="font-serif text-5xl tracking-wide">{{T .Lang "dashboard.title"}}</h1>
-        <p class="mt-4 text-sm text-wl-gray tracking-wide uppercase">{{T .Lang "dashboard.subtitle"}}</p>
-    </div>
 
     {{if .ContinueWatching}}
     <div>
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-8">{{T .Lang "dashboard.continue"}}</h2>
-        <div class="space-y-6">
+        <div class="space-y-6" id="continue-watching-list">
             {{range .ContinueWatching}}
             <div class="border border-wl-border" id="cw-{{.ShowID}}">
                 <div class="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-0">
@@ -44,40 +40,16 @@
                 </div>
             </div>
             {{end}}
+            {{if .HasMore}}
+            <div hx-get="/api/continue-watching?page={{add .Page 1}}" hx-trigger="revealed" hx-swap="outerHTML">
+                <div class="py-8 text-center">
+                    <span class="text-xs text-wl-gray uppercase tracking-widest">···</span>
+                </div>
+            </div>
+            {{end}}
         </div>
     </div>
     {{end}}
-
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-wl-border">
-        <div class="bg-white p-8 text-center">
-            <div class="text-3xl font-light">{{.Stats.FollowedShows}}</div>
-            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.shows"}}</div>
-        </div>
-        <div class="bg-white p-8 text-center">
-            <div class="text-3xl font-light">{{.Stats.TotalEpisodes}}</div>
-            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.episodes"}}</div>
-        </div>
-        <div class="bg-white p-8 text-center">
-            <div class="text-3xl font-light">{{.Stats.TotalMovies}}</div>
-            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.movies"}}</div>
-        </div>
-        <div class="bg-white p-8 text-center">
-            <div class="text-3xl font-light">{{.Runtime}}</div>
-            <div class="mt-2 text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "dashboard.total_time"}}</div>
-        </div>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-wl-border border border-wl-border">
-        <a href="/shows" class="bg-white p-10 group">
-            <span class="text-xs uppercase tracking-widest text-wl-gray group-hover:text-black transition-colors">{{T .Lang "dashboard.shows_link"}}</span>
-        </a>
-        <a href="/movies" class="bg-white p-10 group">
-            <span class="text-xs uppercase tracking-widest text-wl-gray group-hover:text-black transition-colors">{{T .Lang "dashboard.movies_link"}}</span>
-        </a>
-        <a href="/upcoming" class="bg-white p-10 group">
-            <span class="text-xs uppercase tracking-widest text-wl-gray group-hover:text-black transition-colors">{{T .Lang "dashboard.upcoming_link"}}</span>
-        </a>
-    </div>
 </div>
 
 <script>
