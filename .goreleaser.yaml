@@ -40,6 +40,10 @@ release:
   # publish, so a draft can be safely discarded/re-cut without burning the tag.
   # Publish manually from the GitHub UI after reviewing the draft.
   draft: true
+  # Pin the release to the exact commit that was built, so publishing the draft
+  # creates the tag on that commit (not on whatever branch tip GoReleaser
+  # inferred).
+  target_commitish: "{{ .Commit }}"
   # Automatically mark tags with a prerelease suffix (e.g. -rc.N, -beta) as
   # GitHub prereleases.
   prerelease: auto
