@@ -7,8 +7,10 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 - **Import TVTime data** — migrate your full history from the CSV export
 - **TV show tracking** — mark episodes/seasons as watched
 - **Continue watching** — dashboard shows next unwatched episode for recent shows
+- **New seasons** — horizontal scroll of shows with new seasons available
 - **Auto-archive** — shows archived automatically when fully watched and ended
-- **Movies** — your watched movie collection with stats (count + runtime)
+- **Movies** — watchlist (pending) + watched collection with detail pages
+- **Timeline** — infinite scroll history with day-by-day activity and year/month jump
 - **TMDB integration** — posters, synopses, genres, airing status and upcoming episodes
 - **Episode details** — names, synopses, and still images from TMDB
 - **Add new content** — search TMDB and add shows/movies to your library
@@ -18,8 +20,11 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 - **Instant search** — search your library with HTMX
 - **i18n** — Spanish and English, auto-detected or user-selected
 - **Multi-user** — each user has their own library and preferences
+- **Dark mode** — system, light, or dark theme per user
+- **MCP server** — AI agent integration with 13 tools and API key auth
 - **Email notifications** — styled HTML emails for magic links and password reset
 - **PWA** — installable on iOS and Android, works like a native app
+- **Admin CLI** (`watchdog`) — user management, config, database operations
 
 ## Requirements
 

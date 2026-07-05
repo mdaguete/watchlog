@@ -146,6 +146,7 @@ var translations = map[string]map[string]string{
 	"login.with_magic":    {"es": "Acceder con enlace mágico", "en": "Log in with magic link"},
 	"login.forgot_password": {"es": "¿Olvidaste tu contraseña?", "en": "Forgot your password?"},
 	"login.error":       {"es": "Usuario o contraseña incorrectos", "en": "Invalid username or password"},
+	"login.blocked":     {"es": "Tu cuenta está bloqueada", "en": "Your account is blocked"},
 	"login.rate_limited": {"es": "Demasiados intentos. Espera unos minutos.", "en": "Too many attempts. Please wait a few minutes."},
 	"register.title":    {"es": "Crear cuenta", "en": "Create account"},
 	"register.submit":   {"es": "Crear cuenta", "en": "Create account"},

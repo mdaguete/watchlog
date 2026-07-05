@@ -1,7 +1,9 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -9,6 +11,14 @@ import (
 
 	"github.com/mdaguete/watchlog/internal/models"
 )
+
+// HashAPIKey returns the hex-encoded SHA-256 of a raw API key. API keys are
+// high-entropy random tokens, so a fast hash (not bcrypt) is sufficient to
+// avoid storing recoverable secrets at rest while keeping lookups O(1).
+func HashAPIKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
 
 type DB struct {
 	conn *sql.DB
@@ -768,8 +778,8 @@ func (db *DB) AddListItem(item models.ListItem) error {
 	return err
 }
 
-func (db *DB) RemoveListItem(itemID int64) error {
-	_, err := db.conn.Exec(`DELETE FROM list_items WHERE id = ?`, itemID)
+func (db *DB) RemoveListItem(listID, itemID int64) error {
+	_, err := db.conn.Exec(`DELETE FROM list_items WHERE id = ? AND list_id = ?`, itemID, listID)
 	return err
 }
 
@@ -1372,7 +1382,6 @@ func sortInts(s []int) {
 	}
 }
 
-
 // --- API Keys ---
 
 // APIKey represents a user's API key metadata.
@@ -1384,16 +1393,20 @@ type APIKey struct {
 	LastUsedAt time.Time
 }
 
-func (db *DB) CreateAPIKey(userID int64, keyHash, name, scopes string) (int64, error) {
+// CreateAPIKey stores only the SHA-256 hash of the raw key. The raw key is
+// shown to the user once at creation time and never persisted.
+func (db *DB) CreateAPIKey(userID int64, rawKey, name, scopes string) (int64, error) {
 	res, err := db.conn.Exec(`INSERT INTO api_keys (user_id, key_hash, name, scopes) VALUES (?, ?, ?, ?)`,
-		userID, keyHash, name, scopes)
+		userID, HashAPIKey(rawKey), name, scopes)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func (db *DB) ValidateAPIKey(keyHash string) (int64, string, bool) {
+// ValidateAPIKey looks up a key by the hash of the presented raw key.
+func (db *DB) ValidateAPIKey(rawKey string) (int64, string, bool) {
+	keyHash := HashAPIKey(rawKey)
 	var userID int64
 	var scopes string
 	err := db.conn.QueryRow(`SELECT user_id, scopes FROM api_keys WHERE key_hash = ?`, keyHash).Scan(&userID, &scopes)
@@ -1701,4 +1714,88 @@ func (db *DB) GetTimelineYears(userID int64) ([]string, error) {
 		}
 	}
 	return years, nil
+}
+
+// --- CLI Admin Methods ---
+
+// CLIUser is a user record for CLI display.
+type CLIUser struct {
+	ID       int64
+	Username string
+	Email    string
+	Blocked  bool
+}
+
+func (db *DB) ListAllUsers() ([]CLIUser, error) {
+	rows, err := db.conn.Query("SELECT id, username, email, COALESCE(blocked, 0) FROM users ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []CLIUser
+	for rows.Next() {
+		var u CLIUser
+		var blocked int
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &blocked); err != nil {
+			return nil, err
+		}
+		u.Blocked = blocked == 1
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func (db *DB) SetUserBlocked(userID int64, blocked bool) {
+	val := 0
+	if blocked {
+		val = 1
+	}
+	db.conn.Exec("UPDATE users SET blocked = ? WHERE id = ?", val, userID)
+}
+
+func (db *DB) IsUserBlocked(userID int64) bool {
+	var blocked int
+	db.conn.QueryRow("SELECT COALESCE(blocked, 0) FROM users WHERE id = ?", userID).Scan(&blocked)
+	return blocked == 1
+}
+
+func (db *DB) DeleteUser(userID int64) {
+	db.conn.Exec("DELETE FROM episodes WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM user_movies WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM user_shows WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM show_progress WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM watch_stats WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM lists WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM magic_links WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM api_keys WHERE user_id = ?", userID)
+	db.conn.Exec("DELETE FROM users WHERE id = ?", userID)
+}
+
+type Setting struct {
+	Key   string
+	Value string
+}
+
+func (db *DB) ListSettings() ([]Setting, error) {
+	rows, err := db.conn.Query("SELECT key, value FROM settings ORDER BY key")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var settings []Setting
+	for rows.Next() {
+		var s Setting
+		rows.Scan(&s.Key, &s.Value)
+		settings = append(settings, s)
+	}
+	return settings, nil
+}
+
+func (db *DB) CurrentVersion() int {
+	return db.currentVersion()
+}
+
+func (db *DB) Vacuum() {
+	db.conn.Exec("VACUUM")
 }
