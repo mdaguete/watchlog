@@ -278,6 +278,9 @@ func main() {
 	mux.HandleFunc("POST /settings", h.SaveSettings)
 	mux.HandleFunc("GET /admin", h.PageAdmin)
 	mux.HandleFunc("POST /admin", h.SaveAdmin)
+	mux.HandleFunc("POST /admin/users", h.AdminCreateUser)
+	mux.HandleFunc("POST /admin/users/{id}/block", h.AdminToggleUserBlock)
+	mux.HandleFunc("POST /admin/users/{id}/delete", h.AdminDeleteUser)
 
 	// API: Shows
 	mux.HandleFunc("GET /api/shows", h.APIGetShows)

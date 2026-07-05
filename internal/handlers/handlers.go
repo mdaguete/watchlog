@@ -1425,10 +1425,27 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusFound)
 }
 
-func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
+// requireAdmin ensures the request comes from the admin user (id 1). It writes
+// the appropriate response (403 for API/HTMX, redirect otherwise) and returns 0
+// when the caller is not the admin.
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) int64 {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
-	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
+	if userID == 0 {
+		return 0
+	}
+	if userID != 1 {
+		if r.Header.Get("HX-Request") == "true" || strings.HasPrefix(r.URL.Path, "/api/") {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			http.Redirect(w, r, "/", http.StatusFound)
+		}
+		return 0
+	}
+	return userID
+}
+
+// adminData builds the template data for the admin page.
+func (h *Handler) adminData(r *http.Request, userID int64) map[string]any {
 	lang := h.getLang(r, userID)
 	data := map[string]any{
 		"Lang":        lang,
@@ -1449,19 +1466,29 @@ func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	smtpURL := h.DB.GetSetting("smtp_url")
 	if smtpURL != "" {
-		cfg, err := mail.ParseURL(smtpURL)
-		if err == nil {
+		if cfg, err := mail.ParseURL(smtpURL); err == nil {
 			data["SMTPConfigured"] = true
 			data["SMTPDisplay"] = mail.FormatURL(cfg)
 		}
 	}
-	h.Templates.ExecuteTemplate(w, "admin.html", data)
+	users, _ := h.DB.ListAllUsers()
+	data["Users"] = users
+	return data
+}
+
+func (h *Handler) PageAdmin(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAdmin(w, r)
+	if userID == 0 {
+		return
+	}
+	h.Templates.ExecuteTemplate(w, "admin.html", h.adminData(r, userID))
 }
 
 func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
-	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
-	if userID != 1 { http.Redirect(w, r, "/", http.StatusFound); return }
+	userID := h.requireAdmin(w, r)
+	if userID == 0 {
+		return
+	}
 	r.ParseForm()
 
 	// TMDB key
@@ -1500,6 +1527,91 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 		h.DB.SetSetting("auth_default_login", defaultLogin)
 	}
 
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// --- Admin: user management (web, admin only) ---
+
+// AdminCreateUser creates a new user from the admin page.
+func (h *Handler) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAdmin(w, r)
+	if userID == 0 {
+		return
+	}
+	r.ParseForm()
+	lang := h.getLang(r, userID)
+	username := strings.TrimSpace(r.FormValue("username"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	password := r.FormValue("password")
+
+	renderErr := func(key string) {
+		data := h.adminData(r, userID)
+		data["UserError"] = i18n.T(lang, key)
+		w.WriteHeader(http.StatusBadRequest)
+		h.Templates.ExecuteTemplate(w, "admin.html", data)
+	}
+
+	if username == "" {
+		renderErr("admin.users_err_username")
+		return
+	}
+	if len(password) < 8 {
+		renderErr("admin.users_err_password")
+		return
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		renderErr("admin.users_err_password")
+		return
+	}
+	newID, err := h.DB.CreateUser(username, hash)
+	if err != nil {
+		renderErr("admin.users_err_exists")
+		return
+	}
+	if email != "" {
+		h.DB.UpdateUserEmail(newID, email)
+	}
+	log.Printf("ACTION: admin=%d created user=%q id=%d", userID, username, newID)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// AdminToggleUserBlock blocks or unblocks a user. The admin (id 1) cannot be blocked.
+func (h *Handler) AdminToggleUserBlock(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAdmin(w, r)
+	if userID == 0 {
+		return
+	}
+	targetID, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if targetID == 1 {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	blocked := h.DB.IsUserBlocked(targetID)
+	h.DB.SetUserBlocked(targetID, !blocked)
+	log.Printf("ACTION: admin=%d set user=%d blocked=%v", userID, targetID, !blocked)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// AdminDeleteUser deletes a user and all their data. The admin (id 1) cannot be deleted.
+func (h *Handler) AdminDeleteUser(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAdmin(w, r)
+	if userID == 0 {
+		return
+	}
+	targetID, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if targetID == 1 {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	h.DB.DeleteUser(targetID)
+	log.Printf("ACTION: admin=%d deleted user=%d", userID, targetID)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 

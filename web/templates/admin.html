@@ -84,6 +84,69 @@
         </button>
     </form>
 
+    <!-- User management -->
+    <div class="border-t border-wl-border pt-8">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.users_section"}}</h2>
+        <p class="text-xs text-wl-gray mb-6">{{T .Lang "admin.users_help"}}</p>
+
+        {{if .UserError}}
+        <p class="text-xs text-red-600 mb-4">{{.UserError}}</p>
+        {{end}}
+
+        <!-- Create user -->
+        <form method="POST" action="/admin/users" class="max-w-lg grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <input type="text" name="username" required placeholder="{{T .Lang "admin.users_username"}}"
+                class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <input type="email" name="email" placeholder="{{T .Lang "admin.users_email"}}"
+                class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <input type="password" name="password" required minlength="8" placeholder="{{T .Lang "admin.users_password"}}"
+                class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <div class="sm:col-span-3">
+                <button type="submit"
+                    class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                    {{T .Lang "admin.users_create"}}
+                </button>
+            </div>
+        </form>
+
+        <!-- Users list -->
+        <div class="max-w-lg border-t border-wl-border divide-y divide-wl-border">
+            {{range .Users}}
+            <div class="flex items-center justify-between py-3 gap-4">
+                <div class="min-w-0">
+                    <p class="text-sm truncate">
+                        {{.Username}}
+                        {{if eq .ID 1}}<span class="text-[10px] uppercase tracking-widest text-wl-gray ml-2">{{T $.Lang "admin.users_admin_badge"}}</span>{{end}}
+                    </p>
+                    <p class="text-xs text-wl-gray truncate">{{if .Email}}{{.Email}}{{else}}—{{end}}</p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                    {{if .Blocked}}
+                    <span class="text-[10px] uppercase tracking-widest text-red-600">{{T $.Lang "admin.users_blocked"}}</span>
+                    {{else}}
+                    <span class="text-[10px] uppercase tracking-widest text-wl-gray">{{T $.Lang "admin.users_active"}}</span>
+                    {{end}}
+                    {{if ne .ID 1}}
+                    <form method="POST" action="/admin/users/{{.ID}}/block">
+                        <button type="submit"
+                            class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+                            {{if .Blocked}}{{T $.Lang "admin.users_unblock"}}{{else}}{{T $.Lang "admin.users_block"}}{{end}}
+                        </button>
+                    </form>
+                    <form method="POST" action="/admin/users/{{.ID}}/delete"
+                        onsubmit="return confirm('{{T $.Lang "admin.users_delete_confirm"}}')">
+                        <button type="submit"
+                            class="text-xs uppercase tracking-widest text-red-600 hover:text-red-800 transition-colors">
+                            {{T $.Lang "admin.users_delete"}}
+                        </button>
+                    </form>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
     <!-- TMDB Actions -->
     <div class="border-t border-wl-border pt-8">
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "admin.tmdb_actions"}}</h2>
