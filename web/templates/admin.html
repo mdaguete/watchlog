@@ -1,14 +1,29 @@
 {{define "admin.html"}}
 {{template "head" .}}
-<div class="space-y-12">
+<div class="space-y-8" id="admin-root" {{if .UserError}}data-initial-tab="users"{{end}}>
     <div class="border-b border-wl-border pb-6">
         <h1 class="font-serif text-4xl">{{T .Lang "admin.title"}}</h1>
         <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.subtitle"}}</p>
     </div>
 
-    <form method="POST" action="/admin" class="max-w-lg space-y-8">
+    <!-- Tab navigation -->
+    <nav id="admin-tabs" class="flex flex-wrap gap-6 border-b border-wl-border -mt-2">
+        <button type="button" data-tab-btn="tmdb"
+            class="pb-3 border-b-2 text-xs uppercase tracking-widest transition-colors border-transparent text-wl-gray">TMDB</button>
+        <button type="button" data-tab-btn="email"
+            class="pb-3 border-b-2 text-xs uppercase tracking-widest transition-colors border-transparent text-wl-gray">{{T .Lang "admin.smtp_section"}}</button>
+        <button type="button" data-tab-btn="server"
+            class="pb-3 border-b-2 text-xs uppercase tracking-widest transition-colors border-transparent text-wl-gray">{{T .Lang "admin.server_section"}}</button>
+        <button type="button" data-tab-btn="auth"
+            class="pb-3 border-b-2 text-xs uppercase tracking-widest transition-colors border-transparent text-wl-gray">{{T .Lang "admin.auth_section"}}</button>
+        <button type="button" data-tab-btn="users"
+            class="pb-3 border-b-2 text-xs uppercase tracking-widest transition-colors border-transparent text-wl-gray">{{T .Lang "admin.users_section"}}</button>
+    </nav>
+
+    <!-- Settings form (fields spread across config tabs, saved together) -->
+    <form method="POST" action="/admin" class="max-w-lg">
         <!-- TMDB -->
-        <div>
+        <div class="admin-panel" data-tab="tmdb">
             <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">TMDB</h2>
             {{if .TMDBKeySet}}
             <p class="text-xs text-wl-gray mb-2">{{T .Lang "settings.current_key"}}: {{.TMDBKeyHint}}</p>
@@ -19,7 +34,7 @@
         </div>
 
         <!-- SMTP -->
-        <div class="border-t border-wl-border pt-8">
+        <div class="admin-panel" data-tab="email">
             <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.smtp_section"}}</h2>
             <p class="text-xs text-wl-gray mb-4">{{T .Lang "admin.smtp_help"}}</p>
             {{if .SMTPConfigured}}
@@ -31,33 +46,28 @@
         </div>
 
         <!-- Public URL -->
-        <div class="border-t border-wl-border pt-8">
+        <div class="admin-panel" data-tab="server">
             <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.server_section"}}</h2>
-            <div>
-                <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.watchlog_url"}}</label>
-                <input type="url" name="watchlog_url" value="{{.WatchLogURL}}" placeholder="https://watchlog.example.com"
-                    class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-                <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.watchlog_url_help"}}</p>
-            </div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-2">{{T .Lang "admin.watchlog_url"}}</label>
+            <input type="url" name="watchlog_url" value="{{.WatchLogURL}}" placeholder="https://watchlog.example.com"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.watchlog_url_help"}}</p>
         </div>
 
         <!-- Authentication options -->
-        <div class="border-t border-wl-border pt-8">
+        <div class="admin-panel" data-tab="auth">
             <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.auth_section"}}</h2>
             <div class="space-y-4">
                 <label class="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" name="auth_registration" {{if .RegistrationEnabled}}checked{{end}}
-                        class="accent-black">
+                    <input type="checkbox" name="auth_registration" {{if .RegistrationEnabled}}checked{{end}} class="accent-black">
                     <span class="text-sm">{{T .Lang "admin.auth_registration"}}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" name="auth_password" {{if .PasswordEnabled}}checked{{end}}
-                        class="accent-black">
+                    <input type="checkbox" name="auth_password" {{if .PasswordEnabled}}checked{{end}} class="accent-black">
                     <span class="text-sm">{{T .Lang "admin.auth_password"}}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" name="auth_magic_link" {{if .MagicLinkEnabled}}checked{{end}}
-                        class="accent-black">
+                    <input type="checkbox" name="auth_magic_link" {{if .MagicLinkEnabled}}checked{{end}} class="accent-black">
                     <span class="text-sm">{{T .Lang "admin.auth_magic_link"}}</span>
                 </label>
             </div>
@@ -65,28 +75,54 @@
                 <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "admin.auth_default"}}</label>
                 <div class="flex gap-4">
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="auth_default_login" value="magic" {{if eq .DefaultLogin "magic"}}checked{{end}}
-                            class="accent-black">
+                        <input type="radio" name="auth_default_login" value="magic" {{if eq .DefaultLogin "magic"}}checked{{end}} class="accent-black">
                         <span class="text-sm">Magic link</span>
                     </label>
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="auth_default_login" value="password" {{if eq .DefaultLogin "password"}}checked{{end}}
-                            class="accent-black">
+                        <input type="radio" name="auth_default_login" value="password" {{if eq .DefaultLogin "password"}}checked{{end}} class="accent-black">
                         <span class="text-sm">{{T .Lang "login.password"}}</span>
                     </label>
                 </div>
             </div>
         </div>
 
-        <button type="submit"
-            class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
-            {{T .Lang "settings.save"}}
-        </button>
+        <!-- Save bar: shown on configuration tabs only -->
+        <div id="admin-save-bar" class="mt-8">
+            <button type="submit"
+                class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                {{T .Lang "settings.save"}}
+            </button>
+        </div>
     </form>
 
-    <!-- User management -->
-    <div class="border-t border-wl-border pt-8">
-        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-4">{{T .Lang "admin.users_section"}}</h2>
+    <!-- TMDB actions (same tab as TMDB, separate from settings form) -->
+    <div class="admin-panel max-w-lg" data-tab="tmdb">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6 border-t border-wl-border pt-8">{{T .Lang "admin.tmdb_actions"}}</h2>
+        <div class="flex flex-wrap gap-4 items-center">
+            <button type="button" hx-post="/api/tmdb/refresh-all" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
+                hx-indicator="#tmdb-spinner" hx-disabled-elt="this"
+                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-wait">
+                {{T .Lang "settings.refresh_metadata"}}
+            </button>
+            <button type="button" hx-post="/api/tmdb/refresh-upcoming" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
+                hx-indicator="#tmdb-spinner" hx-disabled-elt="this"
+                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-wait">
+                {{T .Lang "settings.refresh_upcoming"}}
+            </button>
+            <span id="tmdb-spinner" class="htmx-indicator text-xs text-wl-gray">{{T .Lang "admin.loading"}}</span>
+        </div>
+        <div id="tmdb-refresh-result" class="mt-4 text-xs text-wl-gray"></div>
+    </div>
+
+    <!-- Import link (Server tab) -->
+    <div class="admin-panel max-w-lg" data-tab="server">
+        <a href="/import" class="inline-block border-t border-wl-border pt-8 text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+            {{T .Lang "import.link"}} →
+        </a>
+    </div>
+
+    <!-- User management (Users tab) -->
+    <div class="admin-panel max-w-lg" data-tab="users">
         <p class="text-xs text-wl-gray mb-6">{{T .Lang "admin.users_help"}}</p>
 
         {{if .UserError}}
@@ -94,7 +130,7 @@
         {{end}}
 
         <!-- Create user -->
-        <form method="POST" action="/admin/users" class="max-w-lg grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <form method="POST" action="/admin/users" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             <input type="text" name="username" required placeholder="{{T .Lang "admin.users_username"}}"
                 class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
             <input type="email" name="email" placeholder="{{T .Lang "admin.users_email"}}"
@@ -110,7 +146,7 @@
         </form>
 
         <!-- Users list -->
-        <div class="max-w-lg border-t border-wl-border divide-y divide-wl-border">
+        <div class="border-t border-wl-border divide-y divide-wl-border">
             {{range .Users}}
             <div class="flex items-center justify-between py-3 gap-4">
                 <div class="min-w-0">
@@ -146,32 +182,41 @@
             {{end}}
         </div>
     </div>
-
-    <!-- TMDB Actions -->
-    <div class="border-t border-wl-border pt-8">
-        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "admin.tmdb_actions"}}</h2>
-        <div class="flex gap-4 items-center">
-            <button type="button" hx-post="/api/tmdb/refresh-all" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
-                hx-indicator="#tmdb-spinner" hx-disabled-elt="this"
-                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-wait">
-                {{T .Lang "settings.refresh_metadata"}}
-            </button>
-            <button type="button" hx-post="/api/tmdb/refresh-upcoming" hx-target="#tmdb-refresh-result" hx-swap="innerHTML"
-                hx-indicator="#tmdb-spinner" hx-disabled-elt="this"
-                class="px-5 py-2.5 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-wait">
-                {{T .Lang "settings.refresh_upcoming"}}
-            </button>
-            <span id="tmdb-spinner" class="htmx-indicator text-xs text-wl-gray">{{T .Lang "admin.loading"}}</span>
-        </div>
-        <div id="tmdb-refresh-result" class="mt-4 text-xs text-wl-gray"></div>
-    </div>
-
-    <!-- Import link -->
-    <div class="border-t border-wl-border pt-8">
-        <a href="/import" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
-            {{T .Lang "import.link"}} →
-        </a>
-    </div>
 </div>
+
+<script>
+(function () {
+    var root = document.getElementById('admin-root');
+    if (!root) return;
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('#admin-tabs [data-tab-btn]'));
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.admin-panel'));
+    var saveBar = document.getElementById('admin-save-bar');
+
+    function activate(name) {
+        panels.forEach(function (p) { p.classList.toggle('hidden', p.dataset.tab !== name); });
+        buttons.forEach(function (b) {
+            var on = b.dataset.tabBtn === name;
+            b.classList.toggle('text-black', on);
+            b.classList.toggle('border-black', on);
+            b.classList.toggle('text-wl-gray', !on);
+            b.classList.toggle('border-transparent', !on);
+        });
+        // The save bar belongs to the settings form; hide it on the Users tab.
+        if (saveBar) saveBar.classList.toggle('hidden', name === 'users');
+        try { localStorage.setItem('admin_tab', name); } catch (e) {}
+    }
+
+    buttons.forEach(function (b) {
+        b.addEventListener('click', function () { activate(b.dataset.tabBtn); });
+    });
+
+    var initial = root.getAttribute('data-initial-tab');
+    if (!initial) {
+        try { initial = localStorage.getItem('admin_tab'); } catch (e) {}
+    }
+    var valid = buttons.some(function (b) { return b.dataset.tabBtn === initial; });
+    activate(valid ? initial : 'tmdb');
+})();
+</script>
 {{template "foot" .}}
 {{end}}
