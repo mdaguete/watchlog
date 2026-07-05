@@ -719,13 +719,49 @@ func TestAddAndRemoveListItem(t *testing.T) {
 		t.Fatalf("expected 1 item, got %d", len(list.Items))
 	}
 
-	err = db.RemoveListItem(list.Items[0].ID)
+	err = db.RemoveListItem(lid, list.Items[0].ID)
 	if err != nil {
 		t.Fatalf("RemoveListItem: %v", err)
 	}
 	list, _ = db.GetListWithItems(lid)
 	if len(list.Items) != 0 {
 		t.Errorf("expected 0 items after remove, got %d", len(list.Items))
+	}
+}
+
+// TestRemoveListItem_ScopedByList ensures an item can only be removed via its
+// own list, preventing cross-list deletion (IDOR).
+func TestRemoveListItem_ScopedByList(t *testing.T) {
+	db := newTestDB(t)
+	uid, _ := db.CreateUser("u", "h")
+	victimList, _ := db.CreateList(uid, "victim", false)
+	attackerList, _ := db.CreateList(uid, "attacker", false)
+
+	if err := db.AddListItem(models.ListItem{ListID: victimList, EntityType: "series", EntityID: 1}); err != nil {
+		t.Fatalf("AddListItem: %v", err)
+	}
+	vl, _ := db.GetListWithItems(victimList)
+	if len(vl.Items) != 1 {
+		t.Fatalf("expected 1 item in victim list, got %d", len(vl.Items))
+	}
+	itemID := vl.Items[0].ID
+
+	// Attempt to remove the victim's item through a different list — must be a no-op.
+	if err := db.RemoveListItem(attackerList, itemID); err != nil {
+		t.Fatalf("RemoveListItem (cross-list): %v", err)
+	}
+	vl, _ = db.GetListWithItems(victimList)
+	if len(vl.Items) != 1 {
+		t.Errorf("cross-list deletion succeeded: item removed via wrong list_id")
+	}
+
+	// Removal through the correct list still works.
+	if err := db.RemoveListItem(victimList, itemID); err != nil {
+		t.Fatalf("RemoveListItem (correct list): %v", err)
+	}
+	vl, _ = db.GetListWithItems(victimList)
+	if len(vl.Items) != 0 {
+		t.Errorf("expected 0 items after correct remove, got %d", len(vl.Items))
 	}
 }
 

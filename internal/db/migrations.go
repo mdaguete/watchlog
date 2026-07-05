@@ -31,6 +31,7 @@ var migrations = []Migration{
 	{Version: 8, Description: "user theme preference", Up: migrateV8},
 	{Version: 9, Description: "API keys for MCP", Up: migrateV9},
 	{Version: 10, Description: "user blocked column", Up: migrateV10},
+	{Version: 11, Description: "hash existing plaintext API keys", Up: migrateV11},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -434,4 +435,39 @@ CREATE TABLE IF NOT EXISTS api_keys (
 func migrateV10(tx *sql.Tx) error {
 	_, err := tx.Exec("ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0")
 	return err
+}
+
+// migrateV11 replaces any plaintext API keys stored at rest with their SHA-256
+// hash. Keys created before this migration were stored verbatim and carry the
+// "wl_" prefix; hashed values (64 hex chars) never do, so the prefix reliably
+// identifies rows that still need hashing. This is idempotent.
+func migrateV11(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT id, key_hash FROM api_keys WHERE key_hash LIKE 'wl\\_%' ESCAPE '\\'")
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id  int64
+		key string
+	}
+	var toHash []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.key); err != nil {
+			rows.Close()
+			return err
+		}
+		toHash = append(toHash, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, r := range toHash {
+		if _, err := tx.Exec("UPDATE api_keys SET key_hash = ? WHERE id = ?", HashAPIKey(r.key), r.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

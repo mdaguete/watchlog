@@ -96,14 +96,20 @@ func (h *Handler) parsePathID(w http.ResponseWriter, r *http.Request, param stri
 	return id, true
 }
 
-// clientIP extracts the client IP from the request, checking X-Forwarded-For first.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP in the chain
-		if idx := strings.Index(xff, ","); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
+// clientIP extracts the client IP from the request. The X-Forwarded-For header
+// is client-controllable, so it is only trusted when the "trust_proxy" setting
+// is enabled (i.e. the app runs behind a reverse proxy that sets it). Otherwise
+// the connection's RemoteAddr is used, preventing rate-limit evasion via a
+// spoofed X-Forwarded-For header.
+func (h *Handler) clientIP(r *http.Request) string {
+	if h.DB.GetSetting("trust_proxy") == "true" {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// Take the first IP in the chain
+			if idx := strings.Index(xff, ","); idx != -1 {
+				return strings.TrimSpace(xff[:idx])
+			}
+			return strings.TrimSpace(xff)
 		}
-		return strings.TrimSpace(xff)
 	}
 	// Fall back to RemoteAddr (ip:port)
 	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
@@ -162,20 +168,24 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	ip := clientIP(r)
-	if !h.LoginLimiter.Allow(ip) {
+	ip := h.clientIP(r)
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	// Rate limit by IP and by target username. The username key caps brute-force
+	// attempts against a single account even if the attacker rotates source IPs.
+	userKey := "user:" + strings.ToLower(strings.TrimSpace(username))
+	if !h.LoginLimiter.Allow(ip) || !h.LoginLimiter.Allow(userKey) {
 		lang := h.getLang(r, 0)
 		w.WriteHeader(http.StatusTooManyRequests)
 		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.rate_limited"), "Lang": lang})
 		return
 	}
 
-	username := r.FormValue("username")
-	password := r.FormValue("password")
-
 	user, err := h.DB.GetUserByUsername(username)
 	if err != nil || !auth.CheckPassword(user.PasswordHash, password) {
 		h.LoginLimiter.Record(ip)
+		h.LoginLimiter.Record(userKey)
 		lang := h.getLang(r, 0)
 		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.error"), "Lang": lang})
 		return
@@ -188,6 +198,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.LoginLimiter.Reset(ip)
+	h.LoginLimiter.Reset(userKey)
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)
 	// Set theme cookie for client-side dark mode
@@ -1088,7 +1099,7 @@ func (h *Handler) APIRemoveFromList(w http.ResponseWriter, r *http.Request) {
 	if err != nil || list.UserID != userID { writeError(w, http.StatusForbidden, "forbidden"); return }
 	itemID, err := strconv.ParseInt(r.PathValue("itemId"), 10, 64)
 	if err != nil { writeError(w, http.StatusBadRequest, "invalid item id"); return }
-	h.DB.RemoveListItem(itemID)
+	h.DB.RemoveListItem(listID, itemID)
 	if r.Header.Get("HX-Request") == "true" { w.Write([]byte("")); return }
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -1778,7 +1789,14 @@ func extractZip(zipPath, destDir string) error {
 	}
 	defer r.Close()
 
-	const maxFileSize = 100 << 20 // 100MB per file
+	const (
+		maxFileSize  = 100 << 20 // 100MB per file
+		maxTotalSize = 2 << 30   // 2GB total uncompressed (zip-bomb guard)
+		maxEntries   = 5000      // cap number of extracted files
+	)
+
+	var totalWritten int64
+	extracted := 0
 
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
@@ -1788,6 +1806,9 @@ func extractZip(zipPath, destDir string) error {
 		name := filepath.Base(f.Name)
 		if name == "" || strings.HasPrefix(name, ".") {
 			continue
+		}
+		if extracted >= maxEntries {
+			return fmt.Errorf("zip has too many entries (max %d)", maxEntries)
 		}
 		destPath := filepath.Join(destDir, name)
 
@@ -1800,9 +1821,25 @@ func extractZip(zipPath, destDir string) error {
 			outFile.Close()
 			continue
 		}
-		io.Copy(outFile, io.LimitReader(rc, maxFileSize))
+		// Cap per-file, and stop if we would exceed the total budget.
+		remaining := maxTotalSize - totalWritten
+		if remaining <= 0 {
+			rc.Close()
+			outFile.Close()
+			return fmt.Errorf("zip exceeds maximum total size (%d bytes)", maxTotalSize)
+		}
+		limit := int64(maxFileSize)
+		if remaining < limit {
+			limit = remaining
+		}
+		n, _ := io.Copy(outFile, io.LimitReader(rc, limit))
 		rc.Close()
 		outFile.Close()
+		totalWritten += n
+		extracted++
+		if totalWritten >= maxTotalSize {
+			return fmt.Errorf("zip exceeds maximum total size (%d bytes)", maxTotalSize)
+		}
 	}
 	return nil
 }
@@ -1829,7 +1866,7 @@ func (h *Handler) APICreateKey(w http.ResponseWriter, r *http.Request) {
 	crypto_rand.Read(keyBytes)
 	key := fmt.Sprintf("wl_%x", keyBytes)
 
-	// Store key (the key itself is the lookup token since it's cryptographically random)
+	// Store only the SHA-256 hash of the key; the raw key is shown once below.
 	h.DB.CreateAPIKey(userID, key, name, scopes)
 
 	// Return the key once (won't be shown again)
