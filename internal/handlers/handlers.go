@@ -181,6 +181,12 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.DB.IsUserBlocked(user.ID) {
+		lang := h.getLang(r, 0)
+		h.Templates.ExecuteTemplate(w, "login.html", map[string]any{"Error": i18n.T(lang, "login.blocked"), "Lang": lang})
+		return
+	}
+
 	h.LoginLimiter.Reset(ip)
 	token := h.Sessions.Create(user.ID)
 	auth.SetSessionCookie(w, token)

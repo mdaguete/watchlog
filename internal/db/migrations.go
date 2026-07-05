@@ -30,6 +30,7 @@ var migrations = []Migration{
 	{Version: 7, Description: "snooze shows from continue watching", Up: migrateV7},
 	{Version: 8, Description: "user theme preference", Up: migrateV8},
 	{Version: 9, Description: "API keys for MCP", Up: migrateV9},
+	{Version: 10, Description: "user blocked column", Up: migrateV10},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -427,5 +428,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	last_used_at DATETIME
 )`)
+	return err
+}
+
+func migrateV10(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0")
 	return err
 }
