@@ -91,6 +91,7 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - Security headers middleware: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy
 - Graceful shutdown on SIGINT/SIGTERM
 - Minimum password length: 8 characters
+- User blocking: blocked users cannot login (managed via `watchdog` CLI)
 
 ### i18n
 - Supported languages: Spanish (es) and English (en)
@@ -135,10 +136,25 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 - "Mark as watched" button fades out the card without page reload
 - Infinite scroll via HTMX `hx-trigger="revealed"` (5 items per page)
 - Skips episodes with no `air_date` or future air dates (not yet available)
+- **Novedades** section: horizontal scroll of shows with new seasons available
+- **Snooze**: hides a show until next episode is marked (button appears after 10+ days inactive)
+- **Auto-unarchive**: when TMDB refresh detects new season on "Returning Series", unarchives for all users
+
+### Timeline (/timeline)
+- Infinite scroll of watched activity day by day
+- Day boxes with border, connected to central timeline line via dot
+- Collapsed by default: shows first item + "+N more" expand/collapse toggle
+- Year/month jump filter (click year → months → loads from that point)
+- Today button to return to present
+- Items link to show detail or movie detail
+- Localized titles (show name + episode name)
 
 ### Movies
-- Movies page shows stats header: total movies watched + total runtime
-- Stats use `importer.FormatRuntime` for human-readable time format
+- Two sections: Watchlist (pending, horizontal scroll) + Watched (grid)
+- Adding a movie = adds to watchlist (pending)
+- Mark as watched from movie detail page
+- Movie detail page: poster, title, genres, runtime, synopsis, watched toggle
+- Movies list items link to detail page
 
 ### Worker
 - Background goroutine refreshes upcoming episodes cache daily
@@ -166,7 +182,9 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 | File | Responsibility |
 |------|---------------|
 | `cmd/server/main.go` | Entrypoint, routes, middleware, template loading, FuncMap |
+| `cmd/watchdog/main.go` | Admin CLI (user/config/db management) |
 | `internal/db/db.go` | Schema, migrations, all queries |
+| `internal/db/migrations.go` | Database migrations (v1–v10) |
 | `internal/models/models.go` | Domain structs |
 | `internal/handlers/handlers.go` | HTTP handlers (API JSON + HTML pages) |
 | `internal/i18n/i18n.go` | Translation maps and language detection |
@@ -177,9 +195,13 @@ WatchLog is a self-hosted replacement for the TVTime app (which shut down). It's
 | `internal/mail/mail.go` | SMTP email sending, URL config parsing |
 | `internal/worker/upcoming.go` | Background worker for upcoming episode cache |
 | `internal/worker/refresh.go` | Full TMDB metadata refresh (used by post-migration hook) |
+| `internal/mcp/server.go` | MCP server, auth middleware |
+| `internal/mcp/tools.go` | MCP tool definitions and handlers |
 | `web/templates/layout.html` | `head` and `foot` (nav + footer) |
 | `web/templates/*.html` | One template per page |
 | `web/templates/settings.html` | Language preference page |
+| `docs/MCP.md` | MCP agent configuration guide |
+| `docs/CLI.md` | watchdog CLI documentation |
 | `Dockerfile` | Multi-stage distroless container |
 | `.goreleaser.yaml` | Release builds (linux/darwin × amd64/arm64) |
 | `Makefile` | Dev commands, build, release |
@@ -224,6 +246,12 @@ docker run -d -p 8080:8080 \
 
 # TMDB
 curl -X POST http://localhost:8080/api/tmdb/fetch-all  # Enrich metadata
+
+# Admin CLI (watchdog)
+./bin/watchdog --datadir /data users                    # List users
+./bin/watchdog --datadir /data user-block <name>        # Block user
+./bin/watchdog --datadir /data config                   # Show settings
+./bin/watchdog --datadir /data db-info                  # DB stats
 ```
 
 ## Deployment
