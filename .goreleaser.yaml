@@ -35,6 +35,11 @@ checksum:
   name_template: "checksums.txt"
 
 release:
+  # Immutable-release best practice: create the release as a draft so all assets
+  # are attached before it is published. The tag only becomes immutable on
+  # publish, so a draft can be safely discarded/re-cut without burning the tag.
+  # Publish manually from the GitHub UI after reviewing the draft.
+  draft: true
   # Automatically mark tags with a prerelease suffix (e.g. -rc.N, -beta) as
   # GitHub prereleases.
   prerelease: auto
