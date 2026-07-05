@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   sync:
+    # Only sync on final releases; prereleases (e.g. -rc.N) must not fast-forward develop.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
