@@ -144,6 +144,18 @@ func main() {
 		}
 	}
 
+	// Trust X-Forwarded-For only when explicitly enabled (app behind a trusted
+	// reverse proxy). Otherwise the header is ignored to prevent rate-limit
+	// evasion via a spoofed X-Forwarded-For.
+	if tp := os.Getenv("TRUST_PROXY"); tp != "" {
+		if tp == "true" || tp == "1" {
+			database.SetSetting("trust_proxy", "true")
+			log.Println("TRUST_PROXY enabled: X-Forwarded-For will be trusted")
+		} else {
+			database.SetSetting("trust_proxy", "false")
+		}
+	}
+
 	// Start background worker for upcoming episodes cache
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

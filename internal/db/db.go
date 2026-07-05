@@ -1,7 +1,9 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -9,6 +11,14 @@ import (
 
 	"github.com/mdaguete/watchlog/internal/models"
 )
+
+// HashAPIKey returns the hex-encoded SHA-256 of a raw API key. API keys are
+// high-entropy random tokens, so a fast hash (not bcrypt) is sufficient to
+// avoid storing recoverable secrets at rest while keeping lookups O(1).
+func HashAPIKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
 
 type DB struct {
 	conn *sql.DB
@@ -768,8 +778,8 @@ func (db *DB) AddListItem(item models.ListItem) error {
 	return err
 }
 
-func (db *DB) RemoveListItem(itemID int64) error {
-	_, err := db.conn.Exec(`DELETE FROM list_items WHERE id = ?`, itemID)
+func (db *DB) RemoveListItem(listID, itemID int64) error {
+	_, err := db.conn.Exec(`DELETE FROM list_items WHERE id = ? AND list_id = ?`, itemID, listID)
 	return err
 }
 
@@ -1372,7 +1382,6 @@ func sortInts(s []int) {
 	}
 }
 
-
 // --- API Keys ---
 
 // APIKey represents a user's API key metadata.
@@ -1384,16 +1393,20 @@ type APIKey struct {
 	LastUsedAt time.Time
 }
 
-func (db *DB) CreateAPIKey(userID int64, keyHash, name, scopes string) (int64, error) {
+// CreateAPIKey stores only the SHA-256 hash of the raw key. The raw key is
+// shown to the user once at creation time and never persisted.
+func (db *DB) CreateAPIKey(userID int64, rawKey, name, scopes string) (int64, error) {
 	res, err := db.conn.Exec(`INSERT INTO api_keys (user_id, key_hash, name, scopes) VALUES (?, ?, ?, ?)`,
-		userID, keyHash, name, scopes)
+		userID, HashAPIKey(rawKey), name, scopes)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func (db *DB) ValidateAPIKey(keyHash string) (int64, string, bool) {
+// ValidateAPIKey looks up a key by the hash of the presented raw key.
+func (db *DB) ValidateAPIKey(rawKey string) (int64, string, bool) {
+	keyHash := HashAPIKey(rawKey)
 	var userID int64
 	var scopes string
 	err := db.conn.QueryRow(`SELECT user_id, scopes FROM api_keys WHERE key_hash = ?`, keyHash).Scan(&userID, &scopes)
