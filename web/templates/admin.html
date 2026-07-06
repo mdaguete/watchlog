@@ -1,6 +1,6 @@
 {{define "admin.html"}}
 {{template "head" .}}
-<div class="space-y-8" id="admin-root" {{if .UserError}}data-initial-tab="users"{{end}}>
+<div class="space-y-8" id="admin-root" {{if or .UserError .InviteLink}}data-initial-tab="users"{{end}}>
     <div class="border-b border-wl-border pb-6">
         <h1 class="font-serif text-4xl">{{T .Lang "admin.title"}}</h1>
         <p class="text-xs text-wl-gray mt-2">{{T .Lang "admin.subtitle"}}</p>
@@ -123,29 +123,56 @@
 
     <!-- User management (Users tab) -->
     <div class="admin-panel max-w-lg" data-tab="users">
-        <p class="text-xs text-wl-gray mb-6">{{T .Lang "admin.users_help"}}</p>
+        <p class="text-xs text-wl-gray mb-6">{{T .Lang "admin.users_invite_help"}}</p>
 
         {{if .UserError}}
         <p class="text-xs text-red-600 mb-4">{{.UserError}}</p>
         {{end}}
 
-        <!-- Create user -->
-        <form method="POST" action="/admin/users" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <input type="text" name="username" required placeholder="{{T .Lang "admin.users_username"}}"
-                class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-            <input type="email" name="email" placeholder="{{T .Lang "admin.users_email"}}"
-                class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-            <input type="password" name="password" required minlength="8" placeholder="{{T .Lang "admin.users_password"}}"
-                class="border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
-            <div class="sm:col-span-3">
-                <button type="submit"
-                    class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
-                    {{T .Lang "admin.users_create"}}
-                </button>
-            </div>
+        <!-- Invite by email -->
+        <form method="POST" action="/admin/invites" class="flex flex-col sm:flex-row gap-4 mb-6">
+            <input type="email" name="email" required placeholder="{{T .Lang "admin.users_invite"}}"
+                class="flex-1 border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black">
+            <button type="submit"
+                class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors shrink-0">
+                {{T .Lang "admin.users_invite_send"}}
+            </button>
         </form>
 
-        <!-- Users list -->
+        {{if .InviteLink}}
+        <div class="border border-wl-border p-4 mb-8">
+            <p class="text-xs uppercase tracking-widest text-wl-gray mb-2">{{if .UserOK}}{{.UserOK}} — {{end}}{{T .Lang "admin.users_invite_link"}}</p>
+            <div class="flex items-center gap-2">
+                <code class="text-sm break-all select-all flex-1" id="invite-link-value">{{.InviteLink}}</code>
+                <button type="button"
+                    onclick="navigator.clipboard.writeText(document.getElementById('invite-link-value').textContent).then(()=>{this.textContent='✓'});setTimeout(()=>{this.textContent='Copy'},1500)"
+                    class="px-3 py-1 text-xs uppercase tracking-widest border border-wl-border hover:bg-black hover:text-white transition-colors shrink-0">Copy</button>
+            </div>
+        </div>
+        {{end}}
+
+        <!-- Pending invitations -->
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-3 mt-8">{{T .Lang "admin.users_pending"}}</h2>
+        {{if .PendingInvites}}
+        <div class="border-t border-wl-border divide-y divide-wl-border mb-10">
+            {{range .PendingInvites}}
+            <div class="flex items-center justify-between py-3 gap-4">
+                <p class="text-sm truncate">{{.Email}}</p>
+                <form method="POST" action="/admin/invites/{{.ID}}/revoke" class="shrink-0">
+                    <button type="submit"
+                        class="text-xs uppercase tracking-widest text-red-600 hover:text-red-800 transition-colors">
+                        {{T $.Lang "admin.users_revoke"}}
+                    </button>
+                </form>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <p class="text-xs text-wl-gray mb-10">{{T .Lang "admin.users_no_pending"}}</p>
+        {{end}}
+
+        <!-- Registered users -->
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-3">{{T .Lang "admin.users_registered"}}</h2>
         <div class="border-t border-wl-border divide-y divide-wl-border">
             {{range .Users}}
             <div class="flex items-center justify-between py-3 gap-4">

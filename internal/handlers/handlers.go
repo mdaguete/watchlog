@@ -1473,6 +1473,8 @@ func (h *Handler) adminData(r *http.Request, userID int64) map[string]any {
 	}
 	users, _ := h.DB.ListAllUsers()
 	data["Users"] = users
+	invites, _ := h.DB.ListPendingInvitations()
+	data["PendingInvites"] = invites
 	return data
 }
 
@@ -1532,48 +1534,156 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 
 // --- Admin: user management (web, admin only) ---
 
-// AdminCreateUser creates a new user from the admin page.
-func (h *Handler) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
+// AdminInviteUser creates an email invitation. The invite link is emailed (when
+// SMTP is configured) and always shown to the admin so it can be shared manually.
+func (h *Handler) AdminInviteUser(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAdmin(w, r)
 	if userID == 0 {
 		return
 	}
 	r.ParseForm()
 	lang := h.getLang(r, userID)
-	username := strings.TrimSpace(r.FormValue("username"))
 	email := strings.TrimSpace(r.FormValue("email"))
-	password := r.FormValue("password")
 
-	renderErr := func(key string) {
+	render := func(extra map[string]any, status int) {
 		data := h.adminData(r, userID)
-		data["UserError"] = i18n.T(lang, key)
-		w.WriteHeader(http.StatusBadRequest)
+		for k, v := range extra {
+			data[k] = v
+		}
+		w.WriteHeader(status)
 		h.Templates.ExecuteTemplate(w, "admin.html", data)
 	}
 
-	if username == "" {
-		renderErr("admin.users_err_username")
+	// Basic email validation.
+	if email == "" || !strings.Contains(email, "@") || strings.Contains(email, " ") {
+		render(map[string]any{"UserError": i18n.T(lang, "admin.users_err_email")}, http.StatusBadRequest)
 		return
 	}
-	if len(password) < 8 {
-		renderErr("admin.users_err_password")
+	// Reject if a user already has that email.
+	if _, err := h.DB.GetUserByEmail(email); err == nil {
+		render(map[string]any{"UserError": i18n.T(lang, "admin.users_err_email_exists")}, http.StatusBadRequest)
 		return
 	}
-	hash, err := auth.HashPassword(password)
-	if err != nil {
-		renderErr("admin.users_err_password")
+
+	token := auth.GenerateToken()
+	expiresAt := time.Now().Add(24 * time.Hour)
+	if _, err := h.DB.CreateInvitation(email, token, expiresAt); err != nil {
+		render(map[string]any{"UserError": i18n.T(lang, "admin.users_err_email")}, http.StatusInternalServerError)
 		return
 	}
-	newID, err := h.DB.CreateUser(username, hash)
-	if err != nil {
-		renderErr("admin.users_err_exists")
+
+	inviteURL := h.getWatchLogURL() + "/invite?token=" + token
+
+	// Send the invitation email if SMTP is configured.
+	smtpCfg := h.getSMTPConfig()
+	if smtpCfg.Configured() {
+		body := fmt.Sprintf(`<p>%s</p><p><a href="%s">%s</a></p>`,
+			html.EscapeString(i18n.T(lang, "invite.email_body")),
+			html.EscapeString(inviteURL),
+			html.EscapeString(inviteURL))
+		if err := mail.Send(smtpCfg, email, i18n.T(lang, "email.invite_subject"), body); err != nil {
+			log.Printf("failed to send invitation email to %s: %v", email, err)
+		}
+	}
+	log.Printf("ACTION: admin=%d invited email=%q", userID, email)
+	render(map[string]any{
+		"InviteLink": inviteURL,
+		"UserOK":     i18n.T(lang, "admin.users_invite_sent"),
+	}, http.StatusOK)
+}
+
+// AdminRevokeInvite deletes a pending invitation.
+func (h *Handler) AdminRevokeInvite(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAdmin(w, r)
+	if userID == 0 {
 		return
 	}
-	if email != "" {
-		h.DB.UpdateUserEmail(newID, email)
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
 	}
-	log.Printf("ACTION: admin=%d created user=%q id=%d", userID, username, newID)
+	h.DB.RevokeInvitation(id)
+	log.Printf("ACTION: admin=%d revoked invitation id=%d", userID, id)
 	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// PageAcceptInvite shows the invitation acceptance form (public).
+func (h *Handler) PageAcceptInvite(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	token := r.URL.Query().Get("token")
+	email, ok := h.DB.GetInvitation(token)
+	if !ok {
+		h.Templates.ExecuteTemplate(w, "invite.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "invite.invalid"),
+		})
+		return
+	}
+	h.Templates.ExecuteTemplate(w, "invite.html", map[string]any{
+		"Lang":  lang,
+		"Token": token,
+		"Email": email,
+	})
+}
+
+// HandleAcceptInvite creates the account from an invitation (public). Username is
+// required; password is optional (empty means the user signs in via magic link).
+func (h *Handler) HandleAcceptInvite(w http.ResponseWriter, r *http.Request) {
+	lang := h.getLang(r, 0)
+	r.ParseForm()
+	token := r.FormValue("token")
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+
+	email, ok := h.DB.GetInvitation(token)
+	if !ok {
+		h.Templates.ExecuteTemplate(w, "invite.html", map[string]any{
+			"Lang":  lang,
+			"Error": i18n.T(lang, "invite.invalid"),
+		})
+		return
+	}
+
+	renderErr := func(key string) {
+		h.Templates.ExecuteTemplate(w, "invite.html", map[string]any{
+			"Lang":  lang,
+			"Token": token,
+			"Email": email,
+			"Error": i18n.T(lang, key),
+		})
+	}
+
+	if username == "" {
+		renderErr("invite.err_username")
+		return
+	}
+	// Password is optional; if provided it must meet the minimum length.
+	passwordHash := ""
+	if password != "" {
+		if len(password) < 8 {
+			renderErr("invite.err_password")
+			return
+		}
+		hash, err := auth.HashPassword(password)
+		if err != nil {
+			renderErr("invite.err_password")
+			return
+		}
+		passwordHash = hash
+	}
+
+	newID, err := h.DB.CreateUser(username, passwordHash)
+	if err != nil {
+		renderErr("invite.err_username_taken")
+		return
+	}
+	h.DB.UpdateUserEmail(newID, email)
+	h.DB.AcceptInvitation(token)
+
+	sessionToken := h.Sessions.Create(newID)
+	auth.SetSessionCookie(w, sessionToken)
+	log.Printf("ACTION: invitation accepted user=%q id=%d", username, newID)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 // AdminToggleUserBlock blocks or unblocks a user. The admin (id 1) cannot be blocked.

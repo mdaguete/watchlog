@@ -1139,6 +1139,73 @@ func (db *DB) CleanExpiredMagicLinks() error {
 	return err
 }
 
+// --- Invitations ---
+
+// Invitation represents a pending or accepted user invitation.
+type Invitation struct {
+	ID        int64
+	Email     string
+	Token     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	Accepted  bool
+}
+
+func (db *DB) CreateInvitation(email, token string, expiresAt time.Time) (int64, error) {
+	res, err := db.conn.Exec(`INSERT INTO invitations (email, token, expires_at) VALUES (?, ?, ?)`, email, token, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// GetInvitation returns the email for a valid (not accepted, not expired) invitation token.
+func (db *DB) GetInvitation(token string) (string, bool) {
+	var email string
+	err := db.conn.QueryRow(`SELECT email FROM invitations WHERE token = ? AND accepted_at IS NULL AND expires_at > ?`, token, time.Now()).Scan(&email)
+	if err != nil {
+		return "", false
+	}
+	return email, true
+}
+
+// AcceptInvitation marks an invitation as accepted so its token can no longer be used.
+func (db *DB) AcceptInvitation(token string) error {
+	_, err := db.conn.Exec(`UPDATE invitations SET accepted_at = ? WHERE token = ?`, time.Now(), token)
+	return err
+}
+
+// ListPendingInvitations returns invitations that are neither accepted nor expired.
+func (db *DB) ListPendingInvitations() ([]Invitation, error) {
+	rows, err := db.conn.Query(`SELECT id, email, token, created_at, expires_at FROM invitations WHERE accepted_at IS NULL AND expires_at > ? ORDER BY created_at DESC`, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var invs []Invitation
+	for rows.Next() {
+		var inv Invitation
+		if err := rows.Scan(&inv.ID, &inv.Email, &inv.Token, &inv.CreatedAt, &inv.ExpiresAt); err != nil {
+			return nil, err
+		}
+		invs = append(invs, inv)
+	}
+	return invs, nil
+}
+
+// RevokeInvitation deletes an invitation by id.
+func (db *DB) RevokeInvitation(id int64) error {
+	_, err := db.conn.Exec(`DELETE FROM invitations WHERE id = ?`, id)
+	return err
+}
+
+// HasPendingInvitationForEmail reports whether there's an active invitation for the email.
+func (db *DB) HasPendingInvitationForEmail(email string) bool {
+	var n int
+	db.conn.QueryRow(`SELECT COUNT(*) FROM invitations WHERE email = ? AND accepted_at IS NULL AND expires_at > ?`, email, time.Now()).Scan(&n)
+	return n > 0
+}
+
 // --- Episode Details ---
 
 // EpisodeDetail holds metadata for a single episode from TMDB.

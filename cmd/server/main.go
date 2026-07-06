@@ -256,6 +256,8 @@ func main() {
 	mux.HandleFunc("GET /magic-login", h.PageMagicLogin)
 	mux.HandleFunc("POST /magic-login", h.HandleMagicLogin)
 	mux.HandleFunc("GET /auth/magic", h.HandleMagicAuth)
+	mux.HandleFunc("GET /invite", h.PageAcceptInvite)
+	mux.HandleFunc("POST /invite", h.HandleAcceptInvite)
 
 	// Web pages
 	mux.HandleFunc("GET /", h.PageDashboard)
@@ -278,7 +280,8 @@ func main() {
 	mux.HandleFunc("POST /settings", h.SaveSettings)
 	mux.HandleFunc("GET /admin", h.PageAdmin)
 	mux.HandleFunc("POST /admin", h.SaveAdmin)
-	mux.HandleFunc("POST /admin/users", h.AdminCreateUser)
+	mux.HandleFunc("POST /admin/invites", h.AdminInviteUser)
+	mux.HandleFunc("POST /admin/invites/{id}/revoke", h.AdminRevokeInvite)
 	mux.HandleFunc("POST /admin/users/{id}/block", h.AdminToggleUserBlock)
 	mux.HandleFunc("POST /admin/users/{id}/delete", h.AdminDeleteUser)
 

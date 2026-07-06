@@ -32,6 +32,7 @@ var migrations = []Migration{
 	{Version: 9, Description: "API keys for MCP", Up: migrateV9},
 	{Version: 10, Description: "user blocked column", Up: migrateV10},
 	{Version: 11, Description: "hash existing plaintext API keys", Up: migrateV11},
+	{Version: 12, Description: "user invitations", Up: migrateV12},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -470,4 +471,17 @@ func migrateV11(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func migrateV12(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS invitations (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	email TEXT NOT NULL DEFAULT '',
+	token TEXT UNIQUE NOT NULL,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	expires_at DATETIME NOT NULL,
+	accepted_at DATETIME
+)`)
+	return err
 }
