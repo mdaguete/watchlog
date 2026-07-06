@@ -1,0 +1,78 @@
+name: Manual Container Build
+
+# Manually build and push a container image from a chosen branch, tag or SHA.
+# Useful for producing preview/dev images without cutting a release.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to build"
+        required: true
+        default: "develop"
+      image_tag:
+        description: "Optional image tag override (defaults to a sanitized ref name)"
+        required: false
+        default: ""
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout ${{ inputs.ref }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            raw="${{ inputs.image_tag }}"
+          else
+            raw="${{ inputs.ref }}"
+          fi
+          # Sanitize to a valid Docker tag (replace anything not [A-Za-z0-9._-] with -)
+          safe="$(printf '%s' "$raw" | sed 's#[^A-Za-z0-9._-]#-#g' | cut -c1-128)"
+          echo "value=$safe" >> "$GITHUB_OUTPUT"
+          echo "Building image tag: $safe"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # Tag with the sanitized ref/override and the short commit SHA.
+          # Deliberately does NOT touch 'latest' — that's reserved for releases.
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
