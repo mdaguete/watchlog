@@ -323,6 +323,8 @@ func main() {
 
 	// API: TMDB
 	mux.HandleFunc("POST /api/shows/{id}/fetch-tmdb", h.APIFetchTMDB)
+	mux.HandleFunc("GET /api/shows/{id}/rematch", h.APIRematchSearch)
+	mux.HandleFunc("POST /api/shows/{id}/relink-tmdb", h.APIRelinkTMDB)
 	mux.HandleFunc("POST /api/tmdb/fetch-all", h.APIFetchAllTMDB)
 	mux.HandleFunc("POST /api/tmdb/add-show", h.APIAddShowFromTMDB)
 	mux.HandleFunc("POST /api/tmdb/add-movie", h.APIAddMovieFromTMDB)

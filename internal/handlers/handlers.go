@@ -1138,6 +1138,17 @@ func (h *Handler) APIFetchTMDB(w http.ResponseWriter, r *http.Request) {
 	if !ok { return }
 	show, err := h.DB.GetShow(id)
 	if err != nil { writeError(w, http.StatusNotFound, "show not found"); return }
+	// If the show is already linked to a TMDB entry (including a manual re-link),
+	// refresh by that id instead of re-matching by name, so a correct match is
+	// never silently overwritten by a title search.
+	if show.TMDBID > 0 {
+		if err := worker.RefreshShowByTMDB(h.DB, h.TMDB, id, show.TMDBID); err != nil {
+			writeError(w, http.StatusBadGateway, "refresh failed"); return
+		}
+		log.Printf("TMDB: refreshed show=%d by existing tmdb_id=%d", id, show.TMDBID)
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "tmdb_id": show.TMDBID})
+		return
+	}
 	result, err := h.TMDB.FindTVByName(show.Name)
 	if err != nil { writeError(w, http.StatusNotFound, "not found on TMDB"); return }
 	genres := extractGenreNames(result.Genres)
@@ -1146,6 +1157,75 @@ func (h *Handler) APIFetchTMDB(w http.ResponseWriter, r *http.Request) {
 	h.DB.UpdateShowTMDB(id, result.ID, posterURL, backdropURL, result.Overview, genres, result.Status, len(result.Seasons))
 	log.Printf("TMDB: fetched %q tmdb_id=%d", show.Name, result.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "tmdb_id": result.ID})
+}
+
+// APIRematchSearch searches TMDB for the correct show so the user can re-link a
+// mismatched entry. Returns an HTMX fragment with a "use this" action per result.
+func (h *Handler) APIRematchSearch(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	lang := h.getLang(r, userID)
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		w.Write([]byte(`<p class="text-sm text-wl-gray">` + i18n.T(lang, "tmdb.not_configured") + `</p>`))
+		return
+	}
+	query := r.URL.Query().Get("q")
+	if strings.TrimSpace(query) == "" {
+		w.Write([]byte(""))
+		return
+	}
+	results, _ := h.TMDB.SearchTV(query)
+	h.Templates.ExecuteTemplate(w, "tmdb_rematch_results.html", map[string]any{
+		"Lang":    lang,
+		"Results": results,
+		"ShowID":  id,
+	})
+}
+
+// APIRelinkTMDB re-links a show to a specific TMDB id and refetches its metadata.
+// Watch history is preserved (episodes are keyed by show id, not tmdb id).
+func (h *Handler) APIRelinkTMDB(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
+	}
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if _, err := h.DB.GetShow(id); err != nil {
+		writeError(w, http.StatusNotFound, "show not found")
+		return
+	}
+	var req struct {
+		TMDBID int `json:"tmdb_id"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.TMDBID <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid tmdb_id")
+		return
+	}
+	// Validate the target exists on TMDB before re-linking.
+	if _, err := h.TMDB.GetTVShow(req.TMDBID); err != nil {
+		writeError(w, http.StatusNotFound, "tmdb show not found")
+		return
+	}
+	if err := worker.RefreshShowByTMDB(h.DB, h.TMDB, id, req.TMDBID); err != nil {
+		writeError(w, http.StatusInternalServerError, "refresh failed")
+		return
+	}
+	log.Printf("ACTION: user=%d relinked show=%d to tmdb_id=%d", userID, id, req.TMDBID)
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "tmdb_id": req.TMDBID})
 }
 
 func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
