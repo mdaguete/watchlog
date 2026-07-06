@@ -688,7 +688,15 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	items, _ := h.DB.GetTimelineItems(userID, "", 100)
+
+	// Optional ?month=YYYY-MM opens the timeline at that month (shared with the calendar tab).
+	before := ""
+	curMonth := time.Now().Format("2006-01")
+	if t, err := time.ParseInLocation("2006-01", r.URL.Query().Get("month"), time.Local); err == nil {
+		curMonth = t.Format("2006-01")
+		before = t.AddDate(0, 1, 0).Format("2006-01-02") // first day of the next month
+	}
+	items, _ := h.DB.GetTimelineItems(userID, before, 100)
 	days := groupByDay(items)
 	if len(days) > 10 {
 		days = days[:10]
@@ -704,6 +712,7 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 		"LastDate": lastDate,
 		"HasMore":  len(days) == 10,
 		"Years":    years,
+		"CurMonth": curMonth,
 	})
 }
 
@@ -863,6 +872,7 @@ func (h *Handler) PageCalendar(w http.ResponseWriter, r *http.Request) {
 		"Lang":       lang,
 		"Weeks":      weeks,
 		"MonthLabel": fmt.Sprintf("%s %d", monthName, firstOfMonth.Year()),
+		"CurMonth":   firstOfMonth.Format("2006-01"),
 		"PrevMonth":  firstOfMonth.AddDate(0, -1, 0).Format("2006-01"),
 		"NextMonth":  nextMonth.Format("2006-01"),
 		"Today":      time.Now().Format("2006-01-02"),
