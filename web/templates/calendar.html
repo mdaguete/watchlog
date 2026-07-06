@@ -1,13 +1,19 @@
 {{define "calendar.html"}}
 {{template "head" .}}
-<div class="space-y-8">
-    <div class="flex items-center justify-between border-b border-wl-border pb-6">
-        <h1 class="font-serif text-4xl">{{T .Lang "calendar.title"}}</h1>
-        <div class="flex items-center gap-4">
-            <a href="/calendar?month={{.PrevMonth}}" class="text-lg text-wl-gray hover:text-black transition-colors">←</a>
-            <span class="text-sm uppercase tracking-widest w-40 text-center">{{.MonthLabel}}</span>
-            <a href="/calendar?month={{.NextMonth}}" class="text-lg text-wl-gray hover:text-black transition-colors">→</a>
-        </div>
+<div class="space-y-6">
+    <div>
+        <h1 class="font-serif text-4xl mb-4">{{T .Lang "timeline.title"}}</h1>
+        <nav class="flex gap-6 border-b border-wl-border">
+            <a href="/timeline" class="pb-3 border-b-2 border-transparent text-wl-gray hover:text-black text-xs uppercase tracking-widest transition-colors">{{T .Lang "nav.timeline"}}</a>
+            <a href="/calendar" class="pb-3 border-b-2 border-black text-black text-xs uppercase tracking-widest">{{T .Lang "nav.calendar"}}</a>
+        </nav>
+    </div>
+
+    <!-- Month navigation -->
+    <div class="flex items-center justify-center gap-4">
+        <a href="/calendar?month={{.PrevMonth}}" class="text-lg text-wl-gray hover:text-black transition-colors">←</a>
+        <span class="text-sm uppercase tracking-widest w-44 text-center">{{.MonthLabel}}</span>
+        <a href="/calendar?month={{.NextMonth}}" class="text-lg text-wl-gray hover:text-black transition-colors">→</a>
     </div>
 
     <!-- Weekday headers -->
@@ -27,9 +33,9 @@
         {{range .Weeks}}
         <div class="grid grid-cols-7 gap-px">
             {{range .}}
-            <div class="min-h-24 border border-wl-border p-1.5 {{if not .InMonth}}bg-wl-light/40{{end}} {{if eq .Date $.Today}}ring-1 ring-black{{end}}">
-                <div class="text-xs {{if .InMonth}}text-wl-dark{{else}}text-wl-gray{{end}} mb-1">{{.Day}}</div>
-                <div class="space-y-1">
+            <div class="h-28 overflow-hidden flex flex-col border border-wl-border p-1.5 {{if not .InMonth}}bg-wl-light/40{{end}} {{if eq .Date $.Today}}ring-1 ring-black{{end}}">
+                <div class="text-xs {{if .InMonth}}text-wl-dark{{else}}text-wl-gray{{end}} mb-1 shrink-0">{{.Day}}</div>
+                <div class="space-y-1 overflow-y-auto grow">
                     {{range .Items}}
                     <button type="button"
                         onclick="calEdit(this, '{{.Type}}', {{.ID}}, {{.SeasonNumber}}, {{.EpisodeNumber}}, '{{.DT}}')"
