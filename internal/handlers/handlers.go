@@ -1138,6 +1138,17 @@ func (h *Handler) APIFetchTMDB(w http.ResponseWriter, r *http.Request) {
 	if !ok { return }
 	show, err := h.DB.GetShow(id)
 	if err != nil { writeError(w, http.StatusNotFound, "show not found"); return }
+	// If the show is already linked to a TMDB entry (including a manual re-link),
+	// refresh by that id instead of re-matching by name, so a correct match is
+	// never silently overwritten by a title search.
+	if show.TMDBID > 0 {
+		if err := worker.RefreshShowByTMDB(h.DB, h.TMDB, id, show.TMDBID); err != nil {
+			writeError(w, http.StatusBadGateway, "refresh failed"); return
+		}
+		log.Printf("TMDB: refreshed show=%d by existing tmdb_id=%d", id, show.TMDBID)
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "tmdb_id": show.TMDBID})
+		return
+	}
 	result, err := h.TMDB.FindTVByName(show.Name)
 	if err != nil { writeError(w, http.StatusNotFound, "not found on TMDB"); return }
 	genres := extractGenreNames(result.Genres)
