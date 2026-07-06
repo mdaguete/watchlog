@@ -1,0 +1,101 @@
+{{define "calendar.html"}}
+{{template "head" .}}
+<div class="space-y-6">
+    <div>
+        <h1 class="font-serif text-4xl mb-4">{{T .Lang "timeline.title"}}</h1>
+        <nav class="flex gap-6 border-b border-wl-border">
+            <a href="/timeline?month={{.CurMonth}}" class="pb-3 border-b-2 border-transparent text-wl-gray hover:text-black text-xs uppercase tracking-widest transition-colors">{{T .Lang "nav.timeline"}}</a>
+            <a href="/calendar" class="pb-3 border-b-2 border-black text-black text-xs uppercase tracking-widest">{{T .Lang "nav.calendar"}}</a>
+        </nav>
+    </div>
+
+    <!-- Month navigation -->
+    <div class="flex items-center justify-center gap-4">
+        <a href="/calendar?month={{.PrevMonth}}" class="text-lg text-wl-gray hover:text-black transition-colors">←</a>
+        <span class="text-sm uppercase tracking-widest w-44 text-center">{{.MonthLabel}}</span>
+        <a href="/calendar?month={{.NextMonth}}" class="text-lg text-wl-gray hover:text-black transition-colors">→</a>
+    </div>
+
+    <!-- Weekday headers -->
+    <div class="grid grid-cols-7 gap-px text-center">
+        {{$lang := .Lang}}
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d0"}}</div>
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d1"}}</div>
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d2"}}</div>
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d3"}}</div>
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d4"}}</div>
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d5"}}</div>
+        <div class="text-[10px] uppercase tracking-widest text-wl-gray pb-2">{{T $lang "cal.d6"}}</div>
+    </div>
+
+    <!-- Weeks -->
+    <div class="space-y-px">
+        {{range .Weeks}}
+        <div class="grid grid-cols-7 gap-px">
+            {{range .}}
+            <div class="aspect-square overflow-hidden flex flex-col border border-wl-border p-1.5 {{if not .InMonth}}bg-wl-light/40{{end}} {{if eq .Date $.Today}}ring-1 ring-black{{end}}">
+                <div class="text-xs {{if .InMonth}}text-wl-dark{{else}}text-wl-gray{{end}} mb-1 shrink-0">{{.Day}}</div>
+                <div class="space-y-1 overflow-y-auto grow">
+                    {{range .Items}}
+                    <button type="button"
+                        onclick="calEdit(this, '{{.Type}}', {{.ID}}, {{.SeasonNumber}}, {{.EpisodeNumber}}, '{{.DT}}')"
+                        title="{{LocName $.Lang .ShowName .ShowNameES .ShowNameEN}}{{if eq .Type "episode"}} · S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}{{end}} — {{T $.Lang "watch.edit"}}"
+                        class="block w-full text-left text-[11px] leading-tight px-1 py-0.5 bg-white border border-wl-border hover:border-black transition-colors truncate">
+                        {{if eq .Type "episode"}}<span class="text-wl-gray">S{{printf "%02d" .SeasonNumber}}E{{printf "%02d" .EpisodeNumber}}</span> {{end}}{{LocName $.Lang .ShowName .ShowNameES .ShowNameEN}}
+                    </button>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Inline editor popover -->
+    <div id="cal-editor" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/30" onclick="if(event.target===this)calClose()">
+        <div class="bg-white border border-wl-border p-6 w-80 max-w-[90vw]">
+            <p id="cal-editor-title" class="text-sm mb-4"></p>
+            <input type="datetime-local" id="cal-editor-input"
+                class="w-full border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black mb-4">
+            <div class="flex items-center justify-end gap-4">
+                <button type="button" onclick="calClose()" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">✕</button>
+                <button type="button" id="cal-editor-save" class="px-4 py-2 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">{{T .Lang "watch.save"}}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var editor = document.getElementById('cal-editor');
+    var input = document.getElementById('cal-editor-input');
+    var title = document.getElementById('cal-editor-title');
+    var saveBtn = document.getElementById('cal-editor-save');
+    var ctx = null;
+
+    window.calEdit = function (btn, type, id, season, episode, dt) {
+        ctx = {type: type, id: id, season: season, episode: episode};
+        title.textContent = btn.textContent.trim();
+        input.value = dt;
+        editor.classList.remove('hidden');
+        input.focus();
+    };
+    window.calClose = function () { editor.classList.add('hidden'); ctx = null; };
+
+    saveBtn.addEventListener('click', function () {
+        if (!ctx || !input.value) { return; }
+        var url = ctx.type === 'movie' ? '/api/movies/' + ctx.id + '/date' : '/api/shows/' + ctx.id + '/episodes/date';
+        var body = ctx.type === 'movie'
+            ? {datetime: input.value}
+            : {season: ctx.season, episode: ctx.episode, datetime: input.value};
+        saveBtn.disabled = true;
+        fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})
+            .then(function (r) {
+                saveBtn.disabled = false;
+                if (r.ok) { location.reload(); } else { alert('{{T .Lang "watch.error"}}'); }
+            });
+    });
+})();
+</script>
+{{template "foot" .}}
+{{end}}

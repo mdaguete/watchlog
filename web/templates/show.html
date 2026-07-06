@@ -71,6 +71,28 @@
     </div>
     {{end}}
 
+    {{if .Episodes}}
+    <!-- Watch dates -->
+    <div class="border-t border-wl-border pt-12">
+        <details>
+            <summary class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors cursor-pointer">{{T .Lang "watch.edit_dates"}}</summary>
+            <p class="text-xs text-wl-gray mt-4 mb-4">{{T .Lang "watch.edit_dates_help"}}</p>
+            <div class="max-w-lg space-y-2">
+                {{range .Episodes}}
+                <div class="flex flex-wrap items-center gap-3 py-1">
+                    <span class="text-xs uppercase tracking-widest text-wl-gray w-16 shrink-0">T{{.SeasonNumber}} · E{{.EpisodeNumber}}</span>
+                    <input type="datetime-local" id="epdate-{{.SeasonNumber}}-{{.EpisodeNumber}}" value="{{dtLocal .WatchedAt}}"
+                        class="border-b border-wl-border bg-transparent px-0 py-1 text-sm focus:outline-none focus:border-black">
+                    <button onclick="saveEpisodeDate({{$.Show.ID}}, {{.SeasonNumber}}, {{.EpisodeNumber}})"
+                        class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">{{T $.Lang "watch.save"}}</button>
+                    <span id="epres-{{.SeasonNumber}}-{{.EpisodeNumber}}" class="text-xs text-wl-gray"></span>
+                </div>
+                {{end}}
+            </div>
+        </details>
+    </div>
+    {{end}}
+
     <!-- Rematch TMDB -->
     <div class="border-t border-wl-border pt-12">
         <details>
@@ -89,6 +111,19 @@
 </div>
 
 <script>
+function saveEpisodeDate(showId, season, episode) {
+    const input = document.getElementById('epdate-' + season + '-' + episode);
+    const res = document.getElementById('epres-' + season + '-' + episode);
+    if (!input || !input.value) { return; }
+    fetch('/api/shows/' + showId + '/episodes/date', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({season: season, episode: episode, datetime: input.value})
+    }).then(r => {
+        res.textContent = r.ok ? '{{T .Lang "watch.saved"}}' : '{{T .Lang "watch.error"}}';
+    });
+}
+
 function rematchShow(showId, tmdbId, btn) {
     btn.disabled = true;
     btn.textContent = '...';

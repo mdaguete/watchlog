@@ -33,6 +33,7 @@ var migrations = []Migration{
 	{Version: 10, Description: "user blocked column", Up: migrateV10},
 	{Version: 11, Description: "hash existing plaintext API keys", Up: migrateV11},
 	{Version: 12, Description: "user invitations", Up: migrateV12},
+	{Version: 13, Description: "normalize watched_at to ISO-8601 text", Up: migrateV13},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -484,4 +485,77 @@ CREATE TABLE IF NOT EXISTS invitations (
 	accepted_at DATETIME
 )`)
 	return err
+}
+
+// migrateV13 normalizes watched_at values to the canonical ISO-8601 text layout
+// ("2006-01-02 15:04:05"). Older rows were stored with Go's time.String() format
+// ("2006-01-02 15:04:05 +0000 UTC"), which SQLite's date/time functions cannot
+// parse. This reformats them so they are sortable and natively parseable.
+// Idempotent: values already in the canonical layout are left unchanged.
+func migrateV13(tx *sql.Tx) error {
+	// Candidate layouts seen in existing data.
+	layouts := []string{
+		"2006-01-02 15:04:05 -0700 MST", // Go time.String()
+		"2006-01-02T15:04:05Z07:00",     // RFC3339
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		WatchedAtLayout, // already canonical
+	}
+	normalize := func(table, col, pk string) error {
+		// Skip if the table doesn't exist (partial/pre-existing databases).
+		var exists int
+		tx.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&exists)
+		if exists == 0 {
+			return nil
+		}
+		rows, err := tx.Query("SELECT " + pk + ", " + col + " FROM " + table + " WHERE " + col + " IS NOT NULL AND " + col + " != ''")
+		if err != nil {
+			return err
+		}
+		type row struct {
+			id  int64
+			val string
+		}
+		var toFix []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.id, &r.val); err != nil {
+				rows.Close()
+				return err
+			}
+			// Already canonical (exactly 19 chars, no trailing zone).
+			if len(r.val) == len(WatchedAtLayout) {
+				continue
+			}
+			toFix = append(toFix, r)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, r := range toFix {
+			var norm string
+			for _, l := range layouts {
+				if t, err := time.Parse(l, r.val); err == nil {
+					norm = t.Format(WatchedAtLayout)
+					break
+				}
+			}
+			if norm == "" {
+				// Fallback: keep the first 19 chars if they look like a datetime.
+				if len(r.val) >= 19 {
+					norm = r.val[:19]
+				} else {
+					continue
+				}
+			}
+			if _, err := tx.Exec("UPDATE "+table+" SET "+col+" = ? WHERE "+pk+" = ?", norm, r.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := normalize("episodes", "watched_at", "id"); err != nil {
+		return err
+	}
+	return normalize("user_movies", "watched_at", "id")
 }

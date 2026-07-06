@@ -637,11 +637,18 @@ func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
 	lang := h.getLang(r, userID)
 	watched := h.DB.IsMovieWatched(userID, id)
-	h.Templates.ExecuteTemplate(w, "movie.html", map[string]any{
+	data := map[string]any{
 		"Lang":    lang,
 		"Movie":   movie,
 		"Watched": watched,
-	})
+	}
+	if watched {
+		if at, ok := h.DB.GetMovieWatchedAt(userID, id); ok && !at.IsZero() {
+			data["WatchedInput"] = at.Format("2006-01-02T15:04")
+			data["WatchedDisplay"] = at.Format("2006-01-02 15:04")
+		}
+	}
+	h.Templates.ExecuteTemplate(w, "movie.html", data)
 }
 
 func (h *Handler) PageLists(w http.ResponseWriter, r *http.Request) {
@@ -681,7 +688,15 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }
 	lang := h.getLang(r, userID)
-	items, _ := h.DB.GetTimelineItems(userID, "", 100)
+
+	// Optional ?month=YYYY-MM opens the timeline at that month (shared with the calendar tab).
+	before := ""
+	curMonth := time.Now().Format("2006-01")
+	if t, err := time.ParseInLocation("2006-01", r.URL.Query().Get("month"), time.Local); err == nil {
+		curMonth = t.Format("2006-01")
+		before = t.AddDate(0, 1, 0).Format("2006-01-02") // first day of the next month
+	}
+	items, _ := h.DB.GetTimelineItems(userID, before, 100)
 	days := groupByDay(items)
 	if len(days) > 10 {
 		days = days[:10]
@@ -697,6 +712,7 @@ func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 		"LastDate": lastDate,
 		"HasMore":  len(days) == 10,
 		"Years":    years,
+		"CurMonth": curMonth,
 	})
 }
 
@@ -793,6 +809,74 @@ func (h *Handler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 		results, _ := h.TMDB.SearchTV(query)
 		h.Templates.ExecuteTemplate(w, "tmdb_show_results.html", map[string]any{"Lang": lang, "Results": results})
 	}
+}
+
+// PageCalendar renders a monthly calendar of watched episodes and movies.
+func (h *Handler) PageCalendar(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	lang := h.getLang(r, userID)
+
+	cur, err := time.ParseInLocation("2006-01", r.URL.Query().Get("month"), time.Local)
+	if err != nil {
+		now := time.Now()
+		cur = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)
+	}
+	firstOfMonth := time.Date(cur.Year(), cur.Month(), 1, 0, 0, 0, 0, time.Local)
+	nextMonth := firstOfMonth.AddDate(0, 1, 0)
+	lastOfMonth := nextMonth.AddDate(0, 0, -1)
+
+	items, _ := h.DB.GetWatchedItemsInRange(userID, firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"))
+	byDay := map[string][]db.CalendarItem{}
+	for _, it := range items {
+		byDay[it.Date] = append(byDay[it.Date], it)
+	}
+
+	type Day struct {
+		Date    string
+		Day     int
+		InMonth bool
+		Items   []db.CalendarItem
+	}
+	// Monday-first grid: convert Sunday=0..Saturday=6 to Monday=0.
+	offset := (int(firstOfMonth.Weekday()) + 6) % 7
+	var days []Day
+	for i := offset; i > 0; i-- {
+		d := firstOfMonth.AddDate(0, 0, -i)
+		days = append(days, Day{Date: d.Format("2006-01-02"), Day: d.Day()})
+	}
+	for d := firstOfMonth; d.Before(nextMonth); d = d.AddDate(0, 0, 1) {
+		ds := d.Format("2006-01-02")
+		days = append(days, Day{Date: ds, Day: d.Day(), InMonth: true, Items: byDay[ds]})
+	}
+	for len(days)%7 != 0 {
+		lt, _ := time.ParseInLocation("2006-01-02", days[len(days)-1].Date, time.Local)
+		nd := lt.AddDate(0, 0, 1)
+		days = append(days, Day{Date: nd.Format("2006-01-02"), Day: nd.Day()})
+	}
+	var weeks [][]Day
+	for i := 0; i < len(days); i += 7 {
+		weeks = append(weeks, days[i:i+7])
+	}
+
+	monthsES := []string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"}
+	monthsEN := []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+	monthName := monthsEN[int(firstOfMonth.Month())-1]
+	if lang == "es" {
+		monthName = monthsES[int(firstOfMonth.Month())-1]
+	}
+
+	h.Templates.ExecuteTemplate(w, "calendar.html", map[string]any{
+		"Lang":       lang,
+		"Weeks":      weeks,
+		"MonthLabel": fmt.Sprintf("%s %d", monthName, firstOfMonth.Year()),
+		"CurMonth":   firstOfMonth.Format("2006-01"),
+		"PrevMonth":  firstOfMonth.AddDate(0, -1, 0).Format("2006-01"),
+		"NextMonth":  nextMonth.Format("2006-01"),
+		"Today":      time.Now().Format("2006-01-02"),
+	})
 }
 
 func (h *Handler) PageUpcoming(w http.ResponseWriter, r *http.Request) {
@@ -997,6 +1081,86 @@ func (h *Handler) APIMarkMovieWatched(w http.ResponseWriter, r *http.Request) {
 	if !ok { return }
 	h.DB.MarkMovieWatched(userID, id, time.Now())
 	log.Printf("ACTION: user=%d mark movie watched id=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// parseWatchedInput parses a datetime from an <input type="datetime-local">
+// value (local wall clock), tolerating with/without seconds.
+func parseWatchedInput(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// APISetEpisodeDate updates the watched date/time of a watched episode.
+func (h *Handler) APISetEpisodeDate(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	showID, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		Season   int    `json:"season"`
+		Episode  int    `json:"episode"`
+		Datetime string `json:"datetime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	at, ok := parseWatchedInput(req.Datetime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid datetime")
+		return
+	}
+	n, err := h.DB.UpdateEpisodeWatchedAt(userID, showID, req.Season, req.Episode, at)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "update failed")
+		return
+	}
+	if n == 0 {
+		writeError(w, http.StatusNotFound, "episode not watched")
+		return
+	}
+	log.Printf("ACTION: user=%d set date show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// APISetMovieDate updates the watched date/time of a watched movie.
+func (h *Handler) APISetMovieDate(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		Datetime string `json:"datetime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	at, ok := parseWatchedInput(req.Datetime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid datetime")
+		return
+	}
+	if !h.DB.IsMovieWatched(userID, id) {
+		writeError(w, http.StatusNotFound, "movie not watched")
+		return
+	}
+	h.DB.MarkMovieWatched(userID, id, at)
+	log.Printf("ACTION: user=%d set movie date id=%d", userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

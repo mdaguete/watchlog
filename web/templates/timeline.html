@@ -1,8 +1,12 @@
 {{define "timeline.html"}}
 {{template "head" .}}
 <div class="space-y-8">
-    <div class="flex items-baseline justify-between border-b border-wl-border pb-6">
-        <h1 class="font-serif text-4xl">{{T .Lang "timeline.title"}}</h1>
+    <div>
+        <h1 class="font-serif text-4xl mb-4">{{T .Lang "timeline.title"}}</h1>
+        <nav class="flex gap-6 border-b border-wl-border">
+            <a href="/timeline" class="pb-3 border-b-2 border-black text-black text-xs uppercase tracking-widest">{{T .Lang "nav.timeline"}}</a>
+            <a href="/calendar?month={{.CurMonth}}" id="calendar-tab" class="pb-3 border-b-2 border-transparent text-wl-gray hover:text-black text-xs uppercase tracking-widest transition-colors">{{T .Lang "nav.calendar"}}</a>
+        </nav>
     </div>
 
     <!-- Year/Month filter -->
@@ -43,6 +47,12 @@ function toggleYear(btn, year) {
 }
 
 function jumpTo(year, month) {
+    // Keep the calendar tab and the URL in sync with the selected month.
+    const ym = year + '-' + month;
+    const calTab = document.getElementById('calendar-tab');
+    if (calTab) { calTab.href = '/calendar?month=' + ym; }
+    try { history.replaceState(null, '', '/timeline?month=' + ym); } catch (e) {}
+
     let nextMonth = parseInt(month) + 1;
     let nextYear = parseInt(year);
     if (nextMonth > 12) { nextMonth = 1; nextYear++; }

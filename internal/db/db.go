@@ -435,11 +435,25 @@ func (db *DB) GetFollowedShowsWithTMDB(userID int64) ([]models.UserShow, error) 
 
 // --- Episodes (per-user) ---
 
+// WatchedAtLayout is the canonical SQLite datetime text format (ISO-8601,
+// no timezone). Storing watched_at in this layout keeps it sortable and usable
+// with SQLite's native date/time functions (date/datetime/strftime), unlike
+// Go's time.String() format which SQLite cannot parse.
+const WatchedAtLayout = "2006-01-02 15:04:05"
+
+// watchedText formats a time for watched_at storage; zero times become "".
+func watchedText(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(WatchedAtLayout)
+}
+
 func (db *DB) InsertEpisode(e models.Episode) error {
 	_, err := db.conn.Exec(`
 		INSERT OR IGNORE INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.UserID, e.ExternalID, e.ShowID, e.SeasonNumber, e.EpisodeNumber, e.Watched, e.WatchedAt, e.Runtime)
+		e.UserID, e.ExternalID, e.ShowID, e.SeasonNumber, e.EpisodeNumber, e.Watched, watchedText(e.WatchedAt), e.Runtime)
 	return err
 }
 
@@ -466,7 +480,7 @@ func (db *DB) MarkEpisodeWatched(userID, showID int64, season, episode int) erro
 		INSERT INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
 		VALUES (?, 0, ?, ?, ?, 1, ?, 0)
 		ON CONFLICT(user_id, show_id, season_number, episode_number) DO NOTHING`,
-		userID, showID, season, episode, now)
+		userID, showID, season, episode, watchedText(now))
 	if err != nil {
 		return err
 	}
@@ -495,7 +509,7 @@ func (db *DB) MarkSeasonWatched(userID, showID int64, season, totalEpisodes int)
 		res, err := db.conn.Exec(`
 			INSERT OR IGNORE INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
 			VALUES (?, 0, ?, ?, ?, 1, ?, 0)`,
-			userID, showID, season, ep, now)
+			userID, showID, season, ep, watchedText(now))
 		if err != nil {
 			continue
 		}
@@ -570,10 +584,32 @@ func (db *DB) IsMovieWatched(userID, movieID int64) bool {
 	return watchedAt != nil
 }
 
+// GetMovieWatchedAt returns the watched time of a movie for the user, if any.
+func (db *DB) GetMovieWatchedAt(userID, movieID int64) (time.Time, bool) {
+	var at sql.NullTime
+	err := db.conn.QueryRow("SELECT watched_at FROM user_movies WHERE user_id = ? AND movie_id = ?", userID, movieID).Scan(&at)
+	if err != nil || !at.Valid {
+		return time.Time{}, false
+	}
+	return at.Time, true
+}
+
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
-		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedAt)
+		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedText(watchedAt))
 	return err
+}
+
+// UpdateEpisodeWatchedAt sets the watched date/time of an already-watched
+// episode (scoped to the user). Returns the number of rows affected.
+func (db *DB) UpdateEpisodeWatchedAt(userID, showID int64, season, episode int, at time.Time) (int64, error) {
+	res, err := db.conn.Exec(
+		`UPDATE episodes SET watched_at = ? WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,
+		watchedText(at), userID, showID, season, episode)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (db *DB) AddMovieToLibrary(userID, movieID int64) error {
@@ -1511,8 +1547,63 @@ func (db *DB) DeleteAPIKey(userID, keyID int64) error {
 	return err
 }
 
-// --- Timeline ---
+// --- Calendar ---
 
+// CalendarItem is a watched episode or movie for the calendar view.
+type CalendarItem struct {
+	Type          string // "episode" or "movie"
+	ID            int64  // show id or movie id
+	ShowName      string
+	ShowNameES    string
+	ShowNameEN    string
+	SeasonNumber  int
+	EpisodeNumber int
+	EpName        string
+	EpNameEN      string
+	Date          string // YYYY-MM-DD
+	DT            string // YYYY-MM-DDTHH:MM (for datetime-local)
+}
+
+// GetWatchedItemsInRange returns watched episodes and movies whose date falls in
+// [start, end] (inclusive, YYYY-MM-DD), for the calendar view.
+func (db *DB) GetWatchedItemsInRange(userID int64, start, end string) ([]CalendarItem, error) {
+	query := `
+		SELECT type, id, show_name, show_name_es, show_name_en, season_number, episode_number, ep_name, ep_name_en, date, dt FROM (
+			SELECT 'episode' as type, e.show_id as id, s.name as show_name, s.name_es as show_name_es, s.name_en as show_name_en,
+				e.season_number, e.episode_number,
+				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				COALESCE((SELECT ed.name_en FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name_en,
+				substr(e.watched_at, 1, 10) as date,
+				replace(substr(e.watched_at, 1, 16), ' ', 'T') as dt
+			FROM episodes e JOIN shows s ON s.id = e.show_id
+			WHERE e.user_id = ? AND e.watched_at != ''
+			UNION ALL
+			SELECT 'movie' as type, m.id as id, m.name as show_name, m.name_es as show_name_es, m.name_en as show_name_en,
+				0, 0, '' as ep_name, '' as ep_name_en,
+				substr(um.watched_at, 1, 10) as date,
+				replace(substr(um.watched_at, 1, 16), ' ', 'T') as dt
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL
+		) items
+		WHERE date >= ? AND date <= ?
+		ORDER BY dt ASC, show_name ASC`
+	rows, err := db.conn.Query(query, userID, userID, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CalendarItem
+	for rows.Next() {
+		var it CalendarItem
+		if err := rows.Scan(&it.Type, &it.ID, &it.ShowName, &it.ShowNameES, &it.ShowNameEN, &it.SeasonNumber, &it.EpisodeNumber, &it.EpName, &it.EpNameEN, &it.Date, &it.DT); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, nil
+}
+
+// --- Timeline ---
 // TimelineItem represents a watched episode or movie in the timeline.
 type TimelineItem struct {
 	Type          string // "episode" or "movie"
