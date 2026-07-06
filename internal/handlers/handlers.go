@@ -802,6 +802,73 @@ func (h *Handler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PageCalendar renders a monthly calendar of watched episodes and movies.
+func (h *Handler) PageCalendar(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	lang := h.getLang(r, userID)
+
+	cur, err := time.ParseInLocation("2006-01", r.URL.Query().Get("month"), time.Local)
+	if err != nil {
+		now := time.Now()
+		cur = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)
+	}
+	firstOfMonth := time.Date(cur.Year(), cur.Month(), 1, 0, 0, 0, 0, time.Local)
+	nextMonth := firstOfMonth.AddDate(0, 1, 0)
+	lastOfMonth := nextMonth.AddDate(0, 0, -1)
+
+	items, _ := h.DB.GetWatchedItemsInRange(userID, firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"))
+	byDay := map[string][]db.CalendarItem{}
+	for _, it := range items {
+		byDay[it.Date] = append(byDay[it.Date], it)
+	}
+
+	type Day struct {
+		Date    string
+		Day     int
+		InMonth bool
+		Items   []db.CalendarItem
+	}
+	// Monday-first grid: convert Sunday=0..Saturday=6 to Monday=0.
+	offset := (int(firstOfMonth.Weekday()) + 6) % 7
+	var days []Day
+	for i := offset; i > 0; i-- {
+		d := firstOfMonth.AddDate(0, 0, -i)
+		days = append(days, Day{Date: d.Format("2006-01-02"), Day: d.Day()})
+	}
+	for d := firstOfMonth; d.Before(nextMonth); d = d.AddDate(0, 0, 1) {
+		ds := d.Format("2006-01-02")
+		days = append(days, Day{Date: ds, Day: d.Day(), InMonth: true, Items: byDay[ds]})
+	}
+	for len(days)%7 != 0 {
+		lt, _ := time.ParseInLocation("2006-01-02", days[len(days)-1].Date, time.Local)
+		nd := lt.AddDate(0, 0, 1)
+		days = append(days, Day{Date: nd.Format("2006-01-02"), Day: nd.Day()})
+	}
+	var weeks [][]Day
+	for i := 0; i < len(days); i += 7 {
+		weeks = append(weeks, days[i:i+7])
+	}
+
+	monthsES := []string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"}
+	monthsEN := []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+	monthName := monthsEN[int(firstOfMonth.Month())-1]
+	if lang == "es" {
+		monthName = monthsES[int(firstOfMonth.Month())-1]
+	}
+
+	h.Templates.ExecuteTemplate(w, "calendar.html", map[string]any{
+		"Lang":       lang,
+		"Weeks":      weeks,
+		"MonthLabel": fmt.Sprintf("%s %d", monthName, firstOfMonth.Year()),
+		"PrevMonth":  firstOfMonth.AddDate(0, -1, 0).Format("2006-01"),
+		"NextMonth":  nextMonth.Format("2006-01"),
+		"Today":      time.Now().Format("2006-01-02"),
+	})
+}
+
 func (h *Handler) PageUpcoming(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 { return }

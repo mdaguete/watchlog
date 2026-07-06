@@ -282,6 +282,7 @@ func main() {
 	mux.HandleFunc("GET /lists/{id}", h.PageList)
 	mux.HandleFunc("GET /stats", h.PageStats)
 	mux.HandleFunc("GET /timeline", h.PageTimeline)
+	mux.HandleFunc("GET /calendar", h.PageCalendar)
 	mux.HandleFunc("GET /api/timeline", h.APITimelineItems)
 	mux.HandleFunc("GET /search", h.PageSearch)
 	mux.HandleFunc("GET /search/results", h.SearchResults)

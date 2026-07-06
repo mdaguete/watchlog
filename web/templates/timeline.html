@@ -54,20 +54,6 @@ function jumpTo(year, month) {
             htmx.process(document.getElementById('timeline-days'));
         });
 }
-
-function tlEditDate(type, id, season, episode, current) {
-    const val = prompt('{{T .Lang "watch.date"}} (YYYY-MM-DDTHH:MM)', current);
-    if (!val) { return; }
-    const url = type === 'movie' ? '/api/movies/' + id + '/date' : '/api/shows/' + id + '/episodes/date';
-    const body = type === 'movie' ? {datetime: val} : {season: season, episode: episode, datetime: val};
-    fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body)
-    }).then(r => {
-        if (r.ok) { location.reload(); } else { alert('{{T .Lang "watch.error"}}'); }
-    });
-}
 </script>
 {{template "foot" .}}
 {{end}}
@@ -81,22 +67,17 @@ function tlEditDate(type, id, season, episode, current) {
             <div class="text-xs uppercase tracking-widest text-wl-gray mb-3 border-b border-wl-border pb-2">{{$day.Date}}</div>
             <div class="space-y-2">
                 {{range $j, $item := $day.Items}}
-                <div class="{{if gt $j 0}}hidden timeline-day-item{{end}} flex items-center gap-2 -mx-2 px-2 py-1">
-                    <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies/{{$item.ShowID}}{{end}}" class="flex items-center gap-3 flex-1 min-w-0 hover:bg-wl-light rounded transition-colors">
-                        {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
-                        <div class="min-w-0">
-                            <p class="text-sm truncate">{{LocName $.Lang $item.ShowName $item.ShowNameES $item.ShowNameEN}}</p>
-                            {{if eq $item.Type "episode"}}
-                            <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{LocName $.Lang $item.EpName $item.EpName $item.EpNameEN}}{{end}}</p>
-                            {{else}}
-                            <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
-                            {{end}}
-                        </div>
-                    </a>
-                    <button type="button" title="{{T $.Lang "watch.edit"}}"
-                        onclick="tlEditDate('{{$item.Type}}', {{$item.ShowID}}, {{$item.SeasonNumber}}, {{$item.EpisodeNumber}}, '{{$item.WatchedAt}}')"
-                        class="text-xs text-wl-gray hover:text-black transition-colors shrink-0">✎</button>
-                </div>
+                <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies/{{$item.ShowID}}{{end}}" class="{{if gt $j 0}}hidden timeline-day-item{{end}} flex items-center gap-3 hover:bg-wl-light -mx-2 px-2 py-1 rounded transition-colors">
+                    {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
+                    <div>
+                        <p class="text-sm">{{LocName $.Lang $item.ShowName $item.ShowNameES $item.ShowNameEN}}</p>
+                        {{if eq $item.Type "episode"}}
+                        <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{LocName $.Lang $item.EpName $item.EpName $item.EpNameEN}}{{end}}</p>
+                        {{else}}
+                        <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
+                        {{end}}
+                    </div>
+                </a>
                 {{end}}
             </div>
             {{if gt (len $day.Items) 1}}
@@ -125,22 +106,17 @@ function tlEditDate(type, id, season, episode, current) {
         <div class="text-xs uppercase tracking-widest text-wl-gray mb-2 border-b border-wl-border pb-1.5">{{$day.Date}}</div>
         <div class="space-y-2">
             {{range $j, $item := $day.Items}}
-            <div class="{{if gt $j 0}}hidden timeline-day-item-m{{end}} flex items-center gap-2 -mx-1 px-1 py-1">
-                <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies/{{$item.ShowID}}{{end}}" class="flex items-center gap-3 flex-1 min-w-0 hover:bg-wl-light rounded transition-colors">
-                    {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
-                    <div class="min-w-0">
-                        <p class="text-sm truncate">{{LocName $.Lang $item.ShowName $item.ShowNameES $item.ShowNameEN}}</p>
-                        {{if eq $item.Type "episode"}}
-                        <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{LocName $.Lang $item.EpName $item.EpName $item.EpNameEN}}{{end}}</p>
-                        {{else}}
-                        <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
-                        {{end}}
-                    </div>
-                </a>
-                <button type="button" title="{{T $.Lang "watch.edit"}}"
-                    onclick="tlEditDate('{{$item.Type}}', {{$item.ShowID}}, {{$item.SeasonNumber}}, {{$item.EpisodeNumber}}, '{{$item.WatchedAt}}')"
-                    class="text-xs text-wl-gray hover:text-black transition-colors shrink-0">✎</button>
-            </div>
+            <a href="{{if eq $item.Type "episode"}}/shows/{{$item.ShowID}}{{else}}/movies/{{$item.ShowID}}{{end}}" class="{{if gt $j 0}}hidden timeline-day-item-m{{end}} flex items-center gap-3 hover:bg-wl-light -mx-1 px-1 py-1 rounded transition-colors">
+                {{if $item.PosterURL}}<img src="{{ImgURL $item.PosterURL}}" alt="" class="w-8 h-12 object-cover shrink-0">{{end}}
+                <div>
+                    <p class="text-sm">{{LocName $.Lang $item.ShowName $item.ShowNameES $item.ShowNameEN}}</p>
+                    {{if eq $item.Type "episode"}}
+                    <p class="text-xs text-wl-gray">S{{printf "%02d" $item.SeasonNumber}}E{{printf "%02d" $item.EpisodeNumber}}{{if $item.EpName}} — {{LocName $.Lang $item.EpName $item.EpName $item.EpNameEN}}{{end}}</p>
+                    {{else}}
+                    <p class="text-xs text-wl-gray">{{T $.Lang "timeline.movie"}}</p>
+                    {{end}}
+                </div>
+            </a>
             {{end}}
         </div>
         {{if gt (len $day.Items) 1}}
