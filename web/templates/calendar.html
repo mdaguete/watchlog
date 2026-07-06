@@ -33,7 +33,7 @@
         {{range .Weeks}}
         <div class="grid grid-cols-7 gap-px">
             {{range .}}
-            <div class="h-28 overflow-hidden flex flex-col border border-wl-border p-1.5 {{if not .InMonth}}bg-wl-light/40{{end}} {{if eq .Date $.Today}}ring-1 ring-black{{end}}">
+            <div class="aspect-square overflow-hidden flex flex-col border border-wl-border p-1.5 {{if not .InMonth}}bg-wl-light/40{{end}} {{if eq .Date $.Today}}ring-1 ring-black{{end}}">
                 <div class="text-xs {{if .InMonth}}text-wl-dark{{else}}text-wl-gray{{end}} mb-1 shrink-0">{{.Day}}</div>
                 <div class="space-y-1 overflow-y-auto grow">
                     {{range .Items}}
