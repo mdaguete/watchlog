@@ -225,6 +225,18 @@ func main() {
 		"mod": func(a, b int) int {
 			return a % b
 		},
+		"dtLocal": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.Format("2006-01-02T15:04")
+		},
+		"dt": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.Format("2006-01-02 15:04")
+		},
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("web/templates/*.html")
 	if err != nil {
@@ -299,11 +311,13 @@ func main() {
 	mux.HandleFunc("DELETE /api/shows/{id}/episodes/watched", h.APIUnmarkEpisodeWatched)
 	mux.HandleFunc("POST /api/shows/{id}/season/watched", h.APIMarkSeasonWatched)
 	mux.HandleFunc("DELETE /api/shows/{id}/season/watched", h.APIUnmarkSeasonWatched)
+	mux.HandleFunc("POST /api/shows/{id}/episodes/date", h.APISetEpisodeDate)
 
 	// API: Movies
 	mux.HandleFunc("GET /api/movies", h.APIGetMovies)
 	mux.HandleFunc("POST /api/movies/{id}/watched", h.APIMarkMovieWatched)
 	mux.HandleFunc("DELETE /api/movies/{id}/watched", h.APIUnmarkMovieWatched)
+	mux.HandleFunc("POST /api/movies/{id}/date", h.APISetMovieDate)
 
 	// API: Lists
 	mux.HandleFunc("GET /api/lists", h.APIGetLists)

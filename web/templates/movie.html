@@ -26,6 +26,14 @@
                     class="px-5 py-2.5 text-xs uppercase tracking-widest border bg-black text-white border-black transition-colors">
                     ✓ {{T .Lang "movies.watched"}}
                 </button>
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <label class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "watch.date"}}</label>
+                    <input type="datetime-local" id="movie-date" value="{{.WatchedInput}}"
+                        class="border-b border-wl-border bg-transparent px-0 py-1 text-sm focus:outline-none focus:border-black">
+                    <button onclick="saveMovieDate({{.Movie.ID}})"
+                        class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">{{T .Lang "watch.save"}}</button>
+                    <span id="movie-date-result" class="text-xs text-wl-gray"></span>
+                </div>
                 {{else}}
                 <button onclick="toggleMovieWatched({{.Movie.ID}}, true)"
                     class="px-5 py-2.5 text-xs uppercase tracking-widest border border-wl-border text-black hover:bg-black hover:text-white transition-colors">
@@ -44,6 +52,19 @@ function toggleMovieWatched(movieId, mark) {
         headers: {'Content-Type': 'application/json'}
     }).then(r => {
         if (r.ok) { location.reload(); }
+    });
+}
+
+function saveMovieDate(movieId) {
+    const val = document.getElementById('movie-date').value;
+    const res = document.getElementById('movie-date-result');
+    if (!val) { return; }
+    fetch('/api/movies/' + movieId + '/date', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({datetime: val})
+    }).then(r => {
+        res.textContent = r.ok ? '{{T .Lang "watch.saved"}}' : '{{T .Lang "watch.error"}}';
     });
 }
 </script>

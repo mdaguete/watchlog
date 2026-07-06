@@ -41,6 +41,8 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 		"mul": func(a, b int) int { return a * b },
 		"add": func(a, b int) int { return a + b },
 		"mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1324,6 +1326,8 @@ func TestSetupWizard_Step1_EmptyUsername(t *testing.T) {
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1350,6 +1354,8 @@ func TestSetupWizard_Step1_PasswordMismatch(t *testing.T) {
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1376,6 +1382,8 @@ func TestSetupWizard_Step1_Success(t *testing.T) {
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")

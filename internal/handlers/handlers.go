@@ -637,11 +637,18 @@ func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
 	lang := h.getLang(r, userID)
 	watched := h.DB.IsMovieWatched(userID, id)
-	h.Templates.ExecuteTemplate(w, "movie.html", map[string]any{
+	data := map[string]any{
 		"Lang":    lang,
 		"Movie":   movie,
 		"Watched": watched,
-	})
+	}
+	if watched {
+		if at, ok := h.DB.GetMovieWatchedAt(userID, id); ok && !at.IsZero() {
+			data["WatchedInput"] = at.Format("2006-01-02T15:04")
+			data["WatchedDisplay"] = at.Format("2006-01-02 15:04")
+		}
+	}
+	h.Templates.ExecuteTemplate(w, "movie.html", data)
 }
 
 func (h *Handler) PageLists(w http.ResponseWriter, r *http.Request) {
@@ -997,6 +1004,86 @@ func (h *Handler) APIMarkMovieWatched(w http.ResponseWriter, r *http.Request) {
 	if !ok { return }
 	h.DB.MarkMovieWatched(userID, id, time.Now())
 	log.Printf("ACTION: user=%d mark movie watched id=%d", userID, id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// parseWatchedInput parses a datetime from an <input type="datetime-local">
+// value (local wall clock), tolerating with/without seconds.
+func parseWatchedInput(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// APISetEpisodeDate updates the watched date/time of a watched episode.
+func (h *Handler) APISetEpisodeDate(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	showID, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		Season   int    `json:"season"`
+		Episode  int    `json:"episode"`
+		Datetime string `json:"datetime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	at, ok := parseWatchedInput(req.Datetime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid datetime")
+		return
+	}
+	n, err := h.DB.UpdateEpisodeWatchedAt(userID, showID, req.Season, req.Episode, at)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "update failed")
+		return
+	}
+	if n == 0 {
+		writeError(w, http.StatusNotFound, "episode not watched")
+		return
+	}
+	log.Printf("ACTION: user=%d set date show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// APISetMovieDate updates the watched date/time of a watched movie.
+func (h *Handler) APISetMovieDate(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	id, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		Datetime string `json:"datetime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	at, ok := parseWatchedInput(req.Datetime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid datetime")
+		return
+	}
+	if !h.DB.IsMovieWatched(userID, id) {
+		writeError(w, http.StatusNotFound, "movie not watched")
+		return
+	}
+	h.DB.MarkMovieWatched(userID, id, at)
+	log.Printf("ACTION: user=%d set movie date id=%d", userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
