@@ -47,6 +47,8 @@ var translations = map[string]map[string]string{
 	"shows.sort.followed": {"es": "Fecha seguimiento", "en": "Follow date"},
 	"shows.filter":          {"es": "Filtrar:", "en": "Filter:"},
 	"shows.filter.all":      {"es": "Todas", "en": "All"},
+	"shows.filter.watching": {"es": "Por ver", "en": "To watch"},
+	"shows.filter.completed": {"es": "Al día", "en": "Caught up"},
 	"shows.filter.favorites": {"es": "Favoritas", "en": "Favorites"},
 	"shows.filter.archived": {"es": "Archivadas", "en": "Archived"},
 	"shows.no_image":      {"es": "Sin imagen", "en": "No image"},

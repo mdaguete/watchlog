@@ -238,11 +238,17 @@ func (db *DB) GetUserShowsFiltered(userID int64, sort, filter string) ([]models.
 	}
 
 	var filterClause string
+	// available = total episodes known from TMDB (season_episodes, real seasons).
+	const available = `COALESCE((SELECT SUM(se.episode_count) FROM season_episodes se WHERE se.show_id = s.id AND se.season_number > 0), 0)`
 	switch filter {
 	case "favorites":
 		filterClause = "AND us.is_favorited = 1"
 	case "archived":
 		filterClause = "AND us.is_archived = 1"
+	case "watching": // episodes still left to watch (or unknown episode count)
+		filterClause = "AND us.is_archived = 0 AND (" + available + " = 0 OR us.episodes_seen < " + available + ")"
+	case "completed": // caught up: watched all available episodes
+		filterClause = "AND us.is_archived = 0 AND " + available + " > 0 AND us.episodes_seen >= " + available
 	default:
 		filterClause = "AND us.is_archived = 0" // hide archived by default
 	}
