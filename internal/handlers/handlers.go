@@ -142,10 +142,10 @@ func (h *Handler) PageLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := h.getLang(r, 0)
 	h.Templates.ExecuteTemplate(w, "login.html", map[string]any{
-		"Lang":             lang,
-		"PasswordEnabled":  h.DB.GetSetting("auth_password") != "disabled",
-		"MagicLinkEnabled": h.DB.GetSetting("auth_magic_link") != "disabled",
-		"DefaultLogin":     h.getDefaultLogin(),
+		"Lang":                lang,
+		"PasswordEnabled":     h.DB.GetSetting("auth_password") != "disabled",
+		"MagicLinkEnabled":    h.DB.GetSetting("auth_magic_link") != "disabled",
+		"DefaultLogin":        h.getDefaultLogin(),
 		"RegistrationEnabled": h.DB.GetSetting("auth_registration") != "disabled",
 	})
 }
@@ -306,7 +306,7 @@ func (h *Handler) PageForgotPassword(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, 0)
 	smtpCfg := h.getSMTPConfig()
 	h.Templates.ExecuteTemplate(w, "forgot_password.html", map[string]any{
-		"Lang":          lang,
+		"Lang":           lang,
 		"SMTPConfigured": smtpCfg.Configured(),
 	})
 }
@@ -326,8 +326,8 @@ func (h *Handler) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	input := strings.TrimSpace(r.FormValue("username_or_email"))
 	// Always show success to prevent user enumeration
 	successData := map[string]any{
-		"Lang":    lang,
-		"Success": i18n.T(lang, "forgot.success"),
+		"Lang":           lang,
+		"Success":        i18n.T(lang, "forgot.success"),
 		"SMTPConfigured": true,
 	}
 
@@ -424,7 +424,7 @@ func (h *Handler) PageMagicLogin(w http.ResponseWriter, r *http.Request) {
 	lang := h.getLang(r, 0)
 	smtpCfg := h.getSMTPConfig()
 	h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
-		"Lang":          lang,
+		"Lang":           lang,
 		"SMTPConfigured": smtpCfg.Configured(),
 	})
 }
@@ -492,8 +492,8 @@ func (h *Handler) HandleMagicAuth(w http.ResponseWriter, r *http.Request) {
 	userID, purpose, ok := h.DB.GetMagicLink(token)
 	if !ok || purpose != "login" {
 		h.Templates.ExecuteTemplate(w, "magic_login.html", map[string]any{
-			"Lang":  lang,
-			"Error": i18n.T(lang, "magic.invalid_token"),
+			"Lang":           lang,
+			"Error":          i18n.T(lang, "magic.invalid_token"),
 			"SMTPConfigured": h.getSMTPConfig().Configured(),
 		})
 		return
@@ -510,7 +510,9 @@ func (h *Handler) HandleMagicAuth(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageDashboard(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	stats, _ := h.DB.GetDashboardStats(userID)
 	continueWatching, _ := h.DB.GetContinueWatching(userID, 5)
@@ -528,10 +530,14 @@ func (h *Handler) PageDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIContinueWatching(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 { page = 1 }
+	if page < 1 {
+		page = 1
+	}
 	offset := (page - 1) * 5
 	items, _ := h.DB.GetContinueWatching(userID, 5, offset)
 	h.Templates.ExecuteTemplate(w, "continue_watching_items.html", map[string]any{
@@ -544,10 +550,14 @@ func (h *Handler) APIContinueWatching(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageShows(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	sort := r.URL.Query().Get("sort")
-	if sort == "" { sort = "recent" }
+	if sort == "" {
+		sort = "recent"
+	}
 	filter := r.URL.Query().Get("filter")
 	shows, _ := h.DB.GetUserShowsFiltered(userID, sort, filter)
 	h.Templates.ExecuteTemplate(w, "shows.html", map[string]any{
@@ -560,15 +570,23 @@ func (h *Handler) PageShows(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil { http.Redirect(w, r, "/shows", http.StatusFound); return }
+	if err != nil {
+		http.Redirect(w, r, "/shows", http.StatusFound)
+		return
+	}
 
 	show, err := h.DB.GetUserShow(userID, id)
 	if err != nil {
 		// Show exists in catalog but user hasn't followed — show catalog info
 		catalogShow, err2 := h.DB.GetShow(id)
-		if err2 != nil { http.Redirect(w, r, "/shows", http.StatusFound); return }
+		if err2 != nil {
+			http.Redirect(w, r, "/shows", http.StatusFound)
+			return
+		}
 		show.Show = catalogShow
 	}
 
@@ -611,10 +629,14 @@ func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	sort := r.URL.Query().Get("sort")
-	if sort == "" { sort = "recent" }
+	if sort == "" {
+		sort = "recent"
+	}
 	movies, _ := h.DB.GetUserMoviesSorted(userID, sort)
 	unwatched, _ := h.DB.GetUserMoviesUnwatched(userID)
 	stats, _ := h.DB.GetMovieStats(userID)
@@ -630,11 +652,19 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	if err != nil {
+		http.Redirect(w, r, "/movies", http.StatusFound)
+		return
+	}
 	movie, err := h.DB.GetMovie(id)
-	if err != nil { http.Redirect(w, r, "/movies", http.StatusFound); return }
+	if err != nil {
+		http.Redirect(w, r, "/movies", http.StatusFound)
+		return
+	}
 	lang := h.getLang(r, userID)
 	watched := h.DB.IsMovieWatched(userID, id)
 	data := map[string]any{
@@ -653,7 +683,9 @@ func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageLists(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	lists, _ := h.DB.GetUserLists(userID)
 	h.Templates.ExecuteTemplate(w, "lists.html", map[string]any{"Lang": lang, "Lists": lists})
@@ -661,18 +693,28 @@ func (h *Handler) PageLists(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil { http.Redirect(w, r, "/lists", http.StatusFound); return }
+	if err != nil {
+		http.Redirect(w, r, "/lists", http.StatusFound)
+		return
+	}
 	list, err := h.DB.GetListWithItems(id)
-	if err != nil || list.UserID != userID { http.Redirect(w, r, "/lists", http.StatusFound); return }
+	if err != nil || list.UserID != userID {
+		http.Redirect(w, r, "/lists", http.StatusFound)
+		return
+	}
 	h.Templates.ExecuteTemplate(w, "list.html", map[string]any{"Lang": lang, "List": list})
 }
 
 func (h *Handler) PageStats(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	stats, _ := h.DB.GetUserWatchStats(userID)
 	dashboard, _ := h.DB.GetDashboardStats(userID)
@@ -686,7 +728,9 @@ func (h *Handler) PageStats(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 
 	// Optional ?month=YYYY-MM opens the timeline at that month (shared with the calendar tab).
@@ -734,7 +778,9 @@ func groupByDay(items []db.TimelineItem) []timelineDay {
 
 func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	before := r.URL.Query().Get("before")
 	from := r.URL.Query().Get("from")
@@ -765,17 +811,24 @@ func (h *Handler) APITimelineItems(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageSearch(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	h.Templates.ExecuteTemplate(w, "search.html", map[string]any{"Lang": lang})
 }
 
 func (h *Handler) SearchResults(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	query := r.URL.Query().Get("q")
-	if query == "" { w.Write([]byte("")); return }
+	if query == "" {
+		w.Write([]byte(""))
+		return
+	}
 	shows, _ := h.DB.SearchShows(query)
 	movies, _ := h.DB.SearchMovies(query)
 	h.Templates.ExecuteTemplate(w, "search_results.html", map[string]any{
@@ -785,14 +838,18 @@ func (h *Handler) SearchResults(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageAddShow(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	h.Templates.ExecuteTemplate(w, "add.html", map[string]any{"Lang": lang})
 }
 
 func (h *Handler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		w.Write([]byte(`<p class="text-sm text-wl-gray">` + i18n.T(lang, "tmdb.not_configured") + `</p>`))
@@ -800,7 +857,10 @@ func (h *Handler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
 	}
 	query := r.URL.Query().Get("q")
 	mediaType := r.URL.Query().Get("type")
-	if query == "" { w.Write([]byte("")); return }
+	if query == "" {
+		w.Write([]byte(""))
+		return
+	}
 
 	if mediaType == "movie" {
 		results, _ := h.TMDB.SearchMovie(query)
@@ -881,7 +941,9 @@ func (h *Handler) PageCalendar(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageUpcoming(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	cached, _ := h.DB.GetUpcomingCacheForUser(userID)
 	h.Templates.ExecuteTemplate(w, "upcoming.html", map[string]any{
@@ -894,35 +956,52 @@ func (h *Handler) PageUpcoming(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIGetShows(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	shows, _ := h.DB.GetUserShowsSorted(userID, "name")
 	writeJSON(w, http.StatusOK, shows)
 }
 
 func (h *Handler) APIGetShow(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	show, err := h.DB.GetUserShow(userID, id)
-	if err != nil { writeError(w, http.StatusNotFound, "not found"); return }
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	writeJSON(w, http.StatusOK, show)
 }
 
 func (h *Handler) APIToggleFollow(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	h.DB.ToggleUserShowFollow(userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) APIToggleFavorite(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	h.DB.ToggleUserShowFavorite(userID, id)
 	var isFav bool
 	h.DB.GetUserShowField(userID, id, "is_favorited", &isFav)
@@ -942,9 +1021,13 @@ func (h *Handler) APIToggleFavorite(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	h.DB.ToggleUserShowArchive(userID, id)
 	var isArchived bool
 	h.DB.GetUserShowField(userID, id, "is_archived", &isArchived)
@@ -964,9 +1047,13 @@ func (h *Handler) APIToggleArchive(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APISnoozeShow(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	// Snooze indefinitely — only unsnoozes when user marks an episode
 	until := time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 	h.DB.SnoozeShow(userID, id, until)
@@ -976,21 +1063,33 @@ func (h *Handler) APISnoozeShow(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIGetEpisodes(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	showID, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	episodes, _ := h.DB.GetEpisodesByShow(userID, showID)
 	writeJSON(w, http.StatusOK, episodes)
 }
 
 func (h *Handler) APIMarkEpisodeWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	showID, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
-	var req struct { Season int `json:"season"`; Episode int `json:"episode"` }
+	if !ok {
+		return
+	}
+	var req struct {
+		Season  int `json:"season"`
+		Episode int `json:"episode"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body"); return
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
 	}
 	h.DB.MarkEpisodeWatched(userID, showID, req.Season, req.Episode)
 	h.DB.IncrementWatchStats(userID, 1)
@@ -1007,12 +1106,20 @@ func (h *Handler) APIMarkEpisodeWatched(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) APIUnmarkEpisodeWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	showID, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
-	var req struct { Season int `json:"season"`; Episode int `json:"episode"` }
+	if !ok {
+		return
+	}
+	var req struct {
+		Season  int `json:"season"`
+		Episode int `json:"episode"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body"); return
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
 	}
 	h.DB.UnmarkEpisodeWatched(userID, showID, req.Season, req.Episode)
 	unarchived := h.DB.AutoUnarchiveIfIncomplete(userID, showID)
@@ -1022,20 +1129,33 @@ func (h *Handler) APIUnmarkEpisodeWatched(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	showID, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
-	var req struct { Season int `json:"season"`; Episodes int `json:"episodes"` }
+	if !ok {
+		return
+	}
+	var req struct {
+		Season   int `json:"season"`
+		Episodes int `json:"episodes"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body"); return
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
 	}
 	if req.Episodes <= 0 {
 		show, _ := h.DB.GetShow(showID)
 		if show.TMDBID > 0 && h.TMDB != nil && h.TMDB.Enabled() {
 			season, err := h.TMDB.GetSeason(show.TMDBID, req.Season)
-			if err == nil { req.Episodes = len(season.Episodes) }
+			if err == nil {
+				req.Episodes = len(season.Episodes)
+			}
 		}
-		if req.Episodes <= 0 { writeError(w, http.StatusBadRequest, "specify episodes"); return }
+		if req.Episodes <= 0 {
+			writeError(w, http.StatusBadRequest, "specify episodes")
+			return
+		}
 	}
 	marked, _ := h.DB.MarkSeasonWatched(userID, showID, req.Season, req.Episodes)
 	if marked > 0 {
@@ -1054,12 +1174,19 @@ func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIUnmarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	showID, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
-	var req struct { Season int `json:"season"` }
+	if !ok {
+		return
+	}
+	var req struct {
+		Season int `json:"season"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body"); return
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
 	}
 	removed, _ := h.DB.UnmarkSeasonWatched(userID, showID, req.Season)
 	unarchived := h.DB.AutoUnarchiveIfIncomplete(userID, showID)
@@ -1069,16 +1196,22 @@ func (h *Handler) APIUnmarkSeasonWatched(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) APIGetMovies(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	movies, _ := h.DB.GetUserMoviesSorted(userID, "name")
 	writeJSON(w, http.StatusOK, movies)
 }
 
 func (h *Handler) APIMarkMovieWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	h.DB.MarkMovieWatched(userID, id, time.Now())
 	log.Printf("ACTION: user=%d mark movie watched id=%d", userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -1166,9 +1299,13 @@ func (h *Handler) APISetMovieDate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIUnmarkMovieWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	h.DB.UnmarkMovieWatched(userID, id)
 	log.Printf("ACTION: user=%d unmark movie watched id=%d", userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -1176,27 +1313,44 @@ func (h *Handler) APIUnmarkMovieWatched(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) APIGetLists(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lists, _ := h.DB.GetUserLists(userID)
 	writeJSON(w, http.StatusOK, lists)
 }
 
 func (h *Handler) APIGetList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	list, err := h.DB.GetListWithItems(id)
-	if err != nil || list.UserID != userID { writeError(w, http.StatusNotFound, "not found"); return }
+	if err != nil || list.UserID != userID {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) APICreateList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
-	var req struct { Name string `json:"name"`; IsPublic bool `json:"is_public"` }
+	if userID == 0 {
+		return
+	}
+	var req struct {
+		Name     string `json:"name"`
+		IsPublic bool   `json:"is_public"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
-	if req.Name == "" { writeError(w, http.StatusBadRequest, "name required"); return }
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name required")
+		return
+	}
 	id, _ := h.DB.CreateList(userID, req.Name, req.IsPublic)
 	log.Printf("ACTION: user=%d create list %q id=%d", userID, req.Name, id)
 	if r.Header.Get("HX-Request") == "true" {
@@ -1208,12 +1362,22 @@ func (h *Handler) APICreateList(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIUpdateList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	list, _ := h.DB.GetListWithItems(id)
-	if list.UserID != userID { writeError(w, http.StatusForbidden, "forbidden"); return }
-	var req struct { Name string `json:"name"`; IsPublic bool `json:"is_public"` }
+	if list.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	var req struct {
+		Name     string `json:"name"`
+		IsPublic bool   `json:"is_public"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	h.DB.UpdateList(id, req.Name, req.IsPublic)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -1221,11 +1385,18 @@ func (h *Handler) APIUpdateList(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIDeleteList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	list, _ := h.DB.GetListWithItems(id)
-	if list.UserID != userID { writeError(w, http.StatusForbidden, "forbidden"); return }
+	if list.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	h.DB.DeleteList(id)
 	log.Printf("ACTION: user=%d delete list id=%d", userID, id)
 	if r.Header.Get("HX-Request") == "true" {
@@ -1237,15 +1408,29 @@ func (h *Handler) APIDeleteList(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIAddToList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	listID, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	list, _ := h.DB.GetListWithItems(listID)
-	if list.UserID != userID { writeError(w, http.StatusForbidden, "forbidden"); return }
-	var req struct { ShowID int64 `json:"show_id"`; MovieID int64 `json:"movie_id"` }
+	if list.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	var req struct {
+		ShowID  int64 `json:"show_id"`
+		MovieID int64 `json:"movie_id"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
-	if req.ShowID > 0 { h.DB.AddShowToList(listID, req.ShowID) }
-	if req.MovieID > 0 { h.DB.AddMovieToList(listID, req.MovieID) }
+	if req.ShowID > 0 {
+		h.DB.AddShowToList(listID, req.ShowID)
+	}
+	if req.MovieID > 0 {
+		h.DB.AddMovieToList(listID, req.MovieID)
+	}
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
 		w.Write([]byte(`<span class="text-xs text-wl-gray">✓ ` + i18n.T(lang, "tmdb.list_added") + `</span>`))
@@ -1256,37 +1441,60 @@ func (h *Handler) APIAddToList(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIRemoveFromList(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	listID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil { writeError(w, http.StatusBadRequest, "invalid list id"); return }
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid list id")
+		return
+	}
 	list, err := h.DB.GetListWithItems(listID)
-	if err != nil || list.UserID != userID { writeError(w, http.StatusForbidden, "forbidden"); return }
+	if err != nil || list.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	itemID, err := strconv.ParseInt(r.PathValue("itemId"), 10, 64)
-	if err != nil { writeError(w, http.StatusBadRequest, "invalid item id"); return }
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item id")
+		return
+	}
 	h.DB.RemoveListItem(listID, itemID)
-	if r.Header.Get("HX-Request") == "true" { w.Write([]byte("")); return }
+	if r.Header.Get("HX-Request") == "true" {
+		w.Write([]byte(""))
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) APIGetStats(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	stats, _ := h.DB.GetDashboardStats(userID)
 	writeJSON(w, http.StatusOK, stats)
 }
 
 func (h *Handler) APIGetWatchStats(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	stats, _ := h.DB.GetUserWatchStats(userID)
 	writeJSON(w, http.StatusOK, stats)
 }
 
 func (h *Handler) APISearch(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	query := r.URL.Query().Get("q")
-	if query == "" { writeJSON(w, http.StatusOK, map[string]any{"shows": []any{}, "movies": []any{}}); return }
+	if query == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"shows": []any{}, "movies": []any{}})
+		return
+	}
 	shows, _ := h.DB.SearchShows(query)
 	movies, _ := h.DB.SearchMovies(query)
 	writeJSON(w, http.StatusOK, map[string]any{"shows": shows, "movies": movies})
@@ -1296,25 +1504,39 @@ func (h *Handler) APISearch(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIFetchTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
-	if h.TMDB == nil || !h.TMDB.Enabled() { writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return }
+	if userID == 0 {
+		return
+	}
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
+	}
 	id, ok := h.parsePathID(w, r, "id")
-	if !ok { return }
+	if !ok {
+		return
+	}
 	show, err := h.DB.GetShow(id)
-	if err != nil { writeError(w, http.StatusNotFound, "show not found"); return }
+	if err != nil {
+		writeError(w, http.StatusNotFound, "show not found")
+		return
+	}
 	// If the show is already linked to a TMDB entry (including a manual re-link),
 	// refresh by that id instead of re-matching by name, so a correct match is
 	// never silently overwritten by a title search.
 	if show.TMDBID > 0 {
 		if err := worker.RefreshShowByTMDB(h.DB, h.TMDB, id, show.TMDBID); err != nil {
-			writeError(w, http.StatusBadGateway, "refresh failed"); return
+			writeError(w, http.StatusBadGateway, "refresh failed")
+			return
 		}
 		log.Printf("TMDB: refreshed show=%d by existing tmdb_id=%d", id, show.TMDBID)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "tmdb_id": show.TMDBID})
 		return
 	}
 	result, err := h.TMDB.ResolveTV(show.ExternalID, show.Name)
-	if err != nil { writeError(w, http.StatusNotFound, "not found on TMDB"); return }
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found on TMDB")
+		return
+	}
 	genres := extractGenreNames(result.Genres)
 	posterURL := tmdb.PosterURL(result.PosterPath, "w342")
 	backdropURL := tmdb.BackdropURL(result.BackdropPath, "w780")
@@ -1394,21 +1616,27 @@ func (h *Handler) APIRelinkTMDB(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte(`<span class="text-xs text-red-600">` + i18n.T(h.getLang(r, userID), "tmdb.not_configured") + `</span>`))
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
 	}
 	shows, _ := h.DB.GetShowsWithoutTMDB()
 	log.Printf("TMDB FETCH: starting — %d shows", len(shows))
 	fetched := 0
 	for i, show := range shows {
 		result, err := h.TMDB.ResolveTV(show.ExternalID, show.Name)
-		if err != nil { log.Printf("TMDB [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err); continue }
+		if err != nil {
+			log.Printf("TMDB [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err)
+			continue
+		}
 		genres := extractGenreNames(result.Genres)
 		h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
 		if resultEN, err := h.TMDB.GetTVShowLang(result.ID, "en-US"); err == nil {
@@ -1429,9 +1657,14 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	moviesFetched := 0
 	for i, movie := range movies {
 		results, err := h.TMDB.SearchMovie(movie.Name)
-		if err != nil || len(results) == 0 { log.Printf("TMDB [%d/%d] ✗ movie %q", i+1, len(movies), movie.Name); continue }
+		if err != nil || len(results) == 0 {
+			log.Printf("TMDB [%d/%d] ✗ movie %q", i+1, len(movies), movie.Name)
+			continue
+		}
 		detail, err := h.TMDB.GetMovie(results[0].ID)
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 		h.DB.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, extractGenreNames(detail.Genres), detail.Runtime)
 		if detailEN, err := h.TMDB.GetMovieLang(detail.ID, "en-US"); err == nil {
 			h.DB.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
@@ -1452,12 +1685,22 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIAddShowFromTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
-	if h.TMDB == nil || !h.TMDB.Enabled() { writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return }
-	var req struct { TMDBID int `json:"tmdb_id"` }
+	if userID == 0 {
+		return
+	}
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
+	}
+	var req struct {
+		TMDBID int `json:"tmdb_id"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	show, err := h.TMDB.GetTVShow(req.TMDBID)
-	if err != nil { writeError(w, http.StatusNotFound, "not found"); return }
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	genres := extractGenreNames(show.Genres)
 	id, _ := h.DB.AddShowFromTMDB(show.ID, show.Name, tmdb.PosterURL(show.PosterPath, "w342"), tmdb.BackdropURL(show.BackdropPath, "w780"), show.Overview, genres, show.Status, len(show.Seasons))
 	h.DB.FollowShow(userID, id)
@@ -1473,12 +1716,22 @@ func (h *Handler) APIAddShowFromTMDB(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
-	if h.TMDB == nil || !h.TMDB.Enabled() { writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return }
-	var req struct { TMDBID int `json:"tmdb_id"` }
+	if userID == 0 {
+		return
+	}
+	if h.TMDB == nil || !h.TMDB.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
+	}
+	var req struct {
+		TMDBID int `json:"tmdb_id"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	movie, err := h.TMDB.GetMovie(req.TMDBID)
-	if err != nil { writeError(w, http.StatusNotFound, "not found"); return }
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
 	genres := extractGenreNames(movie.Genres)
 	id, _ := h.DB.AddMovieFromTMDB(movie.ID, movie.Title, tmdb.PosterURL(movie.PosterPath, "w342"), movie.Overview, genres, movie.Runtime)
 	h.DB.AddMovieToLibrary(userID, id)
@@ -1494,14 +1747,17 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIRefreshUpcoming(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte(`<span class="text-xs text-red-600">` + i18n.T(h.getLang(r, userID), "tmdb.not_configured") + `</span>`))
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
 	}
 	worker.RefreshUpcomingCache(h.DB, h.TMDB)
 	if r.Header.Get("HX-Request") == "true" {
@@ -1515,100 +1771,20 @@ func (h *Handler) APIRefreshUpcoming(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	if h.TMDB == nil || !h.TMDB.Enabled() {
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte(`<span class="text-xs text-red-600">` + i18n.T(h.getLang(r, userID), "tmdb.not_configured") + `</span>`))
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "TMDB not configured"); return
+		writeError(w, http.StatusServiceUnavailable, "TMDB not configured")
+		return
 	}
 
-	shows, _ := h.DB.GetAllShowsWithTMDB()
-	log.Printf("TMDB REFRESH: updating %d shows (es+en)...", len(shows))
-	updated := 0
-	for i, show := range shows {
-		// Fetch in Spanish (primary)
-		result, err := h.TMDB.GetTVShowLang(show.TMDBID, "es-ES")
-		if err != nil { log.Printf("TMDB REFRESH [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err); continue }
-		genres := extractGenreNames(result.Genres)
-		h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
-		// Fetch in English
-		resultEN, err := h.TMDB.GetTVShowLang(show.TMDBID, "en-US")
-		if err == nil {
-			h.DB.UpdateShowTMDBEN(show.ID, resultEN.Overview, extractGenreNames(resultEN.Genres))
-			h.DB.UpdateShowTMDBNames(show.ID, result.Name, resultEN.Name)
-		}
-		// Cache season episode counts
-		newSeasonCount := 0
-		for _, s := range result.Seasons {
-			if s.SeasonNumber > 0 {
-				newSeasonCount++
-			}
-		}
-		h.DB.UnarchiveForNewSeason(show.ID, newSeasonCount)
-		for _, s := range result.Seasons {
-			if s.SeasonNumber > 0 {
-				h.DB.UpsertSeasonEpisodes(show.ID, s.SeasonNumber, s.EpisodeCount)
-			}
-		}
-		// Fetch episode details per season
-		for _, s := range result.Seasons {
-			if s.SeasonNumber == 0 {
-				continue
-			}
-			seasonES, err := h.TMDB.GetSeasonLang(show.TMDBID, s.SeasonNumber, "es-ES")
-			if err != nil {
-				continue
-			}
-			seasonEN, _ := h.TMDB.GetSeasonLang(show.TMDBID, s.SeasonNumber, "en-US")
-			for _, ep := range seasonES.Episodes {
-				d := db.EpisodeDetail{
-					ShowID:        show.ID,
-					SeasonNumber:  ep.SeasonNumber,
-					EpisodeNumber: ep.EpisodeNumber,
-					Name:          ep.Name,
-					Overview:      ep.Overview,
-					AirDate:       ep.AirDate,
-					Runtime:       ep.Runtime,
-					StillURL:      tmdb.BackdropURL(ep.StillPath, "w300"),
-				}
-				// Fill English data if available
-				if seasonEN != nil {
-					for _, epEN := range seasonEN.Episodes {
-						if epEN.EpisodeNumber == ep.EpisodeNumber {
-							d.NameEN = epEN.Name
-							d.OverviewEN = epEN.Overview
-							break
-						}
-					}
-				}
-				h.DB.UpsertEpisodeDetail(d)
-			}
-		}
-		updated++
-	}
-
-	movies, _ := h.DB.GetAllMoviesWithTMDB()
-	log.Printf("TMDB REFRESH: updating %d movies (es+en)...", len(movies))
-	moviesUpdated := 0
-	for i, movie := range movies {
-		// Fetch in Spanish (primary)
-		detail, err := h.TMDB.GetMovieLang(movie.TMDBID, "es-ES")
-		if err != nil { log.Printf("TMDB REFRESH [%d/%d] ✗ movie %q: %v", i+1, len(movies), movie.Name, err); continue }
-		genres := extractGenreNames(detail.Genres)
-		h.DB.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, genres, detail.Runtime)
-		// Fetch in English
-		detailEN, err := h.TMDB.GetMovieLang(movie.TMDBID, "en-US")
-		if err == nil {
-			h.DB.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
-			h.DB.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
-		}
-		moviesUpdated++
-	}
-
-	log.Printf("TMDB REFRESH: complete — shows %d/%d, movies %d/%d", updated, len(shows), moviesUpdated, len(movies))
+	updated, moviesUpdated := worker.RunTMDBRefresh(h.DB, h.TMDB)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
 		w.Header().Set("Content-Type", "text/html")
@@ -1620,7 +1796,9 @@ func (h *Handler) APIRefreshAllTMDB(w http.ResponseWriter, r *http.Request) {
 
 func extractGenreNames(genres []tmdb.Genre) string {
 	names := make([]string, len(genres))
-	for i, g := range genres { names[i] = g.Name }
+	for i, g := range genres {
+		names[i] = g.Name
+	}
 	return strings.Join(names, ", ")
 }
 
@@ -1628,7 +1806,9 @@ func extractGenreNames(genres []tmdb.Genre) string {
 
 func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	user, _ := h.DB.GetUserByID(userID)
 	theme := h.DB.GetUserTheme(userID)
@@ -1644,7 +1824,9 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	r.ParseForm()
 	lang := r.FormValue("lang")
 	if lang != "es" && lang != "en" {
@@ -2099,14 +2281,18 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PageImport(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 	lang := h.getLang(r, userID)
 	h.Templates.ExecuteTemplate(w, "import.html", map[string]any{"Lang": lang})
 }
 
 func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
-	if userID == 0 { return }
+	if userID == 0 {
+		return
+	}
 
 	// Parse multipart form (max 500MB)
 	if err := r.ParseMultipartForm(500 << 20); err != nil {
