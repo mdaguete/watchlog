@@ -35,6 +35,7 @@ var migrations = []Migration{
 	{Version: 12, Description: "user invitations", Up: migrateV12},
 	{Version: 13, Description: "normalize watched_at to ISO-8601 text", Up: migrateV13},
 	{Version: 14, Description: "movie release_date column", Up: migrateV14},
+	{Version: 15, Description: "merge duplicate shows by name", Up: migrateV15},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -564,4 +565,99 @@ func migrateV13(tx *sql.Tx) error {
 func migrateV14(tx *sql.Tx) error {
 	_, err := tx.Exec("ALTER TABLE movies ADD COLUMN release_date TEXT NOT NULL DEFAULT ''")
 	return err
+}
+
+// migrateV15 merges duplicate catalog shows that share the same name (caused by
+// an old importer bug that created one show per episode). For each duplicated
+// name it keeps a canonical show (prefer one tracked in user_shows, else lowest
+// id), moves per-user data (episodes, user_shows, show_progress, list items) to
+// it — ignoring unique-key conflicts — and deletes the duplicates and their
+// cached season/episode metadata. episodes_seen is left untouched (it holds the
+// real total imported from TVTime, which may exceed the individual episode rows).
+func migrateV15(tx *sql.Tx) error {
+	var exists int
+	tx.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='shows'").Scan(&exists)
+	if exists == 0 {
+		return nil
+	}
+
+	rows, err := tx.Query("SELECT name FROM shows GROUP BY name HAVING COUNT(*) > 1")
+	if err != nil {
+		return err
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		var canonical int64
+		if err := tx.QueryRow(`SELECT s.id FROM shows s WHERE s.name = ?
+			ORDER BY (SELECT COUNT(*) FROM user_shows us WHERE us.show_id = s.id) DESC, s.id ASC
+			LIMIT 1`, name).Scan(&canonical); err != nil {
+			return err
+		}
+
+		drows, err := tx.Query("SELECT id FROM shows WHERE name = ? AND id != ?", name, canonical)
+		if err != nil {
+			return err
+		}
+		var dups []int64
+		for drows.Next() {
+			var id int64
+			if err := drows.Scan(&id); err != nil {
+				drows.Close()
+				return err
+			}
+			dups = append(dups, id)
+		}
+		drows.Close()
+
+		for _, d := range dups {
+			stmts := []string{
+				"UPDATE OR IGNORE episodes SET show_id = ? WHERE show_id = ?",
+				"DELETE FROM episodes WHERE show_id = ?",
+				"UPDATE OR IGNORE user_shows SET show_id = ? WHERE show_id = ?",
+				"DELETE FROM user_shows WHERE show_id = ?",
+				"UPDATE OR IGNORE show_progress SET show_id = ? WHERE show_id = ?",
+				"DELETE FROM show_progress WHERE show_id = ?",
+			}
+			// The first of each move/delete pair takes (canonical, d); deletes take (d).
+			if _, err := tx.Exec(stmts[0], canonical, d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[1], d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[2], canonical, d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[3], d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[4], canonical, d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[5], d); err != nil {
+				return err
+			}
+			tx.Exec("UPDATE list_items SET entity_id = ? WHERE entity_type = 'series' AND entity_id = ?", canonical, d)
+			tx.Exec("DELETE FROM season_episodes WHERE show_id = ?", d)
+			tx.Exec("DELETE FROM episode_details WHERE show_id = ?", d)
+			tx.Exec("DELETE FROM upcoming_cache WHERE show_id = ?", d)
+			if _, err := tx.Exec("DELETE FROM shows WHERE id = ?", d); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

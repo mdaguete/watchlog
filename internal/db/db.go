@@ -149,6 +149,15 @@ func (db *DB) GetShow(id int64) (models.Show, error) {
 	return s, err
 }
 
+// GetShowIDByName returns the id of an existing catalog show with the exact
+// name, or 0. Used during import to attach episodes to the already-imported
+// show instead of creating a duplicate per episode.
+func (db *DB) GetShowIDByName(name string) int64 {
+	var id int64
+	db.conn.QueryRow("SELECT id FROM shows WHERE name = ? ORDER BY id LIMIT 1", name).Scan(&id)
+	return id
+}
+
 func (db *DB) GetShowByTMDBID(tmdbID int, id *int64) {
 	db.conn.QueryRow("SELECT id FROM shows WHERE tmdb_id = ?", tmdbID).Scan(id)
 }

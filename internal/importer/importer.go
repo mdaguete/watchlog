@@ -377,11 +377,16 @@ func (imp *Importer) importRewatchedEpisodes() error {
 		epNum, _ := strconv.Atoi(getField(record, idx, "episode_number"))
 		watchedAt := parseTime(getField(record, idx, "created_at"))
 
-		// Try to find the show by name - use 0 as external ID since we don't have it here
-		showID, _ := imp.db.UpsertShow(models.Show{
-			ExternalID: epExtID, // use episode ID as temp external to avoid collision
-			Name:       seriesName,
-		})
+		// Attach to the show already imported (by name) to avoid creating a
+		// duplicate show per episode. Only create a fallback show if the series
+		// wasn't imported from user_tv_show_data.
+		showID := imp.db.GetShowIDByName(seriesName)
+		if showID == 0 {
+			showID, _ = imp.db.UpsertShow(models.Show{
+				ExternalID: epExtID,
+				Name:       seriesName,
+			})
+		}
 		if showID == 0 {
 			continue
 		}
