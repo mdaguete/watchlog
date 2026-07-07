@@ -92,7 +92,18 @@ func RunTMDBRefresh(database *db.DB, client *tmdb.Client) {
 	log.Printf("TMDB REFRESH (worker): updating %d shows...", len(shows))
 	updated := 0
 	for _, show := range shows {
-		if err := RefreshShowByTMDB(database, client, show.ID, show.TMDBID); err != nil {
+		tmdbID := show.TMDBID
+		// Verify the mapping against TheTVDB (TVTime's external_id is a TheTVDB
+		// series id). If TMDB's authoritative tvdb->tmdb mapping disagrees with
+		// the stored id, the show was mis-matched by name — correct it.
+		// (external_id == tmdb_id means the show was added directly from TMDB, skip.)
+		if show.ExternalID > 0 && show.ExternalID != int64(show.TMDBID) {
+			if correct, ok := client.FindTMDBIDByTVDB(int(show.ExternalID)); ok && correct != show.TMDBID {
+				log.Printf("TMDB REFRESH: correcting show %d %q tmdb_id %d -> %d (tvdb=%d)", show.ID, show.Name, show.TMDBID, correct, show.ExternalID)
+				tmdbID = correct
+			}
+		}
+		if err := RefreshShowByTMDB(database, client, show.ID, tmdbID); err != nil {
 			continue
 		}
 		updated++

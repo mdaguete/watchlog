@@ -135,6 +135,25 @@ func (c *Client) GetTVShowLang(id int, lang string) (*ShowResult, error) {
 	return &show, nil
 }
 
+// findResponse is the TMDB /find/{external_id} payload (we only need TV results).
+type findResponse struct {
+	TVResults []ShowResult `json:"tv_results"`
+}
+
+// FindTMDBIDByTVDB resolves a TheTVDB series id (as used by TVTime) to its TMDB
+// id via TMDB's /find endpoint. Returns (tmdbID, true) when a TV match exists.
+// This is authoritative and avoids the wrong matches that name search produces.
+func (c *Client) FindTMDBIDByTVDB(tvdbID int) (int, bool) {
+	var resp findResponse
+	if err := c.get(fmt.Sprintf("/find/%d", tvdbID), map[string]string{"external_source": "tvdb_id"}, &resp); err != nil {
+		return 0, false
+	}
+	if len(resp.TVResults) == 0 || resp.TVResults[0].ID == 0 {
+		return 0, false
+	}
+	return resp.TVResults[0].ID, true
+}
+
 func (c *Client) GetMovie(id int) (*MovieResult, error) {
 	return c.GetMovieLang(id, "es-ES")
 }
