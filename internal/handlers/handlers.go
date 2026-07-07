@@ -1656,12 +1656,12 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	log.Printf("TMDB FETCH: shows done (%d/%d). Starting %d movies...", fetched, len(shows), len(movies))
 	moviesFetched := 0
 	for i, movie := range movies {
-		results, err := h.TMDB.SearchMovie(movie.Name)
-		if err != nil || len(results) == 0 {
+		id, ok := h.TMDB.ResolveMovieID(movie.Name, releaseYear(movie.ReleaseDate))
+		if !ok {
 			log.Printf("TMDB [%d/%d] ✗ movie %q", i+1, len(movies), movie.Name)
 			continue
 		}
-		detail, err := h.TMDB.GetMovie(results[0].ID)
+		detail, err := h.TMDB.GetMovie(id)
 		if err != nil {
 			continue
 		}
@@ -1800,6 +1800,14 @@ func extractGenreNames(genres []tmdb.Genre) string {
 		names[i] = g.Name
 	}
 	return strings.Join(names, ", ")
+}
+
+// releaseYear returns the 4-digit year from a "YYYY-..." date string, or "".
+func releaseYear(s string) string {
+	if len(s) >= 4 {
+		return s[:4]
+	}
+	return ""
 }
 
 // --- Settings ---
@@ -2400,12 +2408,12 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 			sendSSE(fmt.Sprintf("  %d movies to enrich...", len(movies)))
 			fetched := 0
 			for i, movie := range movies {
-				results, err := h.TMDB.SearchMovie(movie.Name)
-				if err != nil || len(results) == 0 {
+				id, ok := h.TMDB.ResolveMovieID(movie.Name, releaseYear(movie.ReleaseDate))
+				if !ok {
 					sendSSE(fmt.Sprintf("  [%d/%d] ✗ %q", i+1, len(movies), movie.Name))
 					continue
 				}
-				detail, err := h.TMDB.GetMovie(results[0].ID)
+				detail, err := h.TMDB.GetMovie(id)
 				if err != nil {
 					continue
 				}

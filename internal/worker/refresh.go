@@ -11,6 +11,14 @@ import (
 
 var errTMDBDisabled = errors.New("tmdb not configured")
 
+// releaseYear returns the 4-digit year from a "YYYY-..." date string, or "".
+func releaseYear(s string) string {
+	if len(s) >= 4 {
+		return s[:4]
+	}
+	return ""
+}
+
 func extractGenreNames(genres []tmdb.Genre) string {
 	names := make([]string, len(genres))
 	for i, g := range genres {
@@ -116,14 +124,28 @@ func RunTMDBRefresh(database *db.DB, client *tmdb.Client) (int, int) {
 	log.Printf("TMDB REFRESH: updating %d movies (es+en)...", len(movies))
 	moviesUpdated := 0
 	for i, movie := range movies {
-		detail, err := client.GetMovieLang(movie.TMDBID, "es-ES")
+		tmdbID := movie.TMDBID
+		storedYear := releaseYear(movie.ReleaseDate)
+		detail, err := client.GetMovieLang(tmdbID, "es-ES")
 		if err != nil {
 			log.Printf("TMDB REFRESH movie [%d/%d] ✗ %q: %v", i+1, len(movies), movie.Name, err)
 			continue
 		}
+		// Movies have no authoritative external id, so verify by release year:
+		// if TVTime's year is known and the linked movie's year disagrees, the
+		// match is likely wrong — re-resolve by name+year and re-link.
+		if storedYear != "" && releaseYear(detail.ReleaseDate) != storedYear {
+			if id, ok := client.ResolveMovieID(movie.Name, storedYear); ok && id != tmdbID {
+				if d2, err2 := client.GetMovieLang(id, "es-ES"); err2 == nil {
+					log.Printf("TMDB REFRESH movie [%d/%d] correcting %q tmdb_id %d -> %d (year=%s)", i+1, len(movies), movie.Name, tmdbID, id, storedYear)
+					tmdbID = id
+					detail = d2
+				}
+			}
+		}
 		genres := extractGenreNames(detail.Genres)
 		database.UpdateMovieTMDB(movie.ID, detail.ID, tmdb.PosterURL(detail.PosterPath, "w342"), detail.Overview, genres, detail.Runtime)
-		detailEN, err := client.GetMovieLang(movie.TMDBID, "en-US")
+		detailEN, err := client.GetMovieLang(tmdbID, "en-US")
 		if err == nil {
 			database.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
 			database.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)

@@ -122,6 +122,35 @@ func (c *Client) SearchMovieLang(query, lang string) ([]MovieResult, error) {
 	return resp.Results, nil
 }
 
+// SearchMovieYear searches movies filtered by primary release year (when given).
+func (c *Client) SearchMovieYear(query, year string) ([]MovieResult, error) {
+	params := map[string]string{"query": query, "language": "es-ES"}
+	if year != "" {
+		params["primary_release_year"] = year
+	}
+	var resp SearchResponse[MovieResult]
+	if err := c.get("/search/movie", params, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Results, nil
+}
+
+// ResolveMovieID resolves a movie name to a TMDB id, preferring a year-filtered
+// search (much more reliable) and falling back to a plain name search. Movies
+// have no authoritative external id in the TVTime export, so the release year is
+// the best disambiguator available.
+func (c *Client) ResolveMovieID(name, year string) (int, bool) {
+	if year != "" {
+		if res, err := c.SearchMovieYear(name, year); err == nil && len(res) > 0 {
+			return res[0].ID, true
+		}
+	}
+	if res, err := c.SearchMovie(name); err == nil && len(res) > 0 {
+		return res[0].ID, true
+	}
+	return 0, false
+}
+
 func (c *Client) GetTVShow(id int) (*ShowResult, error) {
 	return c.GetTVShowLang(id, "es-ES")
 }
