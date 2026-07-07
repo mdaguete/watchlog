@@ -1313,7 +1313,7 @@ func (h *Handler) APIFetchTMDB(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "tmdb_id": show.TMDBID})
 		return
 	}
-	result, err := h.TMDB.FindTVByName(show.Name)
+	result, err := h.TMDB.ResolveTV(show.ExternalID, show.Name)
 	if err != nil { writeError(w, http.StatusNotFound, "not found on TMDB"); return }
 	genres := extractGenreNames(result.Genres)
 	posterURL := tmdb.PosterURL(result.PosterPath, "w342")
@@ -1407,7 +1407,7 @@ func (h *Handler) APIFetchAllTMDB(w http.ResponseWriter, r *http.Request) {
 	log.Printf("TMDB FETCH: starting — %d shows", len(shows))
 	fetched := 0
 	for i, show := range shows {
-		result, err := h.TMDB.FindTVByName(show.Name)
+		result, err := h.TMDB.ResolveTV(show.ExternalID, show.Name)
 		if err != nil { log.Printf("TMDB [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err); continue }
 		genres := extractGenreNames(result.Genres)
 		h.DB.UpdateShowTMDB(show.ID, result.ID, tmdb.PosterURL(result.PosterPath, "w342"), tmdb.BackdropURL(result.BackdropPath, "w780"), result.Overview, genres, result.Status, len(result.Seasons))
@@ -2191,7 +2191,7 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 			sendSSE(fmt.Sprintf("  %d shows to enrich...", len(shows)))
 			fetched := 0
 			for i, show := range shows {
-				result, err := h.TMDB.FindTVByName(show.Name)
+				result, err := h.TMDB.ResolveTV(show.ExternalID, show.Name)
 				if err != nil {
 					sendSSE(fmt.Sprintf("  [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err))
 					continue

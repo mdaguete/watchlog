@@ -135,6 +135,21 @@ func (c *Client) GetTVShowLang(id int, lang string) (*ShowResult, error) {
 	return &show, nil
 }
 
+// ResolveTV resolves a show to full TMDB details, preferring the authoritative
+// TheTVDB id mapping (tvdbID, as provided by TVTime's export) over name search,
+// which is error-prone. Falls back to name search when there's no tvdb id or no
+// tvdb->tmdb mapping.
+func (c *Client) ResolveTV(tvdbID int64, name string) (*ShowResult, error) {
+	if tvdbID > 0 {
+		if id, ok := c.FindTMDBIDByTVDB(int(tvdbID)); ok {
+			if show, err := c.GetTVShow(id); err == nil {
+				return show, nil
+			}
+		}
+	}
+	return c.FindTVByName(name)
+}
+
 // findResponse is the TMDB /find/{external_id} payload (we only need TV results).
 type findResponse struct {
 	TVResults []ShowResult `json:"tv_results"`
