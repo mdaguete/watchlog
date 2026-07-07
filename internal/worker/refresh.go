@@ -83,27 +83,42 @@ func RefreshShowByTMDB(database *db.DB, client *tmdb.Client, showID int64, tmdbI
 
 // RunTMDBRefresh performs a full TMDB metadata refresh for all shows and movies.
 // It fetches metadata in both languages and caches episode details.
-func RunTMDBRefresh(database *db.DB, client *tmdb.Client) {
+// Returns the number of shows and movies updated. Progress is logged per item.
+func RunTMDBRefresh(database *db.DB, client *tmdb.Client) (int, int) {
 	if client == nil || !client.Enabled() {
-		return
+		return 0, 0
 	}
 
 	shows, _ := database.GetAllShowsWithTMDB()
-	log.Printf("TMDB REFRESH (worker): updating %d shows...", len(shows))
+	log.Printf("TMDB REFRESH: updating %d shows (es+en)...", len(shows))
 	updated := 0
-	for _, show := range shows {
-		if err := RefreshShowByTMDB(database, client, show.ID, show.TMDBID); err != nil {
+	for i, show := range shows {
+		tmdbID := show.TMDBID
+		// Verify the mapping against TheTVDB (TVTime's external_id is a TheTVDB
+		// series id). If TMDB's authoritative tvdb->tmdb mapping disagrees with
+		// the stored id, the show was mis-matched by name — correct it.
+		// (external_id == tmdb_id means the show was added directly from TMDB, skip.)
+		if show.ExternalID > 0 && show.ExternalID != int64(show.TMDBID) {
+			if correct, ok := client.FindTMDBIDByTVDB(int(show.ExternalID)); ok && correct != show.TMDBID {
+				log.Printf("TMDB REFRESH [%d/%d] correcting %q tmdb_id %d -> %d (tvdb=%d)", i+1, len(shows), show.Name, show.TMDBID, correct, show.ExternalID)
+				tmdbID = correct
+			}
+		}
+		if err := RefreshShowByTMDB(database, client, show.ID, tmdbID); err != nil {
+			log.Printf("TMDB REFRESH [%d/%d] ✗ %q: %v", i+1, len(shows), show.Name, err)
 			continue
 		}
 		updated++
+		log.Printf("TMDB REFRESH [%d/%d] ✓ %q (tmdb_id=%d)", i+1, len(shows), show.Name, tmdbID)
 	}
 
 	movies, _ := database.GetAllMoviesWithTMDB()
-	log.Printf("TMDB REFRESH (worker): updating %d movies...", len(movies))
+	log.Printf("TMDB REFRESH: updating %d movies (es+en)...", len(movies))
 	moviesUpdated := 0
-	for _, movie := range movies {
+	for i, movie := range movies {
 		detail, err := client.GetMovieLang(movie.TMDBID, "es-ES")
 		if err != nil {
+			log.Printf("TMDB REFRESH movie [%d/%d] ✗ %q: %v", i+1, len(movies), movie.Name, err)
 			continue
 		}
 		genres := extractGenreNames(detail.Genres)
@@ -114,7 +129,9 @@ func RunTMDBRefresh(database *db.DB, client *tmdb.Client) {
 			database.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
 		}
 		moviesUpdated++
+		log.Printf("TMDB REFRESH movie [%d/%d] ✓ %q", i+1, len(movies), movie.Name)
 	}
 
-	log.Printf("TMDB REFRESH (worker): complete — shows %d/%d, movies %d/%d", updated, len(shows), moviesUpdated, len(movies))
+	log.Printf("TMDB REFRESH: complete — shows %d/%d, movies %d/%d", updated, len(shows), moviesUpdated, len(movies))
+	return updated, moviesUpdated
 }

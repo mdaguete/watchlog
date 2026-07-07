@@ -135,6 +135,40 @@ func (c *Client) GetTVShowLang(id int, lang string) (*ShowResult, error) {
 	return &show, nil
 }
 
+// ResolveTV resolves a show to full TMDB details, preferring the authoritative
+// TheTVDB id mapping (tvdbID, as provided by TVTime's export) over name search,
+// which is error-prone. Falls back to name search when there's no tvdb id or no
+// tvdb->tmdb mapping.
+func (c *Client) ResolveTV(tvdbID int64, name string) (*ShowResult, error) {
+	if tvdbID > 0 {
+		if id, ok := c.FindTMDBIDByTVDB(int(tvdbID)); ok {
+			if show, err := c.GetTVShow(id); err == nil {
+				return show, nil
+			}
+		}
+	}
+	return c.FindTVByName(name)
+}
+
+// findResponse is the TMDB /find/{external_id} payload (we only need TV results).
+type findResponse struct {
+	TVResults []ShowResult `json:"tv_results"`
+}
+
+// FindTMDBIDByTVDB resolves a TheTVDB series id (as used by TVTime) to its TMDB
+// id via TMDB's /find endpoint. Returns (tmdbID, true) when a TV match exists.
+// This is authoritative and avoids the wrong matches that name search produces.
+func (c *Client) FindTMDBIDByTVDB(tvdbID int) (int, bool) {
+	var resp findResponse
+	if err := c.get(fmt.Sprintf("/find/%d", tvdbID), map[string]string{"external_source": "tvdb_id"}, &resp); err != nil {
+		return 0, false
+	}
+	if len(resp.TVResults) == 0 || resp.TVResults[0].ID == 0 {
+		return 0, false
+	}
+	return resp.TVResults[0].ID, true
+}
+
 func (c *Client) GetMovie(id int) (*MovieResult, error) {
 	return c.GetMovieLang(id, "es-ES")
 }
