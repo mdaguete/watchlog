@@ -34,6 +34,7 @@ var migrations = []Migration{
 	{Version: 11, Description: "hash existing plaintext API keys", Up: migrateV11},
 	{Version: 12, Description: "user invitations", Up: migrateV12},
 	{Version: 13, Description: "normalize watched_at to ISO-8601 text", Up: migrateV13},
+	{Version: 14, Description: "movie release_date column", Up: migrateV14},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -558,4 +559,9 @@ func migrateV13(tx *sql.Tx) error {
 		return err
 	}
 	return normalize("user_movies", "watched_at", "id")
+}
+
+func migrateV14(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE movies ADD COLUMN release_date TEXT NOT NULL DEFAULT ''")
+	return err
 }

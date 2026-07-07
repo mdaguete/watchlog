@@ -65,6 +65,7 @@ type Movie struct {
 	Genres     string `json:"genres"`
 	GenresEN   string `json:"genres_en"`
 	Runtime    int    `json:"runtime"`
+	ReleaseDate string `json:"release_date"`
 }
 
 // UserMovie is the per-user watch record

@@ -432,10 +432,15 @@ func (imp *Importer) importMovies() error {
 
 			uuid := getField(record, idx, "uuid")
 			watchedAt := parseTime(getField(record, idx, "created_at"))
+			releaseDate := getField(record, idx, "release_date")
+			if len(releaseDate) > 10 {
+				releaseDate = releaseDate[:10]
+			}
 
 			movieID, err := imp.db.UpsertMovie(models.Movie{
-				ExternalID: uuid,
-				Name:       movieName,
+				ExternalID:  uuid,
+				Name:        movieName,
+				ReleaseDate: releaseDate,
 			})
 			if err != nil || movieID == 0 {
 				continue

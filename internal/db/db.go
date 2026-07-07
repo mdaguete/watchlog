@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -449,6 +450,29 @@ func watchedText(t time.Time) string {
 	return t.Format(WatchedAtLayout)
 }
 
+// parseDBTime parses a watched_at value read as text. The SQLite driver does not
+// reliably auto-convert every stored layout to time.Time, so read it as a string
+// and parse tolerantly (canonical ISO, RFC3339, or legacy Go time.String()).
+func parseDBTime(s string) time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}
+	}
+	for _, l := range []string{
+		WatchedAtLayout,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+	} {
+		if t, err := time.Parse(l, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
 func (db *DB) InsertEpisode(e models.Episode) error {
 	_, err := db.conn.Exec(`
 		INSERT OR IGNORE INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
@@ -466,9 +490,11 @@ func (db *DB) GetEpisodesByShow(userID, showID int64) ([]models.Episode, error) 
 	var eps []models.Episode
 	for rows.Next() {
 		var e models.Episode
-		if err := rows.Scan(&e.ID, &e.UserID, &e.ExternalID, &e.ShowID, &e.SeasonNumber, &e.EpisodeNumber, &e.Watched, &e.WatchedAt, &e.Runtime); err != nil {
+		var wa string
+		if err := rows.Scan(&e.ID, &e.UserID, &e.ExternalID, &e.ShowID, &e.SeasonNumber, &e.EpisodeNumber, &e.Watched, &wa, &e.Runtime); err != nil {
 			return nil, err
 		}
+		e.WatchedAt = parseDBTime(wa)
 		eps = append(eps, e)
 	}
 	return eps, nil
@@ -556,13 +582,14 @@ func (db *DB) GetShowProgress(userID, showID int64) (models.ShowProgress, error)
 
 func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 	_, err := db.conn.Exec(`
-		INSERT INTO movies (external_id, name, tmdb_id, poster_url, overview, genres, runtime)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO movies (external_id, name, tmdb_id, poster_url, overview, genres, runtime, release_date)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(external_id) DO UPDATE SET
 			name=COALESCE(NULLIF(excluded.name, ''), movies.name),
 			tmdb_id=MAX(movies.tmdb_id, excluded.tmdb_id),
-			poster_url=COALESCE(NULLIF(excluded.poster_url, ''), movies.poster_url)`,
-		m.ExternalID, m.Name, m.TMDBID, m.PosterURL, m.Overview, m.Genres, m.Runtime)
+			poster_url=COALESCE(NULLIF(excluded.poster_url, ''), movies.poster_url),
+			release_date=COALESCE(NULLIF(excluded.release_date, ''), movies.release_date)`,
+		m.ExternalID, m.Name, m.TMDBID, m.PosterURL, m.Overview, m.Genres, m.Runtime, m.ReleaseDate)
 	if err != nil {
 		return 0, err
 	}
@@ -586,12 +613,13 @@ func (db *DB) IsMovieWatched(userID, movieID int64) bool {
 
 // GetMovieWatchedAt returns the watched time of a movie for the user, if any.
 func (db *DB) GetMovieWatchedAt(userID, movieID int64) (time.Time, bool) {
-	var at sql.NullTime
-	err := db.conn.QueryRow("SELECT watched_at FROM user_movies WHERE user_id = ? AND movie_id = ?", userID, movieID).Scan(&at)
-	if err != nil || !at.Valid {
+	var wa sql.NullString
+	err := db.conn.QueryRow("SELECT watched_at FROM user_movies WHERE user_id = ? AND movie_id = ?", userID, movieID).Scan(&wa)
+	if err != nil || !wa.Valid || wa.String == "" {
 		return time.Time{}, false
 	}
-	return at.Time, true
+	t := parseDBTime(wa.String)
+	return t, !t.IsZero()
 }
 
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
@@ -661,9 +689,11 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 	var movies []models.UserMovie
 	for rows.Next() {
 		var um models.UserMovie
-		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime, &um.WatchedAt); err != nil {
+		var wa string
+		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime, &wa); err != nil {
 			return nil, err
 		}
+		um.WatchedAt = parseDBTime(wa)
 		movies = append(movies, um)
 	}
 	return movies, nil
@@ -686,7 +716,7 @@ func (db *DB) UpdateMovieTMDBNames(id int64, nameES, nameEN string) error {
 }
 
 func (db *DB) GetMoviesWithoutTMDB() ([]models.Movie, error) {
-	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime FROM movies WHERE tmdb_id = 0 ORDER BY name")
+	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime, release_date FROM movies WHERE tmdb_id = 0 ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -694,7 +724,7 @@ func (db *DB) GetMoviesWithoutTMDB() ([]models.Movie, error) {
 	var movies []models.Movie
 	for rows.Next() {
 		var m models.Movie
-		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime); err != nil {
+		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime, &m.ReleaseDate); err != nil {
 			return nil, err
 		}
 		movies = append(movies, m)
@@ -1032,7 +1062,7 @@ func (db *DB) GetAllShowsWithTMDB() ([]models.Show, error) {
 }
 
 func (db *DB) GetAllMoviesWithTMDB() ([]models.Movie, error) {
-	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime FROM movies WHERE tmdb_id > 0 ORDER BY name")
+	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime, release_date FROM movies WHERE tmdb_id > 0 ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -1040,7 +1070,7 @@ func (db *DB) GetAllMoviesWithTMDB() ([]models.Movie, error) {
 	var movies []models.Movie
 	for rows.Next() {
 		var m models.Movie
-		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime); err != nil {
+		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime, &m.ReleaseDate); err != nil {
 			return nil, err
 		}
 		movies = append(movies, m)
