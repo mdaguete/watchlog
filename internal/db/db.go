@@ -1087,6 +1087,20 @@ func (db *DB) UpsertSeasonEpisodes(showID int64, seasonNumber, episodeCount int)
 	return err
 }
 
+// ClearSeasonEpisodes removes all cached season episode counts for a show. Used
+// before re-populating on refresh so seasons that no longer exist (e.g. leftover
+// from a previous wrong TMDB match) are dropped.
+func (db *DB) ClearSeasonEpisodes(showID int64) error {
+	_, err := db.conn.Exec("DELETE FROM season_episodes WHERE show_id = ?", showID)
+	return err
+}
+
+// ClearEpisodeDetails removes all cached episode details for a show (same reason).
+func (db *DB) ClearEpisodeDetails(showID int64) error {
+	_, err := db.conn.Exec("DELETE FROM episode_details WHERE show_id = ?", showID)
+	return err
+}
+
 func (db *DB) GetSeasonEpisodes(showID int64) (map[int]int, error) {
 	rows, err := db.conn.Query("SELECT season_number, episode_count FROM season_episodes WHERE show_id = ? ORDER BY season_number", showID)
 	if err != nil {

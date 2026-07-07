@@ -52,6 +52,11 @@ func RefreshShowByTMDB(database *db.DB, client *tmdb.Client, showID int64, tmdbI
 		}
 	}
 	database.UnarchiveForNewSeason(showID, newSeasonCount)
+	// Drop stale season/episode caches (e.g. leftovers from a previous wrong
+	// TMDB match) before repopulating from the current show. User watch history
+	// lives in the episodes table and is not affected.
+	database.ClearSeasonEpisodes(showID)
+	database.ClearEpisodeDetails(showID)
 	for _, s := range result.Seasons {
 		if s.SeasonNumber == 0 {
 			continue
