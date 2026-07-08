@@ -56,6 +56,7 @@ const months = stats
         const parts = s.period.split('-');
         return {year: parseInt(parts[1]), month: parseInt(parts[2]), count: s.count, runtime: s.runtime};
     })
+    .filter(m => Number.isInteger(m.year) && m.month >= 1 && m.month <= 12)
     .sort((a, b) => a.year === b.year ? a.month - b.month : a.year - b.year);
 
 // Group by year
