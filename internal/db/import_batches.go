@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -264,9 +265,15 @@ type UnmatchedEntry struct {
 
 // UnmatchedGroup aggregates unresolved entries by Netflix name.
 type UnmatchedGroup struct {
-	Name  string
-	Kind  string
-	Count int
+	Name         string
+	Kind         string
+	Count        int
+	MinSeason    int
+	MaxSeason    int
+	SeasonsLabel string
+	FirstDate    string
+	LastDate     string
+	Sample       string // a few example Netflix episode titles
 }
 
 // AddImportUnmatched bulk-inserts unmatched Netflix entries for a batch.
@@ -295,10 +302,17 @@ func (db *DB) AddImportUnmatched(batchID int64, entries []UnmatchedEntry) error 
 	return tx.Commit()
 }
 
-// ListUnmatchedGroups returns distinct unresolved names for a batch.
+// ListUnmatchedGroups returns distinct unresolved names for a batch, enriched
+// with aggregated data from the viewing history to aid TMDB search.
 func (db *DB) ListUnmatchedGroups(batchID int64) ([]UnmatchedGroup, error) {
 	rows, err := db.conn.Query(
-		`SELECT netflix_name, kind, COUNT(*) FROM import_unmatched
+		`SELECT netflix_name, kind, COUNT(*),
+		        COALESCE(MIN(CASE WHEN season > 0 THEN season END), 0),
+		        COALESCE(MAX(season), 0),
+		        COALESCE(MIN(NULLIF(watched_date,'')), ''),
+		        COALESCE(MAX(watched_date), ''),
+		        COALESCE(GROUP_CONCAT(netflix_episode, '|'), '')
+		 FROM import_unmatched
 		 WHERE batch_id = ? AND resolved = 0
 		 GROUP BY netflix_name, kind ORDER BY netflix_name ASC`, batchID)
 	if err != nil {
@@ -308,12 +322,50 @@ func (db *DB) ListUnmatchedGroups(batchID int64) ([]UnmatchedGroup, error) {
 	var out []UnmatchedGroup
 	for rows.Next() {
 		var g UnmatchedGroup
-		if err := rows.Scan(&g.Name, &g.Kind, &g.Count); err != nil {
+		var eps string
+		if err := rows.Scan(&g.Name, &g.Kind, &g.Count, &g.MinSeason, &g.MaxSeason, &g.FirstDate, &g.LastDate, &eps); err != nil {
 			return nil, err
 		}
+		g.SeasonsLabel = seasonsLabel(g.MinSeason, g.MaxSeason)
+		g.Sample = sampleTitles(eps, 3)
 		out = append(out, g)
 	}
 	return out, rows.Err()
+}
+
+// seasonsLabel formats a season range like "T1" or "T1–T3" (empty if none).
+func seasonsLabel(min, max int) string {
+	if min <= 0 && max <= 0 {
+		return ""
+	}
+	if min <= 0 {
+		min = max
+	}
+	if min == max {
+		return "T" + strconv.Itoa(min)
+	}
+	return "T" + strconv.Itoa(min) + "–T" + strconv.Itoa(max)
+}
+
+// sampleTitles returns up to n distinct non-empty titles from a '|'-joined list.
+func sampleTitles(joined string, n int) string {
+	if joined == "" {
+		return ""
+	}
+	seen := map[string]bool{}
+	var picked []string
+	for _, t := range strings.Split(joined, "|") {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		picked = append(picked, t)
+		if len(picked) >= n {
+			break
+		}
+	}
+	return strings.Join(picked, ", ")
 }
 
 // ListUnmatchedEntries returns the unresolved entries for a batch+name.
