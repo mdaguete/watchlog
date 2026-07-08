@@ -8,6 +8,32 @@ import (
 	"github.com/mdaguete/watchlog/internal/importer"
 )
 
+// cmdSyncStats recalculates watch stats from the DB for one user (uid>0) or all
+// users (uid==0). Idempotent; safe to run repeatedly.
+func cmdSyncStats(database *db.DB, uid int64) {
+	var ids []int64
+	if uid > 0 {
+		ids = []int64{uid}
+	} else {
+		users, err := database.ListAllUsers()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing users: %v\n", err)
+			os.Exit(1)
+		}
+		for _, u := range users {
+			ids = append(ids, u.ID)
+		}
+	}
+	for _, id := range ids {
+		if err := database.SyncWatchStatsFromDB(id); err != nil {
+			fmt.Fprintf(os.Stderr, "  ! user %d: %v\n", id, err)
+			continue
+		}
+		fmt.Printf("  \u2713 watch stats synced for user %d\n", id)
+	}
+	fmt.Printf("Done (%d user(s)).\n", len(ids))
+}
+
 // cmdNetflixDates reads a Netflix ViewingHistory.csv and adjusts watched_at
 // dates in the database for episodes/movies that match by title (or episode
 // order). Dry-run (default) only shows what would change; --apply writes them

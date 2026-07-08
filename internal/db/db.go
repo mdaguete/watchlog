@@ -981,6 +981,58 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 	return nil
 }
 
+// SyncWatchStatsFromDB updates watch_stats to include per-month totals derived
+// from the actual episodes and movies in the DB, merging with MAX so existing
+// values (e.g. TVTime CSV aggregates) are never reduced and repeated calls do
+// not double-count. Unlike RecalcWatchStats this is idempotent, so it can be
+// called after incremental operations such as the Netflix history import.
+func (db *DB) SyncWatchStatsFromDB(userID int64) error {
+	type stat struct {
+		period  string
+		count   int
+		runtime int
+	}
+	rows, err := db.conn.Query(`
+		SELECT period, SUM(c) AS cnt, SUM(rt) AS rt FROM (
+			SELECT 'month-' || substr(watched_at, 1, 7) AS period, COUNT(*) AS c, COALESCE(SUM(runtime), 0) AS rt
+			FROM episodes
+			WHERE user_id = ? AND watched_at IS NOT NULL AND watched_at != ''
+			GROUP BY substr(watched_at, 1, 7)
+			UNION ALL
+			SELECT 'month-' || substr(um.watched_at, 1, 7) AS period, COUNT(*) AS c, COALESCE(SUM(m.runtime), 0) AS rt
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND um.watched_at != ''
+			GROUP BY substr(um.watched_at, 1, 7)
+		) GROUP BY period`, userID, userID)
+	if err != nil {
+		return err
+	}
+	var stats []stat
+	for rows.Next() {
+		var s stat
+		if err := rows.Scan(&s.period, &s.count, &s.runtime); err != nil {
+			continue
+		}
+		stats = append(stats, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, s := range stats {
+		if _, err := db.conn.Exec(`
+			INSERT INTO watch_stats (user_id, period, count, runtime)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(user_id, period) DO UPDATE SET
+				count = MAX(count, excluded.count),
+				runtime = MAX(runtime, excluded.runtime)`,
+			userID, s.period, s.count, s.runtime); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (db *DB) GetUserWatchStats(userID int64) ([]models.WatchStats, error) {
 	rows, err := db.conn.Query("SELECT id, user_id, period, count, runtime FROM watch_stats WHERE user_id = ? ORDER BY period", userID)
 	if err != nil {

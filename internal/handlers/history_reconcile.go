@@ -198,6 +198,7 @@ func (h *Handler) HandleHistoryResolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.DB.MarkUnmatchedResolved(batchID, name)
+	h.DB.SyncWatchStatsFromDB(userID)
 
 	// Return the refreshed unmatched section (HTMX swap).
 	groups, _ := h.DB.ListUnmatchedGroups(batchID)
