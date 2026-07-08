@@ -2,6 +2,7 @@ package db
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,25 @@ func TestImportUnmatchedLifecycle(t *testing.T) {
 	groups, _ := database.ListUnmatchedGroups(batchID)
 	if len(groups) != 2 {
 		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	// Verify enriched aggregation for the Arcane series group.
+	var arcaneG *UnmatchedGroup
+	for i := range groups {
+		if groups[i].Name == "Arcane" {
+			arcaneG = &groups[i]
+		}
+	}
+	if arcaneG == nil {
+		t.Fatal("Arcane group missing")
+	}
+	if arcaneG.Count != 2 || arcaneG.SeasonsLabel != "T1" {
+		t.Errorf("Arcane: expected 2 eps / T1, got count=%d seasons=%q", arcaneG.Count, arcaneG.SeasonsLabel)
+	}
+	if arcaneG.FirstDate != "2022-01-01" || arcaneG.LastDate != "2022-01-02" {
+		t.Errorf("Arcane dates: got %q..%q", arcaneG.FirstDate, arcaneG.LastDate)
+	}
+	if !strings.Contains(arcaneG.Sample, "Bienvenidos") {
+		t.Errorf("Arcane sample missing example title, got %q", arcaneG.Sample)
 	}
 	if database.CountUnmatchedGroups(batchID) != 2 {
 		t.Errorf("count mismatch")

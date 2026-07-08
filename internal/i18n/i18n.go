@@ -382,6 +382,7 @@ var translations = map[string]map[string]string{
 	"history.no_candidates":    {"es": "Sin resultados en TMDB.", "en": "No TMDB results."},
 	"history.tmdb_disabled":    {"es": "TMDB no está configurado; no se pueden buscar coincidencias.", "en": "TMDB is not configured; cannot search for matches."},
 	"history.dates_applied":    {"es": "fechas aplicadas", "en": "dates applied"},
+	"history.examples":         {"es": "Ej.", "en": "e.g."},
 	"import.select_file": {"es": "Seleccionar archivo", "en": "Select file"},
 	"import.start":       {"es": "Iniciar importación", "en": "Start import"},
 	"import.log":         {"es": "Progreso", "en": "Progress"},

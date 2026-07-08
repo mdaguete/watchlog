@@ -57,7 +57,7 @@ func (h *Handler) HandleHistoryTMDBSearch(w http.ResponseWriter, r *http.Request
 			}
 			candidates = append(candidates, tmdbCandidate{
 				TMDBID: m.ID, Title: m.Title, Year: yearOf(m.ReleaseDate),
-				Overview: truncate(m.Overview, 160), PosterURL: tmdb.PosterURL(m.PosterPath, "w185"),
+				Overview: truncate(m.Overview, 220), PosterURL: tmdb.PosterURL(m.PosterPath, "w342"),
 			})
 		}
 	} else {
@@ -68,7 +68,7 @@ func (h *Handler) HandleHistoryTMDBSearch(w http.ResponseWriter, r *http.Request
 			}
 			candidates = append(candidates, tmdbCandidate{
 				TMDBID: s.ID, Title: s.Name, Year: yearOf(s.FirstAirDate),
-				Overview: truncate(s.Overview, 160), PosterURL: tmdb.PosterURL(s.PosterPath, "w185"),
+				Overview: truncate(s.Overview, 220), PosterURL: tmdb.PosterURL(s.PosterPath, "w342"),
 			})
 		}
 	}
