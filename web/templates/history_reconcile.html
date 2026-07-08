@@ -16,8 +16,15 @@
             <div class="px-4 py-3">
                 <div class="flex items-center justify-between gap-4">
                     <div class="min-w-0">
-                        <span class="text-sm font-medium">{{$g.Name}}</span>
-                        <span class="text-xs text-wl-gray"> &middot; {{$g.Count}} {{if eq $g.Kind "movie"}}{{T $root.Lang "history.movie"}}{{else}}{{T $root.Lang "history.episodes"}}{{end}}</span>
+                        <div class="text-sm font-medium">{{$g.Name}}</div>
+                        <div class="text-xs text-wl-gray">
+                            {{if eq $g.Kind "movie"}}
+                                {{T $root.Lang "history.movie"}}{{if $g.FirstDate}} &middot; {{$g.FirstDate}}{{end}}
+                            {{else}}
+                                {{$g.Count}} {{T $root.Lang "history.episodes"}}{{if $g.SeasonsLabel}} &middot; {{$g.SeasonsLabel}}{{end}}{{if $g.FirstDate}} &middot; {{$g.FirstDate}}{{if ne $g.LastDate $g.FirstDate}} → {{$g.LastDate}}{{end}}{{end}}
+                            {{end}}
+                        </div>
+                        {{if $g.Sample}}<div class="text-xs text-wl-gray truncate mt-0.5">{{T $root.Lang "history.examples"}}: {{$g.Sample}}</div>{{end}}
                     </div>
                     {{if $root.TMDBEnabled}}
                     <button type="button"
@@ -48,10 +55,10 @@
         <input type="hidden" name="name" value="{{$root.Name}}">
         <input type="hidden" name="kind" value="{{$root.Kind}}">
         <input type="hidden" name="tmdb_id" value="{{.TMDBID}}">
-        {{if .PosterURL}}<img src="{{.PosterURL}}" alt="" class="w-12 h-auto shrink-0">{{end}}
+        {{if .PosterURL}}<img src="{{.PosterURL}}" alt="" class="w-20 h-auto shrink-0">{{end}}
         <div class="flex-1 min-w-0">
             <div class="text-sm font-medium">{{.Title}} {{if .Year}}<span class="text-wl-gray">({{.Year}})</span>{{end}}</div>
-            <div class="text-xs text-wl-gray line-clamp-2">{{.Overview}}</div>
+            <div class="text-xs text-wl-gray line-clamp-3">{{.Overview}}</div>
         </div>
         <button type="submit" class="shrink-0 px-3 py-1.5 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors self-center">
             {{T $root.Lang "history.select"}}
