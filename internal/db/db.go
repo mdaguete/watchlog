@@ -649,6 +649,14 @@ func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error
 	return err
 }
 
+// GetEpisodeWatchedAt returns the watched_at text for a specific episode (empty if not watched).
+func (db *DB) GetEpisodeWatchedAt(userID, showID int64, season, episode int) string {
+	var wa string
+	db.conn.QueryRow(`SELECT COALESCE(watched_at,'') FROM episodes WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,
+		userID, showID, season, episode).Scan(&wa)
+	return wa
+}
+
 // UpdateEpisodeWatchedAt sets the watched date/time of an already-watched
 // episode (scoped to the user). Returns the number of rows affected.
 func (db *DB) UpdateEpisodeWatchedAt(userID, showID int64, season, episode int, at time.Time) (int64, error) {

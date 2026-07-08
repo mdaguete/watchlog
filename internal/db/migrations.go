@@ -386,6 +386,36 @@ func (db *DB) ClearTMDBRefreshPending() {
 	db.SetSetting("tmdb_refresh_pending", "0")
 }
 
+// Backup creates a timestamped backup of the database file with a descriptive
+// label. Returns the backup path or an error.
+func (db *DB) Backup(label string) (string, error) {
+	if db.path == "" {
+		return "", fmt.Errorf("database path not set")
+	}
+	backupDir := filepath.Join(filepath.Dir(db.path), "backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return "", fmt.Errorf("create backup dir: %w", err)
+	}
+	baseName := filepath.Base(db.path)
+	timestamp := time.Now().Format("20060102-150405")
+	backupName := fmt.Sprintf("%s.%s.%s.bak", baseName, label, timestamp)
+	backupPath := filepath.Join(backupDir, backupName)
+	src, err := os.Open(db.path)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+	dst, err := os.Create(backupPath)
+	if err != nil {
+		return "", err
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, src); err != nil {
+		return "", err
+	}
+	return backupPath, nil
+}
+
 // backupBeforeMigration copies the database file to a backups/ folder next to the DB.
 func (db *DB) backupBeforeMigration(currentVersion int) error {
 	if db.path == "" {

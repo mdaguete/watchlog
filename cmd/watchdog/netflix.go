@@ -107,7 +107,13 @@ func cmdNetflixDates(database *db.DB, csvPath string, userID int64, apply bool) 
 
 	// Build a name -> show_id index (case-insensitive, trimmed).
 	showIndex := map[string]int64{}
+	showDisplayName := map[int64]string{} // show_id -> best display name (name_es or name)
 	for _, s := range shows {
+		display := s.NameES
+		if display == "" {
+			display = s.Name
+		}
+		showDisplayName[s.ID] = display
 		for _, n := range []string{s.Name, s.NameES, s.NameEN} {
 			n = normalizeTitle(n)
 			if n != "" {
@@ -143,12 +149,54 @@ func cmdNetflixDates(database *db.DB, csvPath string, userID int64, apply bool) 
 		detailRows.Close()
 	}
 
+	// Pre-compute episode order per series+season: group entries, sort by date
+	// (ascending) and position within day (Netflix CSV is reverse-chrono, so
+	// within same date entries appear newest-first; reversing gives chrono order).
+	// This gives episode number 1, 2, 3... as fallback when title match fails.
+	type groupKey struct {
+		showID int64
+		season int
+	}
+	type orderedEntry struct {
+		idx  int // index in entries slice
+		date time.Time
+	}
+	groups := map[groupKey][]orderedEntry{}
+	for i, e := range entries {
+		sid, ok := showIndex[normalizeTitle(e.SeriesName)]
+		if !ok {
+			continue
+		}
+		k := groupKey{sid, e.Season}
+		groups[k] = append(groups[k], orderedEntry{i, e.Date})
+	}
+	// Assign episode numbers by chronological order within each group.
+	epOrderMap := map[int]int{} // entries index -> episode number
+	for _, oes := range groups {
+		// Reverse the slice (CSV is newest-first) → oldest-first = chrono.
+		for i, j := 0, len(oes)-1; i < j; i, j = i+1, j-1 {
+			oes[i], oes[j] = oes[j], oes[i]
+		}
+		for n, oe := range oes {
+			epOrderMap[oe.idx] = n + 1
+		}
+	}
+
 	// Process entries: match and update.
+	backupDone := false
 	matched, updated, skipped, noMatch := 0, 0, 0, 0
-	for _, e := range entries {
+	var unmatchedSeries []string
+	seenUnmatched := map[string]bool{}
+	var unmatchedEps []string
+
+	for i, e := range entries {
 		showID, ok := showIndex[normalizeTitle(e.SeriesName)]
 		if !ok {
 			noMatch++
+			if !seenUnmatched[e.SeriesName] {
+				seenUnmatched[e.SeriesName] = true
+				unmatchedSeries = append(unmatchedSeries, e.SeriesName)
+			}
 			continue
 		}
 		matched++
@@ -162,27 +210,81 @@ func cmdNetflixDates(database *db.DB, csvPath string, userID int64, apply bool) 
 				}
 			}
 		}
+		// Fallback: use chronological order within the season.
 		if epNum == 0 {
-			// Cannot determine episode number → skip (no fallback by order for safety).
+			if n, ok := epOrderMap[i]; ok {
+				epNum = n
+			}
+		}
+		if epNum == 0 {
 			skipped++
+			unmatchedEps = append(unmatchedEps, fmt.Sprintf("  %s T%d: %q", e.SeriesName, e.Season, e.EpTitle))
 			continue
 		}
 
-		// Check current watched_at.
-		n, err := database.UpdateEpisodeWatchedAt(userID, showID, e.Season, epNum, e.Date)
-		if err != nil || n == 0 {
+		// Read current date for comparison.
+		currentWA := database.GetEpisodeWatchedAt(userID, showID, e.Season, epNum)
+		if currentWA == "" {
+			// Episode not in DB (not marked as watched) → skip.
 			skipped++
 			continue
 		}
+		newDate := e.Date.Format("2006-01-02")
+		currentDate := ""
+		if len(currentWA) >= 10 {
+			currentDate = currentWA[:10]
+		}
+		if currentDate == newDate {
+			// Already correct → no change needed.
+			continue
+		}
+
 		if apply {
+			if !backupDone {
+				bkp, err := database.Backup("netflix-dates")
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating backup: %v\nAborting.\n", err)
+					return
+				}
+				fmt.Printf("Backup created: %s\n\n", bkp)
+				backupDone = true
+			}
+			n, err := database.UpdateEpisodeWatchedAt(userID, showID, e.Season, epNum, e.Date)
+			if err != nil || n == 0 {
+				skipped++
+				continue
+			}
 			updated++
-			fmt.Printf("  ✓ %s S%02dE%02d → %s\n", e.SeriesName, e.Season, epNum, e.Date.Format("2006-01-02"))
+			fmt.Printf("  ✓ %s S%02dE%02d [%s]: %s → %s\n", showDisplayName[showID], e.Season, epNum, e.EpTitle, currentDate, newDate)
 		} else {
 			updated++
-			fmt.Printf("  [dry-run] %s S%02dE%02d → %s\n", e.SeriesName, e.Season, epNum, e.Date.Format("2006-01-02"))
+			fmt.Printf("  %s S%02dE%02d [%s]: %s → %s\n", showDisplayName[showID], e.Season, epNum, e.EpTitle, currentDate, newDate)
 		}
 	}
-	fmt.Printf("\nSummary: %d entries, %d series matched, %d episodes updated, %d skipped (no ep match), %d no series match\n", len(entries), matched, updated, skipped, noMatch)
+
+	// Report unmatched series.
+	if len(unmatchedSeries) > 0 {
+		fmt.Printf("\n— Series not found in your library (%d):\n", len(unmatchedSeries))
+		for _, s := range unmatchedSeries {
+			fmt.Printf("  · %s\n", s)
+		}
+	}
+	// Report unmatched episodes (only in verbose / dry-run).
+	if !apply && len(unmatchedEps) > 0 {
+		fmt.Printf("\n— Episodes not matched by title (%d):\n", len(unmatchedEps))
+		limit := len(unmatchedEps)
+		if limit > 30 {
+			limit = 30
+		}
+		for _, s := range unmatchedEps[:limit] {
+			fmt.Println(s)
+		}
+		if len(unmatchedEps) > 30 {
+			fmt.Printf("  ... and %d more\n", len(unmatchedEps)-30)
+		}
+	}
+
+	fmt.Printf("\nSummary: %d entries, %d series matched, %d dates changed, %d episodes skipped, %d series not found\n", len(entries), matched, updated, skipped, noMatch)
 	if !apply && updated > 0 {
 		fmt.Println("\nRun with --apply to write changes to the database.")
 	}
