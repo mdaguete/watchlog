@@ -57,6 +57,36 @@ func TestImportUnmatchedLifecycle(t *testing.T) {
 	}
 }
 
+func TestListImportBatches_WithCounts(t *testing.T) {
+	database, uid := newImportTestDB(t)
+	// Two batches, each with changes, to exercise per-batch count subqueries
+	// while iterating the batch cursor (regression: single-connection deadlock).
+	for b := 0; b < 2; b++ {
+		id, err := database.CreateImportBatch(uid, "netflix", "f.csv", 5, 1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := database.AddImportChanges(id, []ImportChange{
+			{Type: "episode", TargetID: 1, Title: "X", Season: 1, Episode: 1, NewDate: "2020-01-01"},
+			{Type: "movie", TargetID: 2, Title: "Y", NewDate: "2020-02-02"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	batches, err := database.ListImportBatches(uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batches) != 2 {
+		t.Fatalf("expected 2 batches, got %d", len(batches))
+	}
+	for _, b := range batches {
+		if b.TotalChanges != 2 || b.SelectedChanges != 2 {
+			t.Errorf("batch %d: expected 2 total/selected changes, got total=%d selected=%d", b.ID, b.TotalChanges, b.SelectedChanges)
+		}
+	}
+}
+
 func TestMarkEpisodeWatchedAt(t *testing.T) {
 	database, uid := newImportTestDB(t)
 	showID, _ := database.UpsertShow(models.Show{ExternalID: 5, Name: "Show"})

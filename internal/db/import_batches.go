@@ -140,13 +140,13 @@ func (db *DB) ListImportBatches(userID int64) ([]ImportBatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var out []ImportBatch
 	for rows.Next() {
 		var b ImportBatch
 		var filename, appliedAt *string
 		b.UserID = userID
 		if err := rows.Scan(&b.ID, &b.Source, &filename, &b.Status, &b.Entries, &b.SeriesMatched, &b.CreatedAt, &appliedAt); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		if filename != nil {
@@ -155,10 +155,20 @@ func (db *DB) ListImportBatches(userID int64) ([]ImportBatch, error) {
 		if appliedAt != nil {
 			b.AppliedAt = *appliedAt
 		}
-		scanBatchCounts(db, &b)
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	// Counts run as separate queries; the rows cursor above must be closed
+	// first because the pool is limited to a single connection (nested queries
+	// while iterating would deadlock).
+	for i := range out {
+		scanBatchCounts(db, &out[i])
+	}
+	return out, nil
 }
 
 // ListImportChanges returns the changes of a batch, paginated (limit<=0 = all).
