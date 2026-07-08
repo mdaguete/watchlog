@@ -35,6 +35,9 @@ Commands:
   db-info                   Show database info (version, size, users)
   db-vacuum                 Compact the database (VACUUM)
 
+  netflix-dates <csv> [uid] Adjust episode watched dates from Netflix history
+                            (dry-run by default; add --apply to write)
+
 Examples:
   watchdog --datadir /data users
   watchdog --datadir /data user-create admin mypassword
@@ -122,6 +125,19 @@ func main() {
 		cmdDBInfo(database, dbPath)
 	case "db-vacuum":
 		cmdDBVacuum(database)
+	case "netflix-dates":
+		requireArgs(args, 1, "netflix-dates <csv-path> [user-id] [--apply]")
+		csvPath := args[0]
+		uid := int64(1)
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			} else if n, err := strconv.ParseInt(a, 10, 64); err == nil {
+				uid = n
+			}
+		}
+		cmdNetflixDates(database, csvPath, uid, apply)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
 		fmt.Print(usage)

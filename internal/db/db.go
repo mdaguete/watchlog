@@ -158,6 +158,12 @@ func (db *DB) GetShowIDByName(name string) int64 {
 	return id
 }
 
+// RawQuery executes a raw SQL query and returns the rows. The caller must close
+// the rows when done. For use by CLI tools that need flexible reads.
+func (db *DB) RawQuery(query string, args ...any) (*sql.Rows, error) {
+	return db.conn.Query(query, args...)
+}
+
 func (db *DB) GetShowByTMDBID(tmdbID int, id *int64) {
 	db.conn.QueryRow("SELECT id FROM shows WHERE tmdb_id = ?", tmdbID).Scan(id)
 }
