@@ -37,3 +37,6 @@ dist/
 cache/
 .kiro/
 tmp/
+/watchdog
+/server
+/importer
