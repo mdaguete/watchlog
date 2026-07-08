@@ -1092,7 +1092,7 @@ func (h *Handler) APIMarkEpisodeWatched(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	h.DB.MarkEpisodeWatched(userID, showID, req.Season, req.Episode)
-	h.DB.IncrementWatchStats(userID, 1)
+	h.DB.SyncWatchStatsFromDB(userID)
 	h.DB.UnsnoozeShow(userID, showID)
 	archived := h.DB.AutoArchiveIfComplete(userID, showID)
 	log.Printf("ACTION: user=%d mark watched show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
@@ -1159,7 +1159,7 @@ func (h *Handler) APIMarkSeasonWatched(w http.ResponseWriter, r *http.Request) {
 	}
 	marked, _ := h.DB.MarkSeasonWatched(userID, showID, req.Season, req.Episodes)
 	if marked > 0 {
-		h.DB.IncrementWatchStats(userID, marked)
+		h.DB.SyncWatchStatsFromDB(userID)
 	}
 	archived := h.DB.AutoArchiveIfComplete(userID, showID)
 	log.Printf("ACTION: user=%d mark season show=%d S%02d (%d eps)", userID, showID, req.Season, marked)
@@ -1213,6 +1213,7 @@ func (h *Handler) APIMarkMovieWatched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.DB.MarkMovieWatched(userID, id, time.Now())
+	h.DB.SyncWatchStatsFromDB(userID)
 	log.Printf("ACTION: user=%d mark movie watched id=%d", userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -1262,6 +1263,7 @@ func (h *Handler) APISetEpisodeDate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "episode not watched")
 		return
 	}
+	h.DB.SyncWatchStatsFromDB(userID)
 	log.Printf("ACTION: user=%d set date show=%d S%02dE%02d", userID, showID, req.Season, req.Episode)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -1293,6 +1295,7 @@ func (h *Handler) APISetMovieDate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.DB.MarkMovieWatched(userID, id, at)
+	h.DB.SyncWatchStatsFromDB(userID)
 	log.Printf("ACTION: user=%d set movie date id=%d", userID, id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
