@@ -95,14 +95,7 @@
     <p class="text-sm text-wl-gray">{{T .Lang "history.no_changes"}}</p>
     {{end}}
 
-    {{if $b.UnmatchedSeries}}
-    <details class="border border-wl-border">
-        <summary class="px-4 py-3 text-xs uppercase tracking-widest text-wl-gray cursor-pointer">{{T .Lang "history.unmatched_series"}} ({{len $b.UnmatchedSeries}})</summary>
-        <ul class="px-4 py-3 text-sm space-y-1">
-            {{range $b.UnmatchedSeries}}<li class="text-wl-gray">&middot; {{.}}</li>{{end}}
-        </ul>
-    </details>
-    {{end}}
+    {{template "history_unmatched_section" (dict "Lang" .Lang "Batch" $b "UnmatchedGroups" .UnmatchedGroups "TMDBEnabled" .TMDBEnabled)}}
 
     <a href="/import/history" class="inline-block text-xs uppercase tracking-widest text-wl-gray hover:text-black">&larr; {{T .Lang "history.all_batches"}}</a>
 </div>

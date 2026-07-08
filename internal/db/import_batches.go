@@ -74,6 +74,32 @@ func (db *DB) AddImportChanges(batchID int64, changes []ImportChange) error {
 	return tx.Commit()
 }
 
+// AddImportChangesApplied bulk-inserts changes already applied (selected+applied).
+func (db *DB) AddImportChangesApplied(batchID int64, changes []ImportChange) error {
+	if len(changes) == 0 {
+		return nil
+	}
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(
+		`INSERT INTO import_changes (batch_id, type, target_id, title, season, episode, netflix_title, current_date, new_date, selected, applied)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, c := range changes {
+		if _, err := stmt.Exec(batchID, c.Type, c.TargetID, c.Title, c.Season, c.Episode, c.NetflixTitle, c.CurrentDate, c.NewDate); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func scanBatchCounts(db *DB, b *ImportBatch) {
 	db.conn.QueryRow(`SELECT
 		COUNT(*),
@@ -213,4 +239,102 @@ func (db *DB) SetImportBatchStatus(id int64, status string) error {
 func (db *DB) DeleteImportBatch(id, userID int64) error {
 	_, err := db.conn.Exec(`DELETE FROM import_batches WHERE id = ? AND user_id = ?`, id, userID)
 	return err
+}
+
+// UnmatchedEntry is one Netflix row whose series/movie is not in the library.
+type UnmatchedEntry struct {
+	ID          int64
+	BatchID     int64
+	Kind        string // series | movie
+	NetflixName string
+	Season      int
+	NetflixEp   string
+	WatchedDate string // YYYY-MM-DD
+}
+
+// UnmatchedGroup aggregates unresolved entries by Netflix name.
+type UnmatchedGroup struct {
+	Name  string
+	Kind  string
+	Count int
+}
+
+// AddImportUnmatched bulk-inserts unmatched Netflix entries for a batch.
+func (db *DB) AddImportUnmatched(batchID int64, entries []UnmatchedEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(
+		`INSERT INTO import_unmatched (batch_id, kind, netflix_name, season, netflix_episode, watched_date, resolved)
+		 VALUES (?, ?, ?, ?, ?, ?, 0)`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entries {
+		if _, err := stmt.Exec(batchID, e.Kind, e.NetflixName, e.Season, e.NetflixEp, e.WatchedDate); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ListUnmatchedGroups returns distinct unresolved names for a batch.
+func (db *DB) ListUnmatchedGroups(batchID int64) ([]UnmatchedGroup, error) {
+	rows, err := db.conn.Query(
+		`SELECT netflix_name, kind, COUNT(*) FROM import_unmatched
+		 WHERE batch_id = ? AND resolved = 0
+		 GROUP BY netflix_name, kind ORDER BY netflix_name ASC`, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UnmatchedGroup
+	for rows.Next() {
+		var g UnmatchedGroup
+		if err := rows.Scan(&g.Name, &g.Kind, &g.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// ListUnmatchedEntries returns the unresolved entries for a batch+name.
+func (db *DB) ListUnmatchedEntries(batchID int64, name string) ([]UnmatchedEntry, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, batch_id, kind, netflix_name, season, netflix_episode, watched_date
+		 FROM import_unmatched WHERE batch_id = ? AND netflix_name = ? AND resolved = 0 ORDER BY id ASC`, batchID, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UnmatchedEntry
+	for rows.Next() {
+		var e UnmatchedEntry
+		if err := rows.Scan(&e.ID, &e.BatchID, &e.Kind, &e.NetflixName, &e.Season, &e.NetflixEp, &e.WatchedDate); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// MarkUnmatchedResolved flags all entries of a batch+name as resolved.
+func (db *DB) MarkUnmatchedResolved(batchID int64, name string) error {
+	_, err := db.conn.Exec(`UPDATE import_unmatched SET resolved = 1 WHERE batch_id = ? AND netflix_name = ?`, batchID, name)
+	return err
+}
+
+// CountUnmatchedGroups returns the number of distinct unresolved names.
+func (db *DB) CountUnmatchedGroups(batchID int64) int {
+	var n int
+	db.conn.QueryRow(`SELECT COUNT(DISTINCT netflix_name) FROM import_unmatched WHERE batch_id = ? AND resolved = 0`, batchID).Scan(&n)
+	return n
 }
