@@ -36,6 +36,7 @@ var migrations = []Migration{
 	{Version: 13, Description: "normalize watched_at to ISO-8601 text", Up: migrateV13},
 	{Version: 14, Description: "movie release_date column", Up: migrateV14},
 	{Version: 15, Description: "merge duplicate shows by name", Up: migrateV15},
+	{Version: 16, Description: "viewing-history import staging tables", Up: migrateV16},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -690,4 +691,48 @@ func migrateV15(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// migrateV16 creates the staging tables used by the viewing-history import
+// (Netflix, etc.): a batch per upload and one row per proposed watched-date
+// change, so the user can review, edit and confirm changes over time.
+func migrateV16(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS import_batches (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			source TEXT NOT NULL DEFAULT 'netflix',
+			filename TEXT,
+			status TEXT NOT NULL DEFAULT 'pending',
+			entries INTEGER NOT NULL DEFAULT 0,
+			series_matched INTEGER NOT NULL DEFAULT 0,
+			unmatched_series TEXT,
+			created_at TEXT NOT NULL,
+			applied_at TEXT,
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`
+		CREATE TABLE IF NOT EXISTS import_changes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			batch_id INTEGER NOT NULL,
+			type TEXT NOT NULL,
+			target_id INTEGER NOT NULL,
+			title TEXT NOT NULL DEFAULT '',
+			season INTEGER NOT NULL DEFAULT 0,
+			episode INTEGER NOT NULL DEFAULT 0,
+			netflix_title TEXT NOT NULL DEFAULT '',
+			current_date TEXT NOT NULL DEFAULT '',
+			new_date TEXT NOT NULL DEFAULT '',
+			selected INTEGER NOT NULL DEFAULT 1,
+			applied INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(batch_id) REFERENCES import_batches(id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_import_changes_batch ON import_changes(batch_id)`)
+	return err
 }

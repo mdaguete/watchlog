@@ -34,6 +34,14 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 
 	funcMap := template.FuncMap{
 		"T":   i18n.T,
+		"dict": func(values ...any) map[string]any {
+			m := make(map[string]any, len(values)/2)
+			for i := 0; i+1 < len(values); i += 2 {
+				key, _ := values[i].(string)
+				m[key] = values[i+1]
+			}
+			return m
+		},
 		"Loc": func(lang, es, en string) string { if lang == "en" && en != "" { return en }; if es != "" { return es }; return en },
 		"LocGenres": func(lang, es, en string) string { if lang == "en" && en != "" { return en }; return i18n.TranslateGenres(lang, es) },
 		"LocName": func(lang, name, nameES, nameEN string) string { if lang == "en" { if nameEN != "" { return nameEN }; return name }; if nameES != "" { return nameES }; return name },
@@ -1321,7 +1329,8 @@ func TestSetupWizard_Step1_EmptyUsername(t *testing.T) {
 	database, _ := db.New(f.Name())
 	defer database.Close()
 	funcMap := template.FuncMap{
-		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"T": i18n.T, "dict": func(values ...any) map[string]any { m := make(map[string]any); for i := 0; i+1 < len(values); i += 2 { k, _ := values[i].(string); m[k] = values[i+1] }; return m },
+		"Loc": func(l, e, n string) string { return e },
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
@@ -1349,7 +1358,8 @@ func TestSetupWizard_Step1_PasswordMismatch(t *testing.T) {
 	database, _ := db.New(f.Name())
 	defer database.Close()
 	funcMap := template.FuncMap{
-		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"T": i18n.T, "dict": func(values ...any) map[string]any { m := make(map[string]any); for i := 0; i+1 < len(values); i += 2 { k, _ := values[i].(string); m[k] = values[i+1] }; return m },
+		"Loc": func(l, e, n string) string { return e },
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
@@ -1377,7 +1387,8 @@ func TestSetupWizard_Step1_Success(t *testing.T) {
 	database, _ := db.New(f.Name())
 	defer database.Close()
 	funcMap := template.FuncMap{
-		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"T": i18n.T, "dict": func(values ...any) map[string]any { m := make(map[string]any); for i := 0; i+1 < len(values); i += 2 { k, _ := values[i].(string); m[k] = values[i+1] }; return m },
+		"Loc": func(l, e, n string) string { return e },
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },

@@ -181,6 +181,14 @@ func main() {
 	// Parse templates
 	funcMap := template.FuncMap{
 		"T": i18n.T,
+		"dict": func(values ...any) map[string]any {
+			m := make(map[string]any, len(values)/2)
+			for i := 0; i+1 < len(values); i += 2 {
+				key, _ := values[i].(string)
+				m[key] = values[i+1]
+			}
+			return m
+		},
 		"Loc": func(lang, es, en string) string {
 			if lang == "en" && en != "" {
 				return en
@@ -254,6 +262,13 @@ func main() {
 	// Import
 	mux.HandleFunc("GET /import", h.PageImport)
 	mux.HandleFunc("POST /import", h.HandleImport)
+	mux.HandleFunc("GET /import/history", h.PageHistoryImport)
+	mux.HandleFunc("POST /import/history", h.HandleHistoryAnalyze)
+	mux.HandleFunc("GET /import/history/{id}", h.PageHistoryBatch)
+	mux.HandleFunc("POST /import/history/{id}/change/{cid}/toggle", h.HandleHistoryToggle)
+	mux.HandleFunc("POST /import/history/{id}/change/{cid}/date", h.HandleHistoryEditDate)
+	mux.HandleFunc("POST /import/history/{id}/apply", h.HandleHistoryApply)
+	mux.HandleFunc("POST /import/history/{id}/delete", h.HandleHistoryDelete)
 
 	// Auth
 	mux.HandleFunc("GET /login", h.PageLogin)
