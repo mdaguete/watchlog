@@ -37,6 +37,8 @@ Commands:
 
   netflix-dates <csv> [uid] Adjust episode watched dates from Netflix history
                             (dry-run by default; add --apply to write)
+  sync-stats [uid]          Recalculate watch stats from the DB (all users if
+                            no id); use after importing viewing history
 
 Examples:
   watchdog --datadir /data users
@@ -138,6 +140,14 @@ func main() {
 			}
 		}
 		cmdNetflixDates(database, csvPath, uid, apply)
+	case "sync-stats":
+		uid := int64(0) // 0 = all users
+		if len(args) > 0 {
+			if n, err := strconv.ParseInt(args[0], 10, 64); err == nil {
+				uid = n
+			}
+		}
+		cmdSyncStats(database, uid)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
 		fmt.Print(usage)

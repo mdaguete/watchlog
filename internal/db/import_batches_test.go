@@ -125,3 +125,39 @@ func TestMarkEpisodeWatchedAt(t *testing.T) {
 		t.Errorf("expected updated 2020-04-05, got %q", got)
 	}
 }
+
+func TestSyncWatchStatsFromDB_IdempotentAndNewPeriods(t *testing.T) {
+	database, uid := newImportTestDB(t)
+	showID, _ := database.UpsertShow(models.Show{ExternalID: 7, Name: "S"})
+	// Two episodes in an old month (as a Netflix import would produce).
+	database.MarkEpisodeWatchedAt(uid, showID, 1, 1, time.Date(2018, 3, 2, 12, 0, 0, 0, time.Local))
+	database.MarkEpisodeWatchedAt(uid, showID, 1, 2, time.Date(2018, 3, 5, 12, 0, 0, 0, time.Local))
+	// A movie in another old month.
+	movieID, _ := database.UpsertMovie(models.Movie{ExternalID: "mv1", Name: "M"})
+	database.MarkMovieWatched(uid, movieID, time.Date(2019, 7, 1, 12, 0, 0, 0, time.Local))
+
+	if err := database.SyncWatchStatsFromDB(uid); err != nil {
+		t.Fatal(err)
+	}
+	get := func() map[string]int {
+		stats, _ := database.GetUserWatchStats(uid)
+		m := map[string]int{}
+		for _, s := range stats {
+			m[s.Period] = s.Count
+		}
+		return m
+	}
+	m := get()
+	if m["month-2018-03"] != 2 {
+		t.Errorf("expected 2 episodes in 2018-03, got %d", m["month-2018-03"])
+	}
+	if m["month-2019-07"] != 1 {
+		t.Errorf("expected 1 movie in 2019-07, got %d", m["month-2019-07"])
+	}
+	// Idempotent: calling again must not inflate counts.
+	database.SyncWatchStatsFromDB(uid)
+	m2 := get()
+	if m2["month-2018-03"] != 2 || m2["month-2019-07"] != 1 {
+		t.Errorf("not idempotent: got %+v", m2)
+	}
+}

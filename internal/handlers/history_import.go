@@ -241,6 +241,7 @@ func (h *Handler) HandleHistoryApply(w http.ResponseWriter, r *http.Request) {
 		applied++
 	}
 	h.DB.SetImportBatchStatus(batchID, "applied")
+	h.DB.SyncWatchStatsFromDB(userID)
 	log.Printf("ACTION: history import batch %d applied %d changes (%d failed), backup=%s", batch.ID, applied, failed, bkp)
 	http.Redirect(w, r, "/import/history/"+strconv.FormatInt(batchID, 10), http.StatusSeeOther)
 }
