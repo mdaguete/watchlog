@@ -933,7 +933,7 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 		INSERT INTO watch_stats (user_id, period, count, runtime)
 		SELECT ?, 'month-' || substr(watched_at, 1, 7), COUNT(*), COALESCE(SUM(runtime), 0)
 		FROM episodes
-		WHERE user_id = ? AND watched_at IS NOT NULL
+		WHERE user_id = ? AND watched_at IS NOT NULL AND substr(watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
 		GROUP BY substr(watched_at, 1, 7)
 		ON CONFLICT(user_id, period) DO UPDATE SET
 			count = MAX(count, excluded.count),
@@ -954,7 +954,7 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 		SELECT 'month-' || substr(um.watched_at, 1, 7) AS period, COUNT(*) AS cnt, COALESCE(SUM(m.runtime), 0) AS rt
 		FROM user_movies um
 		JOIN movies m ON m.id = um.movie_id
-		WHERE um.user_id = ? AND um.watched_at IS NOT NULL
+		WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
 		GROUP BY substr(um.watched_at, 1, 7)`,
 		userID)
 	if err != nil {
@@ -987,6 +987,10 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 // not double-count. Unlike RecalcWatchStats this is idempotent, so it can be
 // called after incremental operations such as the Netflix history import.
 func (db *DB) SyncWatchStatsFromDB(userID int64) error {
+	// Remove stale/malformed month periods (e.g. "month-" produced by older
+	// imports from empty watched_at values) so they don't show as a NaN year.
+	db.conn.Exec(`DELETE FROM watch_stats WHERE user_id = ? AND period LIKE 'month-%' AND period NOT GLOB 'month-[0-9][0-9][0-9][0-9]-*'`, userID)
+
 	type stat struct {
 		period  string
 		count   int
@@ -996,12 +1000,12 @@ func (db *DB) SyncWatchStatsFromDB(userID int64) error {
 		SELECT period, SUM(c) AS cnt, SUM(rt) AS rt FROM (
 			SELECT 'month-' || substr(watched_at, 1, 7) AS period, COUNT(*) AS c, COALESCE(SUM(runtime), 0) AS rt
 			FROM episodes
-			WHERE user_id = ? AND watched_at IS NOT NULL AND watched_at != ''
+			WHERE user_id = ? AND watched_at IS NOT NULL AND substr(watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
 			GROUP BY substr(watched_at, 1, 7)
 			UNION ALL
 			SELECT 'month-' || substr(um.watched_at, 1, 7) AS period, COUNT(*) AS c, COALESCE(SUM(m.runtime), 0) AS rt
 			FROM user_movies um JOIN movies m ON m.id = um.movie_id
-			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND um.watched_at != ''
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
 			GROUP BY substr(um.watched_at, 1, 7)
 		) GROUP BY period`, userID, userID)
 	if err != nil {

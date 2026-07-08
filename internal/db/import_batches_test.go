@@ -161,3 +161,31 @@ func TestSyncWatchStatsFromDB_IdempotentAndNewPeriods(t *testing.T) {
 		t.Errorf("not idempotent: got %+v", m2)
 	}
 }
+
+func TestSyncWatchStatsFromDB_PurgesMalformedPeriod(t *testing.T) {
+	database, uid := newImportTestDB(t)
+	// Simulate a stale malformed period from an older import.
+	database.UpsertWatchStats(uid, models.WatchStats{Period: "month-", Count: 63, Runtime: 7862})
+	// A legit weekly CSV period must be preserved (stats page ignores it).
+	database.UpsertWatchStats(uid, models.WatchStats{Period: "week-2024-10", Count: 5, Runtime: 100})
+
+	if err := database.SyncWatchStatsFromDB(uid); err != nil {
+		t.Fatal(err)
+	}
+	stats, _ := database.GetUserWatchStats(uid)
+	for _, s := range stats {
+		if s.Period == "month-" {
+			t.Errorf("malformed 'month-' period was not purged")
+		}
+	}
+	// week- period preserved.
+	found := false
+	for _, s := range stats {
+		if s.Period == "week-2024-10" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("weekly period should be preserved")
+	}
+}
