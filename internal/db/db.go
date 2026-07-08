@@ -158,6 +158,12 @@ func (db *DB) GetShowIDByName(name string) int64 {
 	return id
 }
 
+// RawQuery executes a raw SQL query and returns the rows. The caller must close
+// the rows when done. For use by CLI tools that need flexible reads.
+func (db *DB) RawQuery(query string, args ...any) (*sql.Rows, error) {
+	return db.conn.Query(query, args...)
+}
+
 func (db *DB) GetShowByTMDBID(tmdbID int, id *int64) {
 	db.conn.QueryRow("SELECT id FROM shows WHERE tmdb_id = ?", tmdbID).Scan(id)
 }
@@ -641,6 +647,14 @@ func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
 		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedText(watchedAt))
 	return err
+}
+
+// GetEpisodeWatchedAt returns the watched_at text for a specific episode (empty if not watched).
+func (db *DB) GetEpisodeWatchedAt(userID, showID int64, season, episode int) string {
+	var wa string
+	db.conn.QueryRow(`SELECT COALESCE(watched_at,'') FROM episodes WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,
+		userID, showID, season, episode).Scan(&wa)
+	return wa
 }
 
 // UpdateEpisodeWatchedAt sets the watched date/time of an already-watched
