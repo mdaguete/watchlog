@@ -535,6 +535,18 @@ func (db *DB) MarkEpisodeWatched(userID, showID int64, season, episode int) erro
 	return err
 }
 
+// MarkEpisodeWatchedAt marks an episode watched with a specific date, inserting
+// it if absent or updating the date if already present. Used by the viewing
+// history import when adding a newly-reconciled show.
+func (db *DB) MarkEpisodeWatchedAt(userID, showID int64, season, episode int, at time.Time) error {
+	_, err := db.conn.Exec(`
+		INSERT INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
+		VALUES (?, 0, ?, ?, ?, 1, ?, 0)
+		ON CONFLICT(user_id, show_id, season_number, episode_number) DO UPDATE SET watched_at = excluded.watched_at, watched = 1`,
+		userID, showID, season, episode, watchedText(at))
+	return err
+}
+
 func (db *DB) UnmarkEpisodeWatched(userID, showID int64, season, episode int) error {
 	res, err := db.conn.Exec(`
 		DELETE FROM episodes WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,
