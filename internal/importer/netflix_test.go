@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -158,5 +159,43 @@ func TestAnalyzeNetflix_MovieRewatchKeepsOldest(t *testing.T) {
 	}
 	if got != "2022-03-10" {
 		t.Errorf("expected oldest date 2022-03-10, got %q", got)
+	}
+}
+
+func TestMatchSeriesEpisodes_TitleAndOrder(t *testing.T) {
+	database, _ := setupDB(t)
+	showID, _ := database.UpsertShow(models.Show{ExternalID: 9, Name: "Lupin"})
+	// Season 1 has episode_details (title match); season 2 has none (order fallback).
+	database.UpsertEpisodeDetail(db.EpisodeDetail{ShowID: showID, SeasonNumber: 1, EpisodeNumber: 1, Name: "Capítulo 1"})
+	database.UpsertEpisodeDetail(db.EpisodeDetail{ShowID: showID, SeasonNumber: 1, EpisodeNumber: 2, Name: "Capítulo 2"})
+
+	mk := func(season int, title, d string) NetflixEntry {
+		tt, _ := time.ParseInLocation("2006-01-02", d, time.Local)
+		return NetflixEntry{Series: "Lupin", Season: season, EpTitle: title, Date: tt}
+	}
+	// Newest-first (as Netflix exports).
+	entries := []NetflixEntry{
+		mk(2, "Algo", "2021-06-20"),       // S2 no details -> order ep2
+		mk(2, "Otro", "2021-06-10"),       // S2 -> order ep1
+		mk(1, "Capítulo 2", "2021-01-20"), // title match -> S1E2
+		mk(1, "Capítulo 1", "2021-01-10"), // title match -> S1E1
+		mk(1, "Capítulo 1", "2021-01-05"), // rewatch -> keep oldest for S1E1
+	}
+	matches := MatchSeriesEpisodes(database, showID, entries)
+	got := map[string]string{}
+	for _, m := range matches {
+		got[fmt.Sprintf("S%dE%d", m.Season, m.Episode)] = m.Date.Format("2006-01-02")
+	}
+	if got["S1E1"] != "2021-01-05" {
+		t.Errorf("S1E1 expected oldest 2021-01-05, got %q", got["S1E1"])
+	}
+	if got["S1E2"] != "2021-01-20" {
+		t.Errorf("S1E2 expected 2021-01-20, got %q", got["S1E2"])
+	}
+	if got["S2E1"] != "2021-06-10" {
+		t.Errorf("S2E1 (order) expected 2021-06-10, got %q", got["S2E1"])
+	}
+	if got["S2E2"] != "2021-06-20" {
+		t.Errorf("S2E2 (order) expected 2021-06-20, got %q", got["S2E2"])
 	}
 }

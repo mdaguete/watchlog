@@ -269,6 +269,8 @@ func main() {
 	mux.HandleFunc("POST /import/history/{id}/change/{cid}/date", h.HandleHistoryEditDate)
 	mux.HandleFunc("POST /import/history/{id}/apply", h.HandleHistoryApply)
 	mux.HandleFunc("POST /import/history/{id}/delete", h.HandleHistoryDelete)
+	mux.HandleFunc("GET /import/history/{id}/tmdb", h.HandleHistoryTMDBSearch)
+	mux.HandleFunc("POST /import/history/{id}/resolve", h.HandleHistoryResolve)
 
 	// Auth
 	mux.HandleFunc("GET /login", h.PageLogin)

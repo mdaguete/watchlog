@@ -37,6 +37,7 @@ var migrations = []Migration{
 	{Version: 14, Description: "movie release_date column", Up: migrateV14},
 	{Version: 15, Description: "merge duplicate shows by name", Up: migrateV15},
 	{Version: 16, Description: "viewing-history import staging tables", Up: migrateV16},
+	{Version: 17, Description: "viewing-history unmatched entries", Up: migrateV17},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -734,5 +735,28 @@ func migrateV16(tx *sql.Tx) error {
 		return err
 	}
 	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_import_changes_batch ON import_changes(batch_id)`)
+	return err
+}
+
+// migrateV17 stores the individual Netflix entries whose series/movie was not
+// found in the library, so the user can later reconcile them against TMDB and
+// apply their watched dates.
+func migrateV17(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS import_unmatched (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			batch_id INTEGER NOT NULL,
+			kind TEXT NOT NULL DEFAULT 'series',
+			netflix_name TEXT NOT NULL,
+			season INTEGER NOT NULL DEFAULT 0,
+			netflix_episode TEXT NOT NULL DEFAULT '',
+			watched_date TEXT NOT NULL DEFAULT '',
+			resolved INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(batch_id) REFERENCES import_batches(id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_import_unmatched_batch ON import_unmatched(batch_id)`)
 	return err
 }

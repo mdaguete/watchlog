@@ -75,7 +75,22 @@ func (h *Handler) HandleHistoryAnalyze(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.AddImportChanges(batchID, changes); err != nil {
 		log.Printf("history import: add changes error: %v", err)
 	}
-	log.Printf("ACTION: history import batch %d created (%d changes)", batchID, len(changes))
+	// Persist unmatched entries for later TMDB reconciliation.
+	unmatched := make([]db.UnmatchedEntry, 0, len(analysis.UnmatchedEntries))
+	for _, e := range analysis.UnmatchedEntries {
+		kind := "series"
+		if e.IsMovie {
+			kind = "movie"
+		}
+		unmatched = append(unmatched, db.UnmatchedEntry{
+			Kind: kind, NetflixName: e.Series, Season: e.Season,
+			NetflixEp: e.EpTitle, WatchedDate: e.Date.Format("2006-01-02"),
+		})
+	}
+	if err := h.DB.AddImportUnmatched(batchID, unmatched); err != nil {
+		log.Printf("history import: add unmatched error: %v", err)
+	}
+	log.Printf("ACTION: history import batch %d created (%d changes, %d unmatched)", batchID, len(changes), len(unmatched))
 	http.Redirect(w, r, "/import/history/"+strconv.FormatInt(batchID, 10), http.StatusSeeOther)
 }
 
@@ -102,17 +117,20 @@ func (h *Handler) PageHistoryBatch(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * historyPageSize
 	changes, _ := h.DB.ListImportChanges(batchID, historyPageSize, offset)
 	totalPages := (batch.TotalChanges + historyPageSize - 1) / historyPageSize
+	unmatchedGroups, _ := h.DB.ListUnmatchedGroups(batchID)
 
 	h.Templates.ExecuteTemplate(w, "history_batch.html", map[string]any{
-		"Lang":       lang,
-		"Batch":      batch,
-		"Changes":    changes,
-		"Page":       page,
-		"TotalPages": totalPages,
-		"HasPrev":    page > 1,
-		"HasNext":    page < totalPages,
-		"PrevPage":   page - 1,
-		"NextPage":   page + 1,
+		"Lang":            lang,
+		"Batch":           batch,
+		"Changes":         changes,
+		"UnmatchedGroups": unmatchedGroups,
+		"TMDBEnabled":     h.TMDB != nil && h.TMDB.Enabled(),
+		"Page":            page,
+		"TotalPages":      totalPages,
+		"HasPrev":         page > 1,
+		"HasNext":         page < totalPages,
+		"PrevPage":        page - 1,
+		"NextPage":        page + 1,
 	})
 }
 
