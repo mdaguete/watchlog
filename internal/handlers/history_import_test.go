@@ -132,3 +132,49 @@ func TestHistoryImport_FullFlow(t *testing.T) {
 		t.Errorf("batch not marked applied: %+v", b2)
 	}
 }
+
+func TestHistoryReconcile_TMDBDisabledGuards(t *testing.T) {
+	h, userID, token := newTestHandler(t) // TMDB is nil in tests
+	batchID, _ := h.DB.CreateImportBatch(userID, "netflix", "f.csv", 1, 0, nil)
+
+	sreq := authedRequest("GET", "/import/history/1/tmdb?name=Arcane&kind=series", token, nil)
+	sreq.SetPathValue("id", strconv.FormatInt(batchID, 10))
+	srec := httptest.NewRecorder()
+	h.HandleHistoryTMDBSearch(srec, sreq)
+	if srec.Code != http.StatusServiceUnavailable {
+		t.Errorf("search: expected 503 when TMDB disabled, got %d", srec.Code)
+	}
+
+	rreq := formPost("/import/history/1/resolve", token, url.Values{"name": {"Arcane"}, "kind": {"series"}, "tmdb_id": {"123"}}.Encode())
+	rreq.SetPathValue("id", strconv.FormatInt(batchID, 10))
+	rrec := httptest.NewRecorder()
+	h.HandleHistoryResolve(rrec, rreq)
+	if rrec.Code != http.StatusServiceUnavailable {
+		t.Errorf("resolve: expected 503 when TMDB disabled, got %d", rrec.Code)
+	}
+}
+
+func TestHistoryAnalyze_PersistsUnmatched(t *testing.T) {
+	h, userID, token := newTestHandler(t)
+	// No shows seeded -> everything is unmatched.
+	csv := "Title,Date\n\"Arcane: Temporada 1: Bienvenidos\",\"1/1/22\"\n\"Some Movie\",\"5/1/20\"\n"
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("csvfile", "n.csv")
+	fw.Write([]byte(csv))
+	mw.WriteField("source", "netflix")
+	mw.Close()
+	req := authedRequest("POST", "/import/history", token, buf.Bytes())
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.HandleHistoryAnalyze(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d", rec.Code)
+	}
+	batchID, _ := strconv.ParseInt(strings.TrimPrefix(rec.Header().Get("Location"), "/import/history/"), 10, 64)
+	groups, _ := h.DB.ListUnmatchedGroups(batchID)
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 unmatched groups (series + movie), got %d: %+v", len(groups), groups)
+	}
+	_ = userID
+}

@@ -27,10 +27,11 @@ type NetflixChange struct {
 
 // NetflixAnalysis is the result of analyzing a Netflix history against the DB.
 type NetflixAnalysis struct {
-	Changes         []NetflixChange
-	UnmatchedSeries []string
-	Entries         int
-	SeriesMatched   int
+	Changes          []NetflixChange
+	UnmatchedSeries  []string
+	UnmatchedEntries []NetflixEntry
+	Entries          int
+	SeriesMatched    int
 }
 
 var netflixSeasonRe = regexp.MustCompile(`(?i)(?:temporada|season|parte|part|volumen|volume)\s+(\d+)`)
@@ -38,7 +39,17 @@ var netflixSeasonRe = regexp.MustCompile(`(?i)(?:temporada|season|parte|part|vol
 // AnalyzeNetflix parses a Netflix ViewingHistory.csv and returns the watched-date
 // changes that would bring the DB in line with Netflix, matching series by name
 // and episodes by title or chronological order, plus movies by title.
-func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysis, error) {
+// NetflixEntry is a parsed row from a Netflix viewing-history CSV.
+type NetflixEntry struct {
+	Series  string
+	Season  int
+	EpTitle string
+	IsMovie bool
+	Date    time.Time
+}
+
+// ParseNetflixCSV parses a Netflix ViewingHistory.csv into structured entries.
+func ParseNetflixCSV(r io.Reader) ([]NetflixEntry, error) {
 	cr := csv.NewReader(r)
 	cr.LazyQuotes = true
 	cr.FieldsPerRecord = -1
@@ -47,17 +58,9 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 		return nil, err
 	}
 	if len(records) < 2 {
-		return &NetflixAnalysis{}, nil
+		return nil, nil
 	}
-
-	type entry struct {
-		series  string
-		season  int
-		epTitle string
-		isMovie bool
-		date    time.Time
-	}
-	var entries []entry
+	var entries []NetflixEntry
 	for _, rec := range records[1:] {
 		if len(rec) < 2 {
 			continue
@@ -74,13 +77,28 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 				continue
 			}
 			season, _ := strconv.Atoi(m[1])
-			entries = append(entries, entry{series: strings.TrimSpace(parts[0]), season: season, epTitle: strings.TrimSpace(parts[2]), date: t})
+			entries = append(entries, NetflixEntry{Series: strings.TrimSpace(parts[0]), Season: season, EpTitle: strings.TrimSpace(parts[2]), Date: t})
 		} else if len(parts) == 1 {
-			// Movie (single title, no season).
-			entries = append(entries, entry{series: strings.TrimSpace(parts[0]), isMovie: true, date: t})
+			entries = append(entries, NetflixEntry{Series: strings.TrimSpace(parts[0]), IsMovie: true, Date: t})
 		}
 	}
+	return entries, nil
+}
 
+// AnalyzeNetflix parses a Netflix ViewingHistory.csv and returns the watched-date
+// changes that would bring the DB in line with Netflix, matching series by name
+// and episodes by title or chronological order, plus movies by title.
+func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysis, error) {
+	entries, err := ParseNetflixCSV(r)
+	if err != nil {
+		return nil, err
+	}
+	return Analyze(database, userID, entries), nil
+}
+
+// Analyze matches parsed entries against the library and returns proposed
+// changes plus the entries whose series/movie was not found.
+func Analyze(database *db.DB, userID int64, entries []NetflixEntry) *NetflixAnalysis {
 	res := &NetflixAnalysis{Entries: len(entries)}
 
 	// --- Shows index ---
@@ -157,11 +175,11 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 	}
 	groups := map[gk][]int{}
 	for i, e := range entries {
-		if e.isMovie {
+		if e.IsMovie {
 			continue
 		}
-		if sid, ok := showIndex[normalizeTitle(e.series)]; ok {
-			k := gk{sid, e.season}
+		if sid, ok := showIndex[normalizeTitle(e.Series)]; ok {
+			k := gk{sid, e.Season}
 			groups[k] = append(groups[k], i)
 		}
 	}
@@ -181,16 +199,17 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 	epSeen := map[string]int{}    // "sid-season-ep" -> index in res.Changes
 
 	for i, e := range entries {
-		if e.isMovie {
-			mid, ok := movieIndex[normalizeTitle(e.series)]
+		if e.IsMovie {
+			mid, ok := movieIndex[normalizeTitle(e.Series)]
 			if !ok {
+				res.UnmatchedEntries = append(res.UnmatchedEntries, e)
 				continue
 			}
 			cur := movieDate[mid]
 			if cur == "" {
 				continue // not watched in DB
 			}
-			nd := e.date.Format("2006-01-02")
+			nd := e.Date.Format("2006-01-02")
 			if cur == nd {
 				continue
 			}
@@ -203,26 +222,27 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 			}
 			res.Changes = append(res.Changes, NetflixChange{
 				Type: "movie", ID: mid, Title: movieDisplay[mid],
-				NetflixTitle: e.series, CurrentDate: cur, NewDate: nd,
+				NetflixTitle: e.Series, CurrentDate: cur, NewDate: nd,
 			})
 			movieSeen[mid] = len(res.Changes) - 1
 			continue
 		}
 
-		sid, ok := showIndex[normalizeTitle(e.series)]
+		sid, ok := showIndex[normalizeTitle(e.Series)]
 		if !ok {
-			if !seenUnmatched[e.series] {
-				seenUnmatched[e.series] = true
-				res.UnmatchedSeries = append(res.UnmatchedSeries, e.series)
+			if !seenUnmatched[e.Series] {
+				seenUnmatched[e.Series] = true
+				res.UnmatchedSeries = append(res.UnmatchedSeries, e.Series)
 			}
+			res.UnmatchedEntries = append(res.UnmatchedEntries, e)
 			continue
 		}
 		seriesMatched[sid] = true
 
 		epNum := 0
 		if sm, ok := epNames[sid]; ok {
-			if nm, ok := sm[e.season]; ok {
-				epNum = nm[normalizeTitle(e.epTitle)]
+			if nm, ok := sm[e.Season]; ok {
+				epNum = nm[normalizeTitle(e.EpTitle)]
 			}
 		}
 		if epNum == 0 {
@@ -231,7 +251,7 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 		if epNum == 0 {
 			continue
 		}
-		cur := database.GetEpisodeWatchedAt(userID, sid, e.season, epNum)
+		cur := database.GetEpisodeWatchedAt(userID, sid, e.Season, epNum)
 		if cur == "" {
 			continue // not watched
 		}
@@ -239,11 +259,11 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 		if len(cur) >= 10 {
 			curDate = cur[:10]
 		}
-		nd := e.date.Format("2006-01-02")
+		nd := e.Date.Format("2006-01-02")
 		if curDate == nd {
 			continue
 		}
-		key := fmt.Sprintf("%d-%d-%d", sid, e.season, epNum)
+		key := fmt.Sprintf("%d-%d-%d", sid, e.Season, epNum)
 		if idx, ok := epSeen[key]; ok {
 			if nd < res.Changes[idx].NewDate {
 				res.Changes[idx].NewDate = nd
@@ -252,13 +272,95 @@ func AnalyzeNetflix(database *db.DB, userID int64, r io.Reader) (*NetflixAnalysi
 		}
 		res.Changes = append(res.Changes, NetflixChange{
 			Type: "episode", ID: sid, Title: showDisplay[sid],
-			Season: e.season, Episode: epNum, NetflixTitle: e.epTitle,
+			Season: e.Season, Episode: epNum, NetflixTitle: e.EpTitle,
 			CurrentDate: curDate, NewDate: nd,
 		})
 		epSeen[key] = len(res.Changes) - 1
 	}
 	res.SeriesMatched = len(seriesMatched)
-	return res, nil
+	return res
+}
+
+// SeriesEpisodeMatch is a resolved episode with its (oldest) watched date.
+type SeriesEpisodeMatch struct {
+	Season       int
+	Episode      int
+	NetflixTitle string
+	Date         time.Time // oldest watch date for this episode
+}
+
+// MatchSeriesEpisodes maps Netflix entries of a single (freshly added) show to
+// episode numbers, using episode_details titles when available and falling back
+// to chronological order within each season. When an episode appears multiple
+// times (rewatch) the oldest date is kept. Entries must all belong to the same
+// series; IsMovie entries are ignored.
+func MatchSeriesEpisodes(database *db.DB, showID int64, entries []NetflixEntry) []SeriesEpisodeMatch {
+	// Episode-name index for this show: season -> normalized(name) -> ep number.
+	epNames := map[int]map[string]int{}
+	if rows, err := database.RawQuery("SELECT season_number, episode_number, name FROM episode_details WHERE show_id = ?", showID); err == nil {
+		for rows.Next() {
+			var sn, en int
+			var name string
+			rows.Scan(&sn, &en, &name)
+			if epNames[sn] == nil {
+				epNames[sn] = map[string]int{}
+			}
+			epNames[sn][normalizeTitle(name)] = en
+		}
+		rows.Close()
+	}
+
+	// Chronological order fallback per season (Netflix CSV is newest-first).
+	order := map[int]int{} // entry index -> episode number
+	groups := map[int][]int{}
+	for i, e := range entries {
+		if e.IsMovie {
+			continue
+		}
+		groups[e.Season] = append(groups[e.Season], i)
+	}
+	for _, idxs := range groups {
+		for a, b := 0, len(idxs)-1; a < b; a, b = a+1, b-1 {
+			idxs[a], idxs[b] = idxs[b], idxs[a]
+		}
+		for n, idx := range idxs {
+			order[idx] = n + 1
+		}
+	}
+
+	type key struct{ s, e int }
+	best := map[key]SeriesEpisodeMatch{}
+	var keys []key
+	for i, e := range entries {
+		if e.IsMovie {
+			continue
+		}
+		epNum := 0
+		if nm, ok := epNames[e.Season]; ok {
+			epNum = nm[normalizeTitle(e.EpTitle)]
+		}
+		if epNum == 0 {
+			epNum = order[i]
+		}
+		if epNum == 0 {
+			continue
+		}
+		k := key{e.Season, epNum}
+		if cur, ok := best[k]; ok {
+			if e.Date.Before(cur.Date) {
+				cur.Date = e.Date
+				best[k] = cur
+			}
+			continue
+		}
+		best[k] = SeriesEpisodeMatch{Season: e.Season, Episode: epNum, NetflixTitle: e.EpTitle, Date: e.Date}
+		keys = append(keys, k)
+	}
+	out := make([]SeriesEpisodeMatch, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, best[k])
+	}
+	return out
 }
 
 // ApplyNetflixChange writes a single change's new date to the DB.
