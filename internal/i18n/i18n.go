@@ -12,6 +12,8 @@ var translations = map[string]map[string]string{
 	"nav.timeline": {"es": "Historial", "en": "Timeline"},
 	"nav.search":   {"es": "Buscar", "en": "Search"},
 	"nav.add":      {"es": "+ Añadir", "en": "+ Add"},
+	"nav.settings": {"es": "Ajustes", "en": "Settings"},
+	"nav.admin":    {"es": "Administrar", "en": "Manage"},
 
 	// Footer
 	"footer.tagline": {"es": "WatchLog — Tu seguimiento personal de series y películas", "en": "WatchLog — Your personal TV & movie tracker"},
