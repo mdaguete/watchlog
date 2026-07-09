@@ -28,7 +28,7 @@
     <!-- Calendar Heatmap -->
     <div>
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "stats.calendar"}}</h2>
-        <div id="calendar-heatmap"></div>
+        <div id="calendar-heatmap" class="overflow-x-auto"></div>
         <div class="flex items-center justify-end gap-2 mt-4">
             <span class="text-xs text-wl-gray">{{T .Lang "stats.less"}}</span>
             <div class="w-3 h-3 cal-0"></div>
@@ -84,7 +84,7 @@ const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 
 const calendarEl = document.getElementById('calendar-heatmap');
 const sortedYears = Object.keys(years).sort();
 
-let calHTML = '<div class="space-y-4 flex flex-col items-center">';
+let calHTML = '<div class="flex flex-col gap-4 min-w-max">';
 
 // Month labels + Total header
 calHTML += '<div class="flex items-center gap-1 ml-12">';
