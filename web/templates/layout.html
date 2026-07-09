@@ -132,7 +132,13 @@
                         <a href="/timeline" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.timeline"}}{{else}}Historial{{end}}</a>
                         <a href="/search" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
                         <a href="/add" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
-                        <a href="/settings" class="nav-link text-xs uppercase tracking-widest">⚙</a>
+                        <div class="relative">
+                            <button type="button" onclick="toggleSettingsMenu(event)" class="nav-link text-xs uppercase tracking-widest" aria-haspopup="true" aria-label="{{if .}}{{T .Lang "nav.settings"}}{{else}}Ajustes{{end}}">⚙</button>
+                            <div id="settings-menu" class="hidden absolute right-0 mt-2 w-44 bg-white dark:bg-wl-dark border border-wl-border dark:border-wl-dark shadow-lg z-[60]">
+                                <a href="/settings" class="block px-4 py-3 text-xs uppercase tracking-widest hover:bg-wl-light dark:hover:bg-black transition-colors">{{if .}}{{T .Lang "nav.settings"}}{{else}}Ajustes{{end}}</a>
+                                <a href="/admin" id="settings-admin-link" class="hidden px-4 py-3 text-xs uppercase tracking-widest hover:bg-wl-light dark:hover:bg-black transition-colors">{{if .}}{{T .Lang "nav.admin"}}{{else}}Administrar{{end}}</a>
+                            </div>
+                        </div>
                     </nav>
                 </div>
             </div>
@@ -147,10 +153,32 @@
                     <a href="/timeline" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.timeline"}}{{else}}Historial{{end}}</a>
                     <a href="/search" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
                     <a href="/add" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
-                    <a href="/settings" class="text-xs uppercase tracking-widest py-2">⚙</a>
+                    <a href="/settings" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.settings"}}{{else}}Ajustes{{end}}</a>
+                    <a href="/admin" id="settings-admin-link-m" class="hidden text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.admin"}}{{else}}Administrar{{end}}</a>
                 </div>
             </nav>
         </header>
+        <script>
+        function toggleSettingsMenu(e) {
+            e.stopPropagation();
+            var m = document.getElementById('settings-menu');
+            if (m) m.classList.toggle('hidden');
+        }
+        document.addEventListener('click', function() {
+            var m = document.getElementById('settings-menu');
+            if (m) m.classList.add('hidden');
+        });
+        // Reveal server-admin entries only for the admin user. This is a UI hint
+        // (set via the wl_admin cookie); the /admin routes are gated server-side.
+        (function() {
+            if (document.cookie.split('; ').indexOf('wl_admin=1') >= 0) {
+                ['settings-admin-link', 'settings-admin-link-m'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) el.classList.remove('hidden');
+                });
+            }
+        })();
+        </script>
         <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
 {{end}}
 

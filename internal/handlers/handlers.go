@@ -83,7 +83,27 @@ func (h *Handler) requireAuth(w http.ResponseWriter, r *http.Request) int64 {
 		}
 		return 0
 	}
+	// Expose an admin hint to the nav (UI only; /admin is gated server-side).
+	setAdminHint(w, userID == 1)
 	return userID
+}
+
+// setAdminHint sets a non-HttpOnly cookie the nav reads to reveal server-admin
+// menu entries. It carries no privilege: all /admin routes enforce admin
+// server-side via requireAdmin.
+func setAdminHint(w http.ResponseWriter, isAdmin bool) {
+	v := "0"
+	if isAdmin {
+		v = "1"
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "wl_admin",
+		Value:    v,
+		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(auth.SessionDuration.Seconds()),
+	})
 }
 
 // parsePathID extracts and validates a numeric path parameter. Returns 0 and writes a 400 error on failure.
