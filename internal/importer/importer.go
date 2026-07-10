@@ -49,7 +49,6 @@ func (imp *Importer) ImportAll() error {
 		{"movies (ratings-live-votes)", imp.importMovies},
 		{"show progress (show_seen_episode_latest)", imp.importShowProgress},
 		{"watch stats (tracking-prod-count-by-timeframe)", imp.importWatchStats},
-		{"lists (lists-prod-lists)", imp.importLists},
 	}
 
 	for i, step := range steps {
@@ -597,86 +596,6 @@ func (imp *Importer) importWatchStats() error {
 	}
 	imp.logf("  Recalculated watch stats from DB")
 	return nil
-}
-
-func (imp *Importer) importLists() error {
-	r, f, err := imp.openCSV("lists-prod-lists.csv")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	header, err := r.Read()
-	if err != nil {
-		return err
-	}
-	idx := indexHeader(header)
-
-	count := 0
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			continue
-		}
-
-		name := getField(record, idx, "name")
-		if name == "" {
-			continue
-		}
-
-		isPublic := getField(record, idx, "is_public") == "true"
-
-		listID, err := imp.db.CreateList(imp.userID, name, isPublic)
-		if err != nil || listID == 0 {
-			continue
-		}
-		count++
-
-		// The objects field contains serialized data - extract show IDs
-		objects := getField(record, idx, "objects")
-		if objects != "" {
-			imp.parseListObjects(listID, objects)
-		}
-	}
-	imp.logf("  Imported %d lists", count)
-	return nil
-}
-
-func (imp *Importer) parseListObjects(listID int64, objects string) {
-	// Objects are in format: [map[created_at:... id:417271 type:series uuid:...] ...]
-	// Simple extraction of id and type fields
-	parts := strings.Split(objects, "map[")
-	for _, part := range parts {
-		if !strings.Contains(part, "id:") {
-			continue
-		}
-		var entityType string
-		var entityID int64
-
-		fields := strings.Fields(part)
-		for _, field := range fields {
-			if strings.HasPrefix(field, "type:") {
-				entityType = strings.TrimPrefix(field, "type:")
-				entityType = strings.TrimSuffix(entityType, "]")
-			}
-			if strings.HasPrefix(field, "id:") {
-				idStr := strings.TrimPrefix(field, "id:")
-				idStr = strings.TrimSuffix(idStr, "]")
-				entityID, _ = strconv.ParseInt(idStr, 10, 64)
-			}
-		}
-
-		if entityID > 0 && entityType != "" {
-			imp.db.AddListItem(models.ListItem{
-				ListID:     listID,
-				EntityType: entityType,
-				EntityID:   entityID,
-			})
-		}
-	}
 }
 
 // --- Helpers ---
