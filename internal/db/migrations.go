@@ -38,6 +38,7 @@ var migrations = []Migration{
 	{Version: 15, Description: "merge duplicate shows by name", Up: migrateV15},
 	{Version: 16, Description: "viewing-history import staging tables", Up: migrateV16},
 	{Version: 17, Description: "viewing-history unmatched entries", Up: migrateV17},
+	{Version: 18, Description: "drop unused lists tables", Up: migrateV18},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -759,4 +760,16 @@ func migrateV17(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_import_unmatched_batch ON import_unmatched(batch_id)`)
 	return err
+}
+
+// migrateV18 drops the lists and list_items tables. The Lists feature was
+// removed from the app; the tables are no longer read or written.
+func migrateV18(tx *sql.Tx) error {
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS list_items`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS lists`); err != nil {
+		return err
+	}
+	return nil
 }

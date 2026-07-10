@@ -74,24 +74,6 @@ type UserMovie struct {
 	WatchedAt time.Time `json:"watched_at"`
 }
 
-type List struct {
-	ID        int64      `json:"id"`
-	UserID    int64      `json:"user_id"`
-	Name      string     `json:"name"`
-	IsPublic  bool       `json:"is_public"`
-	CreatedAt time.Time  `json:"created_at"`
-	Items     []ListItem `json:"items"`
-}
-
-type ListItem struct {
-	ID         int64  `json:"id"`
-	ListID     int64  `json:"list_id"`
-	EntityType string `json:"entity_type"`
-	EntityID   int64  `json:"entity_id"`
-	Name       string `json:"name"`
-	PosterURL  string `json:"poster_url"`
-}
-
 type WatchStats struct {
 	ID      int64  `json:"id"`
 	UserID  int64  `json:"user_id"`
