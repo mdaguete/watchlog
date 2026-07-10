@@ -302,7 +302,6 @@ func main() {
 	mux.HandleFunc("GET /search", h.PageSearch)
 	mux.HandleFunc("GET /search/results", h.SearchResults)
 	mux.HandleFunc("GET /add", h.PageAddShow)
-	mux.HandleFunc("GET /add/search", h.SearchTMDB)
 	mux.HandleFunc("GET /upcoming", h.PageUpcoming)
 	mux.HandleFunc("GET /settings", h.PageSettings)
 	mux.HandleFunc("POST /settings", h.SaveSettings)

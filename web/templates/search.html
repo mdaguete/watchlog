@@ -15,5 +15,33 @@
 
     <div id="search-results"></div>
 </div>
+<script>
+function addShow(tmdbId, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    const resultEl = btn.closest('.tmdb-item').querySelector('.add-result');
+    fetch('/api/tmdb/add-show', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
+        body: JSON.stringify({tmdb_id: tmdbId})
+    }).then(r => r.text()).then(html => {
+        resultEl.innerHTML = html;
+        btn.style.display = 'none';
+    });
+}
+function addMovie(tmdbId, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    const resultEl = btn.closest('.tmdb-item').querySelector('.add-result');
+    fetch('/api/tmdb/add-movie', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
+        body: JSON.stringify({tmdb_id: tmdbId})
+    }).then(r => r.text()).then(html => {
+        resultEl.innerHTML = html;
+        btn.style.display = 'none';
+    });
+}
+</script>
 {{template "foot" .}}
 {{end}}

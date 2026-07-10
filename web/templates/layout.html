@@ -129,7 +129,6 @@
                         <a href="/upcoming" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
                         <a href="/timeline" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.timeline"}}{{else}}Historial{{end}}</a>
                         <a href="/search" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
-                        <a href="/add" class="nav-link text-xs uppercase tracking-widest">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
                         <div class="relative">
                             <button type="button" onclick="toggleSettingsMenu(event)" class="nav-link text-xs uppercase tracking-widest" aria-haspopup="true" aria-label="{{if .}}{{T .Lang "nav.settings"}}{{else}}Ajustes{{end}}">⚙</button>
                             <div id="settings-menu" class="hidden absolute right-0 mt-2 w-44 bg-white dark:bg-wl-dark border border-wl-border dark:border-wl-dark shadow-lg z-[60]">
@@ -148,7 +147,6 @@
                     <a href="/upcoming" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.upcoming"}}{{else}}Próximos{{end}}</a>
                     <a href="/timeline" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.timeline"}}{{else}}Historial{{end}}</a>
                     <a href="/search" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.search"}}{{else}}Buscar{{end}}</a>
-                    <a href="/add" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.add"}}{{else}}+ Añadir{{end}}</a>
                     <a href="/settings" class="text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.settings"}}{{else}}Ajustes{{end}}</a>
                     <a href="/admin" id="settings-admin-link-m" class="hidden text-xs uppercase tracking-widest py-2">{{if .}}{{T .Lang "nav.admin"}}{{else}}Administrar{{end}}</a>
                 </div>
