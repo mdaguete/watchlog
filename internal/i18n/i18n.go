@@ -7,11 +7,9 @@ var translations = map[string]map[string]string{
 	"nav.shows":    {"es": "Series", "en": "Shows"},
 	"nav.movies":   {"es": "Películas", "en": "Movies"},
 	"nav.upcoming": {"es": "Próximos", "en": "Upcoming"},
-	"nav.lists":    {"es": "Listas", "en": "Lists"},
 	"nav.stats":    {"es": "Stats", "en": "Stats"},
 	"nav.timeline": {"es": "Historial", "en": "Timeline"},
 	"nav.search":   {"es": "Buscar", "en": "Search"},
-	"nav.add":      {"es": "+ Añadir", "en": "+ Add"},
 	"nav.settings": {"es": "Ajustes", "en": "Settings"},
 	"nav.admin":    {"es": "Administrar", "en": "Manage"},
 
@@ -108,7 +106,6 @@ var translations = map[string]map[string]string{
 	"movies.watched":       {"es": "Vista", "en": "Watched"},
 
 	// Stats
-	"stats.title":     {"es": "Estadísticas", "en": "Statistics"},
 	"stats.shows":     {"es": "Series", "en": "Shows"},
 	"stats.episodes":  {"es": "Episodios", "en": "Episodes"},
 	"stats.movies":    {"es": "Películas", "en": "Movies"},
@@ -151,10 +148,6 @@ var translations = map[string]map[string]string{
 	"search.movies":      {"es": "Películas", "en": "Movies"},
 
 	// Add
-	"add.title":       {"es": "Añadir", "en": "Add"},
-	"add.shows":       {"es": "Series", "en": "Shows"},
-	"add.movies":      {"es": "Películas", "en": "Movies"},
-	"add.search_tmdb": {"es": "Buscar en TMDB", "en": "Search TMDB"},
 	"add.add":         {"es": "Añadir", "en": "Add"},
 	"add.no_results":  {"es": "Sin resultados", "en": "No results"},
 
@@ -212,7 +205,6 @@ var translations = map[string]map[string]string{
 	// TMDB inline messages
 	"tmdb.not_configured":     {"es": "TMDB no configurado", "en": "TMDB not configured"},
 	"tmdb.added":              {"es": "añadida", "en": "added"},
-	"tmdb.list_added":         {"es": "Añadido", "en": "Added"},
 	"tmdb.season_marked":      {"es": "Temporada %d: %d episodios", "en": "Season %d: %d episodes"},
 	"tmdb.upcoming_refreshed": {"es": "Próximos episodios actualizados", "en": "Upcoming episodes refreshed"},
 	"tmdb.refresh_result":     {"es": "Actualizado: %d series, %d películas", "en": "Updated: %d shows, %d movies"},
@@ -232,7 +224,6 @@ var translations = map[string]map[string]string{
 	"settings.tmdb_help":       {"es": "Déjalo vacío para mantener la clave actual. Obtén una en themoviedb.org/settings/api", "en": "Leave empty to keep current key. Get one at themoviedb.org/settings/api"},
 	"settings.refresh_metadata": {"es": "Refrescar metadatos", "en": "Refresh metadata"},
 	"settings.refresh_upcoming": {"es": "Refrescar próximos", "en": "Refresh upcoming"},
-	"settings.admin_link":       {"es": "Administración del servidor", "en": "Server administration"},
 	"settings.logout":           {"es": "Cerrar sesión", "en": "Log out"},
 	"settings.api_keys":         {"es": "API Keys (MCP)", "en": "API Keys (MCP)"},
 	"settings.key_name":         {"es": "Nombre", "en": "Name"},
