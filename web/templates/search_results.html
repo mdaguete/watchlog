@@ -4,7 +4,9 @@
 
 {{define "search_content"}}
 {{if .}}
-{{if or .Shows .Movies}}
+{{$hasLocal := or .Shows .Movies}}
+{{$hasTMDB := or .TMDBShows .TMDBMovies}}
+{{if or $hasLocal $hasTMDB}}
     {{if .Shows}}
     <div class="mb-12">
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "search.shows"}} ({{len .Shows}})</h2>
@@ -26,11 +28,11 @@
     {{end}}
 
     {{if .Movies}}
-    <div>
+    <div class="mb-12">
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "search.movies"}} ({{len .Movies}})</h2>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {{range .Movies}}
-            <div class="group">
+            <a href="/movies/{{.ID}}" class="group">
                 <div class="aspect-[2/3] bg-wl-light overflow-hidden mb-3">
                     {{if .PosterURL}}
                     <img src="{{ImgURL .PosterURL}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
@@ -40,6 +42,42 @@
                 </div>
                 <h3 class="text-sm">{{LocName $.Lang .Name .NameES .NameEN}}</h3>
                 {{if .Genres}}<p class="text-xs text-wl-gray mt-1">{{LocGenres $.Lang .Genres .GenresEN}}</p>{{end}}
+            </a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
+    {{if $hasTMDB}}
+    <div>
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "search.add_from_tmdb"}}</h2>
+        <div class="space-y-px border border-wl-border">
+            {{range .TMDBShows}}
+            <div class="tmdb-item flex gap-5 p-5 bg-white items-center">
+                {{if .PosterPath}}<img src="https://image.tmdb.org/t/p/w92{{.PosterPath}}" alt="{{.Name}}" class="w-12 shrink-0">{{else}}<div class="w-12 h-18 bg-wl-light shrink-0"></div>{{end}}
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-sm">{{.Name}} <span class="text-xs text-wl-gray uppercase tracking-widest ml-1">{{T $.Lang "search.tv"}}</span></h3>
+                    {{if .FirstAirDate}}<p class="text-xs text-wl-gray mt-0.5">{{.FirstAirDate}}</p>{{end}}
+                    {{if .Overview}}<p class="text-xs text-wl-gray mt-1 line-clamp-1">{{.Overview}}</p>{{end}}
+                </div>
+                <div class="shrink-0 text-right">
+                    <button onclick="addShow({{.ID}}, this)" class="px-4 py-2 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">{{T $.Lang "add.add"}}</button>
+                    <div class="add-result mt-1 text-xs text-wl-gray"></div>
+                </div>
+            </div>
+            {{end}}
+            {{range .TMDBMovies}}
+            <div class="tmdb-item flex gap-5 p-5 bg-white items-center">
+                {{if .PosterPath}}<img src="https://image.tmdb.org/t/p/w92{{.PosterPath}}" alt="{{.Title}}" class="w-12 shrink-0">{{else}}<div class="w-12 h-18 bg-wl-light shrink-0"></div>{{end}}
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-sm">{{.Title}} <span class="text-xs text-wl-gray uppercase tracking-widest ml-1">{{T $.Lang "search.movie"}}</span></h3>
+                    {{if .ReleaseDate}}<p class="text-xs text-wl-gray mt-0.5">{{.ReleaseDate}}</p>{{end}}
+                    {{if .Overview}}<p class="text-xs text-wl-gray mt-1 line-clamp-1">{{.Overview}}</p>{{end}}
+                </div>
+                <div class="shrink-0 text-right">
+                    <button onclick="addMovie({{.ID}}, this)" class="px-4 py-2 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">{{T $.Lang "add.add"}}</button>
+                    <div class="add-result mt-1 text-xs text-wl-gray"></div>
+                </div>
             </div>
             {{end}}
         </div>

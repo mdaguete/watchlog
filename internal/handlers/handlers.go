@@ -822,44 +822,55 @@ func (h *Handler) SearchResults(w http.ResponseWriter, r *http.Request) {
 	}
 	shows, _ := h.DB.SearchShows(query)
 	movies, _ := h.DB.SearchMovies(query)
-	h.Templates.ExecuteTemplate(w, "search_results.html", map[string]any{
-		"Lang": lang, "Query": query, "Shows": shows, "Movies": movies,
-	})
+	data := map[string]any{"Lang": lang, "Query": query, "Shows": shows, "Movies": movies}
+
+	// Also search TMDB so new content can be added from the same box. Skip
+	// results already in the library (matched by tmdb id).
+	if h.TMDB != nil && h.TMDB.Enabled() {
+		have := map[int]bool{}
+		for _, s := range shows {
+			if s.TMDBID > 0 {
+				have[s.TMDBID] = true
+			}
+		}
+		for _, m := range movies {
+			if m.TMDBID > 0 {
+				have[m.TMDBID] = true
+			}
+		}
+		const maxTMDB = 8
+		if tv, err := h.TMDB.SearchTV(query); err == nil {
+			var add []tmdb.ShowResult
+			for _, s := range tv {
+				if !have[s.ID] {
+					add = append(add, s)
+				}
+				if len(add) >= maxTMDB {
+					break
+				}
+			}
+			data["TMDBShows"] = add
+		}
+		if mv, err := h.TMDB.SearchMovie(query); err == nil {
+			var add []tmdb.MovieResult
+			for _, m := range mv {
+				if !have[m.ID] {
+					add = append(add, m)
+				}
+				if len(add) >= maxTMDB {
+					break
+				}
+			}
+			data["TMDBMovies"] = add
+		}
+	}
+	h.Templates.ExecuteTemplate(w, "search_results.html", data)
 }
 
+// PageAddShow now redirects to the unified search page (search covers local +
+// TMDB and lets you add TMDB results directly).
 func (h *Handler) PageAddShow(w http.ResponseWriter, r *http.Request) {
-	userID := h.requireAuth(w, r)
-	if userID == 0 {
-		return
-	}
-	lang := h.getLang(r, userID)
-	h.Templates.ExecuteTemplate(w, "add.html", map[string]any{"Lang": lang})
-}
-
-func (h *Handler) SearchTMDB(w http.ResponseWriter, r *http.Request) {
-	userID := h.requireAuth(w, r)
-	if userID == 0 {
-		return
-	}
-	lang := h.getLang(r, userID)
-	if h.TMDB == nil || !h.TMDB.Enabled() {
-		w.Write([]byte(`<p class="text-sm text-wl-gray">` + i18n.T(lang, "tmdb.not_configured") + `</p>`))
-		return
-	}
-	query := r.URL.Query().Get("q")
-	mediaType := r.URL.Query().Get("type")
-	if query == "" {
-		w.Write([]byte(""))
-		return
-	}
-
-	if mediaType == "movie" {
-		results, _ := h.TMDB.SearchMovie(query)
-		h.Templates.ExecuteTemplate(w, "tmdb_movie_results.html", map[string]any{"Lang": lang, "Results": results})
-	} else {
-		results, _ := h.TMDB.SearchTV(query)
-		h.Templates.ExecuteTemplate(w, "tmdb_show_results.html", map[string]any{"Lang": lang, "Results": results})
-	}
+	http.Redirect(w, r, "/search", http.StatusMovedPermanently)
 }
 
 // PageCalendar renders a monthly calendar of watched episodes and movies.

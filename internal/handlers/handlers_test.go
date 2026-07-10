@@ -388,8 +388,12 @@ func TestPageAddShow(t *testing.T) {
 	req := authedRequest("GET", "/add", token, nil)
 	w := httptest.NewRecorder()
 	h.PageAddShow(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
+	// /add now redirects to the unified /search page.
+	if w.Code != http.StatusMovedPermanently && w.Code != http.StatusFound {
+		t.Errorf("status = %d, want redirect", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/search" {
+		t.Errorf("redirect Location = %q, want /search", loc)
 	}
 }
 
@@ -639,17 +643,6 @@ func TestPageShow_InvalidID(t *testing.T) {
 	h.PageShow(w, req)
 	if w.Code != http.StatusFound {
 		t.Errorf("status = %d, want 302 redirect", w.Code)
-	}
-}
-
-func TestSearchTMDB_NoClient(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/add/search?q=test&type=tv", token, nil)
-	w := httptest.NewRecorder()
-	h.SearchTMDB(w, req)
-	// TMDB is nil so it should return a message
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
 	}
 }
 

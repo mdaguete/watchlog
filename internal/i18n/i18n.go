@@ -141,7 +141,10 @@ var translations = map[string]map[string]string{
 	"lists.confirm_delete": {"es": "¿Eliminar esta lista?", "en": "Delete this list?"},
 
 	// Search
-	"search.placeholder": {"es": "Buscar", "en": "Search"},
+	"search.placeholder": {"es": "Buscar en tu biblioteca y en TMDB", "en": "Search your library and TMDB"},
+	"search.add_from_tmdb": {"es": "Añadir desde TMDB", "en": "Add from TMDB"},
+	"search.tv":            {"es": "Serie", "en": "TV"},
+	"search.movie":         {"es": "Película", "en": "Movie"},
 	"search.searching":   {"es": "Buscando...", "en": "Searching..."},
 	"search.no_results":  {"es": "Sin resultados para", "en": "No results for"},
 	"search.shows":       {"es": "Series", "en": "Shows"},
