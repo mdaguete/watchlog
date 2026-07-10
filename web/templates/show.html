@@ -70,9 +70,80 @@
         <div id="season-action-result" class="mt-4 text-xs text-wl-gray"></div>
     </div>
     {{end}}
+
+    {{if .Episodes}}
+    <!-- Watch dates -->
+    <div class="border-t border-wl-border pt-12">
+        <details>
+            <summary class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors cursor-pointer">{{T .Lang "watch.edit_dates"}}</summary>
+            <p class="text-xs text-wl-gray mt-4 mb-4">{{T .Lang "watch.edit_dates_help"}}</p>
+            <div class="max-w-lg space-y-2">
+                {{range .Episodes}}
+                <div class="flex flex-wrap items-center gap-3 py-1">
+                    <span class="text-xs uppercase tracking-widest text-wl-gray w-16 shrink-0">T{{.SeasonNumber}} · E{{.EpisodeNumber}}</span>
+                    <input type="datetime-local" id="epdate-{{.SeasonNumber}}-{{.EpisodeNumber}}" value="{{dtLocal .WatchedAt}}"
+                        class="border-b border-wl-border bg-transparent px-0 py-1 text-sm focus:outline-none focus:border-black">
+                    <button onclick="saveEpisodeDate({{$.Show.ID}}, {{.SeasonNumber}}, {{.EpisodeNumber}})"
+                        class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">{{T $.Lang "watch.save"}}</button>
+                    <span id="epres-{{.SeasonNumber}}-{{.EpisodeNumber}}" class="text-xs text-wl-gray"></span>
+                </div>
+                {{end}}
+            </div>
+        </details>
+    </div>
+    {{end}}
+
+    <!-- Rematch TMDB -->
+    <div class="border-t border-wl-border pt-12">
+        <details>
+            <summary class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors cursor-pointer">{{T .Lang "show.rematch"}}</summary>
+            <p class="text-xs text-wl-gray mt-4 mb-4">{{T .Lang "show.rematch_help"}}</p>
+            <input type="text" id="rematch-search"
+                placeholder="{{T .Lang "show.rematch_search"}}"
+                class="w-full max-w-lg border-b border-wl-border bg-transparent px-0 py-2 text-sm focus:outline-none focus:border-black"
+                hx-get="/api/shows/{{.Show.ID}}/rematch"
+                hx-trigger="input changed delay:400ms"
+                hx-target="#rematch-results"
+                hx-vals='js:{"q": document.getElementById("rematch-search").value}'>
+            <div id="rematch-results" class="mt-4 max-w-lg"></div>
+        </details>
+    </div>
 </div>
 
 <script>
+function saveEpisodeDate(showId, season, episode) {
+    const input = document.getElementById('epdate-' + season + '-' + episode);
+    const res = document.getElementById('epres-' + season + '-' + episode);
+    if (!input || !input.value) { return; }
+    fetch('/api/shows/' + showId + '/episodes/date', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({season: season, episode: episode, datetime: input.value})
+    }).then(r => {
+        res.textContent = r.ok ? '{{T .Lang "watch.saved"}}' : '{{T .Lang "watch.error"}}';
+    });
+}
+
+function rematchShow(showId, tmdbId, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    const resultEl = btn.closest('.tmdb-item').querySelector('.rematch-result');
+    fetch('/api/shows/' + showId + '/relink-tmdb', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tmdb_id: tmdbId})
+    }).then(r => {
+        if (r.ok) {
+            resultEl.textContent = '{{T .Lang "show.rematch_done"}}';
+            location.reload();
+        } else {
+            btn.disabled = false;
+            btn.textContent = '{{T .Lang "show.rematch_use"}}';
+            resultEl.textContent = '{{T .Lang "show.rematch_error"}}';
+        }
+    });
+}
+
 const watched = new Set();
 {{range .Episodes}}
 watched.add("{{.SeasonNumber}}-{{.EpisodeNumber}}");

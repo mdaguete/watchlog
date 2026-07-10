@@ -181,6 +181,14 @@ func main() {
 	// Parse templates
 	funcMap := template.FuncMap{
 		"T": i18n.T,
+		"dict": func(values ...any) map[string]any {
+			m := make(map[string]any, len(values)/2)
+			for i := 0; i+1 < len(values); i += 2 {
+				key, _ := values[i].(string)
+				m[key] = values[i+1]
+			}
+			return m
+		},
 		"Loc": func(lang, es, en string) string {
 			if lang == "en" && en != "" {
 				return en
@@ -225,6 +233,18 @@ func main() {
 		"mod": func(a, b int) int {
 			return a % b
 		},
+		"dtLocal": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.Format("2006-01-02T15:04")
+		},
+		"dt": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.Format("2006-01-02 15:04")
+		},
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("web/templates/*.html")
 	if err != nil {
@@ -242,6 +262,15 @@ func main() {
 	// Import
 	mux.HandleFunc("GET /import", h.PageImport)
 	mux.HandleFunc("POST /import", h.HandleImport)
+	mux.HandleFunc("GET /import/history", h.PageHistoryImport)
+	mux.HandleFunc("POST /import/history", h.HandleHistoryAnalyze)
+	mux.HandleFunc("GET /import/history/{id}", h.PageHistoryBatch)
+	mux.HandleFunc("POST /import/history/{id}/change/{cid}/toggle", h.HandleHistoryToggle)
+	mux.HandleFunc("POST /import/history/{id}/change/{cid}/date", h.HandleHistoryEditDate)
+	mux.HandleFunc("POST /import/history/{id}/apply", h.HandleHistoryApply)
+	mux.HandleFunc("POST /import/history/{id}/delete", h.HandleHistoryDelete)
+	mux.HandleFunc("GET /import/history/{id}/tmdb", h.HandleHistoryTMDBSearch)
+	mux.HandleFunc("POST /import/history/{id}/resolve", h.HandleHistoryResolve)
 
 	// Auth
 	mux.HandleFunc("GET /login", h.PageLogin)
@@ -256,6 +285,8 @@ func main() {
 	mux.HandleFunc("GET /magic-login", h.PageMagicLogin)
 	mux.HandleFunc("POST /magic-login", h.HandleMagicLogin)
 	mux.HandleFunc("GET /auth/magic", h.HandleMagicAuth)
+	mux.HandleFunc("GET /invite", h.PageAcceptInvite)
+	mux.HandleFunc("POST /invite", h.HandleAcceptInvite)
 
 	// Web pages
 	mux.HandleFunc("GET /", h.PageDashboard)
@@ -264,20 +295,22 @@ func main() {
 	mux.HandleFunc("GET /shows/{id}", h.PageShow)
 	mux.HandleFunc("GET /movies", h.PageMovies)
 	mux.HandleFunc("GET /movies/{id}", h.PageMovie)
-	mux.HandleFunc("GET /lists", h.PageLists)
-	mux.HandleFunc("GET /lists/{id}", h.PageList)
 	mux.HandleFunc("GET /stats", h.PageStats)
 	mux.HandleFunc("GET /timeline", h.PageTimeline)
+	mux.HandleFunc("GET /calendar", h.PageCalendar)
 	mux.HandleFunc("GET /api/timeline", h.APITimelineItems)
 	mux.HandleFunc("GET /search", h.PageSearch)
 	mux.HandleFunc("GET /search/results", h.SearchResults)
 	mux.HandleFunc("GET /add", h.PageAddShow)
-	mux.HandleFunc("GET /add/search", h.SearchTMDB)
 	mux.HandleFunc("GET /upcoming", h.PageUpcoming)
 	mux.HandleFunc("GET /settings", h.PageSettings)
 	mux.HandleFunc("POST /settings", h.SaveSettings)
 	mux.HandleFunc("GET /admin", h.PageAdmin)
 	mux.HandleFunc("POST /admin", h.SaveAdmin)
+	mux.HandleFunc("POST /admin/invites", h.AdminInviteUser)
+	mux.HandleFunc("POST /admin/invites/{id}/revoke", h.AdminRevokeInvite)
+	mux.HandleFunc("POST /admin/users/{id}/block", h.AdminToggleUserBlock)
+	mux.HandleFunc("POST /admin/users/{id}/delete", h.AdminDeleteUser)
 
 	// API: Shows
 	mux.HandleFunc("GET /api/shows", h.APIGetShows)
@@ -293,20 +326,13 @@ func main() {
 	mux.HandleFunc("DELETE /api/shows/{id}/episodes/watched", h.APIUnmarkEpisodeWatched)
 	mux.HandleFunc("POST /api/shows/{id}/season/watched", h.APIMarkSeasonWatched)
 	mux.HandleFunc("DELETE /api/shows/{id}/season/watched", h.APIUnmarkSeasonWatched)
+	mux.HandleFunc("POST /api/shows/{id}/episodes/date", h.APISetEpisodeDate)
 
 	// API: Movies
 	mux.HandleFunc("GET /api/movies", h.APIGetMovies)
 	mux.HandleFunc("POST /api/movies/{id}/watched", h.APIMarkMovieWatched)
 	mux.HandleFunc("DELETE /api/movies/{id}/watched", h.APIUnmarkMovieWatched)
-
-	// API: Lists
-	mux.HandleFunc("GET /api/lists", h.APIGetLists)
-	mux.HandleFunc("GET /api/lists/{id}", h.APIGetList)
-	mux.HandleFunc("POST /api/lists", h.APICreateList)
-	mux.HandleFunc("PUT /api/lists/{id}", h.APIUpdateList)
-	mux.HandleFunc("DELETE /api/lists/{id}", h.APIDeleteList)
-	mux.HandleFunc("POST /api/lists/{id}/items", h.APIAddToList)
-	mux.HandleFunc("DELETE /api/lists/{id}/items/{itemId}", h.APIRemoveFromList)
+	mux.HandleFunc("POST /api/movies/{id}/date", h.APISetMovieDate)
 
 	// API: Stats
 	mux.HandleFunc("GET /api/stats", h.APIGetStats)
@@ -317,6 +343,8 @@ func main() {
 
 	// API: TMDB
 	mux.HandleFunc("POST /api/shows/{id}/fetch-tmdb", h.APIFetchTMDB)
+	mux.HandleFunc("GET /api/shows/{id}/rematch", h.APIRematchSearch)
+	mux.HandleFunc("POST /api/shows/{id}/relink-tmdb", h.APIRelinkTMDB)
 	mux.HandleFunc("POST /api/tmdb/fetch-all", h.APIFetchAllTMDB)
 	mux.HandleFunc("POST /api/tmdb/add-show", h.APIAddShowFromTMDB)
 	mux.HandleFunc("POST /api/tmdb/add-movie", h.APIAddMovieFromTMDB)

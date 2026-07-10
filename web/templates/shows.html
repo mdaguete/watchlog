@@ -17,6 +17,8 @@
     <div class="flex flex-wrap items-center gap-3 sm:gap-4">
         <span class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "shows.filter"}}</span>
         <a href="/shows?sort={{.Sort}}" class="text-xs uppercase tracking-widest {{if eq .Filter ""}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.filter.all"}}</a>
+        <a href="/shows?sort={{.Sort}}&filter=watching" class="text-xs uppercase tracking-widest {{if eq .Filter "watching"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.filter.watching"}}</a>
+        <a href="/shows?sort={{.Sort}}&filter=completed" class="text-xs uppercase tracking-widest {{if eq .Filter "completed"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.filter.completed"}}</a>
         <a href="/shows?sort={{.Sort}}&filter=favorites" class="text-xs uppercase tracking-widest {{if eq .Filter "favorites"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">★ {{T .Lang "shows.filter.favorites"}}</a>
         <a href="/shows?sort={{.Sort}}&filter=archived" class="text-xs uppercase tracking-widest {{if eq .Filter "archived"}}text-black border-b border-black{{else}}text-wl-gray hover:text-black{{end}} pb-1">{{T .Lang "shows.filter.archived"}}</a>
     </div>

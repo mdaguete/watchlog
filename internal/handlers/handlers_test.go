@@ -34,6 +34,14 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 
 	funcMap := template.FuncMap{
 		"T":   i18n.T,
+		"dict": func(values ...any) map[string]any {
+			m := make(map[string]any, len(values)/2)
+			for i := 0; i+1 < len(values); i += 2 {
+				key, _ := values[i].(string)
+				m[key] = values[i+1]
+			}
+			return m
+		},
 		"Loc": func(lang, es, en string) string { if lang == "en" && en != "" { return en }; if es != "" { return es }; return en },
 		"LocGenres": func(lang, es, en string) string { if lang == "en" && en != "" { return en }; return i18n.TranslateGenres(lang, es) },
 		"LocName": func(lang, name, nameES, nameEN string) string { if lang == "en" { if nameEN != "" { return nameEN }; return name }; if nameES != "" { return nameES }; return name },
@@ -41,6 +49,8 @@ func newTestHandler(t *testing.T) (*Handler, int64, string) {
 		"mul": func(a, b int) int { return a * b },
 		"add": func(a, b int) int { return a + b },
 		"mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -361,30 +371,7 @@ func TestAPIGetShows_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestAPICreateList(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	body, _ := json.Marshal(map[string]any{"name": "Test List", "is_public": false})
-	req := authedRequest("POST", "/api/lists", token, body)
-	w := httptest.NewRecorder()
-
-	h.APICreateList(w, req)
-
-	if w.Code != http.StatusOK && w.Code != http.StatusCreated {
-		t.Errorf("status = %d, want 200 or 201", w.Code)
-	}
-}
-
 // --- More Page Tests ---
-
-func TestPageLists(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/lists", token, nil)
-	w := httptest.NewRecorder()
-	h.PageLists(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
 
 func TestPageSearch(t *testing.T) {
 	h, _, token := newTestHandler(t)
@@ -401,8 +388,12 @@ func TestPageAddShow(t *testing.T) {
 	req := authedRequest("GET", "/add", token, nil)
 	w := httptest.NewRecorder()
 	h.PageAddShow(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
+	// /add now redirects to the unified /search page.
+	if w.Code != http.StatusMovedPermanently && w.Code != http.StatusFound {
+		t.Errorf("status = %d, want redirect", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/search" {
+		t.Errorf("redirect Location = %q, want /search", loc)
 	}
 }
 
@@ -443,16 +434,6 @@ func TestAPIGetMovies(t *testing.T) {
 	req := authedRequest("GET", "/api/movies", token, nil)
 	w := httptest.NewRecorder()
 	h.APIGetMovies(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestAPIGetLists(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/api/lists", token, nil)
-	w := httptest.NewRecorder()
-	h.APIGetLists(w, req)
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
@@ -584,21 +565,6 @@ func TestAPIUnmarkSeasonWatched(t *testing.T) {
 	}
 }
 
-func TestAPIDeleteList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	lid, _ := h.DB.CreateList(userID, "ToDelete", false)
-
-	req := authedRequest("DELETE", "/api/lists/1", token, nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIDeleteList(w, req)
-	// Should work since we own the list
-	_ = lid
-	if w.Code != http.StatusOK && w.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want 200 or 204", w.Code)
-	}
-}
-
 func TestAPIGetShow(t *testing.T) {
 	h, userID, token := newTestHandler(t)
 	sid, _ := h.DB.UpsertShow(models.Show{ExternalID: 1, Name: "Show"})
@@ -677,100 +643,6 @@ func TestPageShow_InvalidID(t *testing.T) {
 	h.PageShow(w, req)
 	if w.Code != http.StatusFound {
 		t.Errorf("status = %d, want 302 redirect", w.Code)
-	}
-}
-
-func TestPageList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	lid, _ := h.DB.CreateList(userID, "My List", false)
-
-	req := authedRequest("GET", "/lists/1", token, nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.PageList(w, req)
-	_ = lid
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestPageList_InvalidID(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/lists/abc", token, nil)
-	req.SetPathValue("id", "abc")
-	w := httptest.NewRecorder()
-	h.PageList(w, req)
-	if w.Code != http.StatusFound {
-		t.Errorf("status = %d, want 302", w.Code)
-	}
-}
-
-func TestAPIGetList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	h.DB.CreateList(userID, "My List", false)
-
-	req := authedRequest("GET", "/api/lists/1", token, nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIGetList(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestAPIUpdateList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	h.DB.CreateList(userID, "Original", false)
-
-	body, _ := json.Marshal(map[string]any{"name": "Updated", "is_public": true})
-	req := authedRequest("PUT", "/api/lists/1", token, body)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIUpdateList(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestAPIAddToList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	h.DB.CreateList(userID, "L", false)
-	sid, _ := h.DB.UpsertShow(models.Show{ExternalID: 1, Name: "S"})
-
-	body, _ := json.Marshal(map[string]any{"show_id": sid})
-	req := authedRequest("POST", "/api/lists/1/items", token, body)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIAddToList(w, req)
-	if w.Code != http.StatusOK && w.Code != http.StatusCreated {
-		t.Errorf("status = %d, want 200 or 201", w.Code)
-	}
-}
-
-func TestAPIRemoveFromList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	lid, _ := h.DB.CreateList(userID, "L", false)
-	sid, _ := h.DB.UpsertShow(models.Show{ExternalID: 1, Name: "S"})
-	h.DB.AddShowToList(lid, sid)
-
-	req := authedRequest("DELETE", "/api/lists/1/items/1", token, nil)
-	req.SetPathValue("id", "1")
-	req.SetPathValue("itemId", "1")
-	w := httptest.NewRecorder()
-	h.APIRemoveFromList(w, req)
-	if w.Code != http.StatusOK && w.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want 200 or 204", w.Code)
-	}
-}
-
-func TestSearchTMDB_NoClient(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/add/search?q=test&type=tv", token, nil)
-	w := httptest.NewRecorder()
-	h.SearchTMDB(w, req)
-	// TMDB is nil so it should return a message
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
 	}
 }
 
@@ -1319,11 +1191,14 @@ func TestSetupWizard_Step1_EmptyUsername(t *testing.T) {
 	database, _ := db.New(f.Name())
 	defer database.Close()
 	funcMap := template.FuncMap{
-		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"T": i18n.T, "dict": func(values ...any) map[string]any { m := make(map[string]any); for i := 0; i+1 < len(values); i += 2 { k, _ := values[i].(string); m[k] = values[i+1] }; return m },
+		"Loc": func(l, e, n string) string { return e },
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1345,11 +1220,14 @@ func TestSetupWizard_Step1_PasswordMismatch(t *testing.T) {
 	database, _ := db.New(f.Name())
 	defer database.Close()
 	funcMap := template.FuncMap{
-		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"T": i18n.T, "dict": func(values ...any) map[string]any { m := make(map[string]any); for i := 0; i+1 < len(values); i += 2 { k, _ := values[i].(string); m[k] = values[i+1] }; return m },
+		"Loc": func(l, e, n string) string { return e },
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")
@@ -1371,11 +1249,14 @@ func TestSetupWizard_Step1_Success(t *testing.T) {
 	database, _ := db.New(f.Name())
 	defer database.Close()
 	funcMap := template.FuncMap{
-		"T": i18n.T, "Loc": func(l, e, n string) string { return e },
+		"T": i18n.T, "dict": func(values ...any) map[string]any { m := make(map[string]any); for i := 0; i+1 < len(values); i += 2 { k, _ := values[i].(string); m[k] = values[i+1] }; return m },
+		"Loc": func(l, e, n string) string { return e },
 		"LocGenres": func(l, e, n string) string { return e },
 		"LocName": func(l, n, e, en string) string { return n },
 		"min": func(a, b int) int { if a < b { return a }; return b },
 		"mul": func(a, b int) int { return a * b }, "add": func(a, b int) int { return a + b }, "mod": func(a, b int) int { return a % b },
+		"dtLocal": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02T15:04") },
+		"dt": func(t time.Time) string { if t.IsZero() { return "" }; return t.Format("2006-01-02 15:04") },
 		"ImgURL": func(url string) string { return url },
 	}
 	tmpl, _ := template.New("").Funcs(funcMap).ParseGlob("../../web/templates/*.html")

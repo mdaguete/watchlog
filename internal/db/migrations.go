@@ -32,6 +32,13 @@ var migrations = []Migration{
 	{Version: 9, Description: "API keys for MCP", Up: migrateV9},
 	{Version: 10, Description: "user blocked column", Up: migrateV10},
 	{Version: 11, Description: "hash existing plaintext API keys", Up: migrateV11},
+	{Version: 12, Description: "user invitations", Up: migrateV12},
+	{Version: 13, Description: "normalize watched_at to ISO-8601 text", Up: migrateV13},
+	{Version: 14, Description: "movie release_date column", Up: migrateV14},
+	{Version: 15, Description: "merge duplicate shows by name", Up: migrateV15},
+	{Version: 16, Description: "viewing-history import staging tables", Up: migrateV16},
+	{Version: 17, Description: "viewing-history unmatched entries", Up: migrateV17},
+	{Version: 18, Description: "drop unused lists tables", Up: migrateV18},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -382,6 +389,36 @@ func (db *DB) ClearTMDBRefreshPending() {
 	db.SetSetting("tmdb_refresh_pending", "0")
 }
 
+// Backup creates a timestamped backup of the database file with a descriptive
+// label. Returns the backup path or an error.
+func (db *DB) Backup(label string) (string, error) {
+	if db.path == "" {
+		return "", fmt.Errorf("database path not set")
+	}
+	backupDir := filepath.Join(filepath.Dir(db.path), "backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return "", fmt.Errorf("create backup dir: %w", err)
+	}
+	baseName := filepath.Base(db.path)
+	timestamp := time.Now().Format("20060102-150405")
+	backupName := fmt.Sprintf("%s.%s.%s.bak", baseName, label, timestamp)
+	backupPath := filepath.Join(backupDir, backupName)
+	src, err := os.Open(db.path)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+	dst, err := os.Create(backupPath)
+	if err != nil {
+		return "", err
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, src); err != nil {
+		return "", err
+	}
+	return backupPath, nil
+}
+
 // backupBeforeMigration copies the database file to a backups/ folder next to the DB.
 func (db *DB) backupBeforeMigration(currentVersion int) error {
 	if db.path == "" {
@@ -468,6 +505,271 @@ func migrateV11(tx *sql.Tx) error {
 		if _, err := tx.Exec("UPDATE api_keys SET key_hash = ? WHERE id = ?", HashAPIKey(r.key), r.id); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func migrateV12(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS invitations (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	email TEXT NOT NULL DEFAULT '',
+	token TEXT UNIQUE NOT NULL,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	expires_at DATETIME NOT NULL,
+	accepted_at DATETIME
+)`)
+	return err
+}
+
+// migrateV13 normalizes watched_at values to the canonical ISO-8601 text layout
+// ("2006-01-02 15:04:05"). Older rows were stored with Go's time.String() format
+// ("2006-01-02 15:04:05 +0000 UTC"), which SQLite's date/time functions cannot
+// parse. This reformats them so they are sortable and natively parseable.
+// Idempotent: values already in the canonical layout are left unchanged.
+func migrateV13(tx *sql.Tx) error {
+	// Candidate layouts seen in existing data.
+	layouts := []string{
+		"2006-01-02 15:04:05 -0700 MST", // Go time.String()
+		"2006-01-02T15:04:05Z07:00",     // RFC3339
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		WatchedAtLayout, // already canonical
+	}
+	normalize := func(table, col, pk string) error {
+		// Skip if the table doesn't exist (partial/pre-existing databases).
+		var exists int
+		tx.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&exists)
+		if exists == 0 {
+			return nil
+		}
+		rows, err := tx.Query("SELECT " + pk + ", " + col + " FROM " + table + " WHERE " + col + " IS NOT NULL AND " + col + " != ''")
+		if err != nil {
+			return err
+		}
+		type row struct {
+			id  int64
+			val string
+		}
+		var toFix []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.id, &r.val); err != nil {
+				rows.Close()
+				return err
+			}
+			// Already canonical (exactly 19 chars, no trailing zone).
+			if len(r.val) == len(WatchedAtLayout) {
+				continue
+			}
+			toFix = append(toFix, r)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, r := range toFix {
+			var norm string
+			for _, l := range layouts {
+				if t, err := time.Parse(l, r.val); err == nil {
+					norm = t.Format(WatchedAtLayout)
+					break
+				}
+			}
+			if norm == "" {
+				// Fallback: keep the first 19 chars if they look like a datetime.
+				if len(r.val) >= 19 {
+					norm = r.val[:19]
+				} else {
+					continue
+				}
+			}
+			if _, err := tx.Exec("UPDATE "+table+" SET "+col+" = ? WHERE "+pk+" = ?", norm, r.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := normalize("episodes", "watched_at", "id"); err != nil {
+		return err
+	}
+	return normalize("user_movies", "watched_at", "id")
+}
+
+func migrateV14(tx *sql.Tx) error {
+	_, err := tx.Exec("ALTER TABLE movies ADD COLUMN release_date TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+// migrateV15 merges duplicate catalog shows that share the same name (caused by
+// an old importer bug that created one show per episode). For each duplicated
+// name it keeps a canonical show (prefer one tracked in user_shows, else lowest
+// id), moves per-user data (episodes, user_shows, show_progress, list items) to
+// it — ignoring unique-key conflicts — and deletes the duplicates and their
+// cached season/episode metadata. episodes_seen is left untouched (it holds the
+// real total imported from TVTime, which may exceed the individual episode rows).
+func migrateV15(tx *sql.Tx) error {
+	var exists int
+	tx.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='shows'").Scan(&exists)
+	if exists == 0 {
+		return nil
+	}
+
+	rows, err := tx.Query("SELECT name FROM shows GROUP BY name HAVING COUNT(*) > 1")
+	if err != nil {
+		return err
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		var canonical int64
+		if err := tx.QueryRow(`SELECT s.id FROM shows s WHERE s.name = ?
+			ORDER BY (SELECT COUNT(*) FROM user_shows us WHERE us.show_id = s.id) DESC, s.id ASC
+			LIMIT 1`, name).Scan(&canonical); err != nil {
+			return err
+		}
+
+		drows, err := tx.Query("SELECT id FROM shows WHERE name = ? AND id != ?", name, canonical)
+		if err != nil {
+			return err
+		}
+		var dups []int64
+		for drows.Next() {
+			var id int64
+			if err := drows.Scan(&id); err != nil {
+				drows.Close()
+				return err
+			}
+			dups = append(dups, id)
+		}
+		drows.Close()
+
+		for _, d := range dups {
+			stmts := []string{
+				"UPDATE OR IGNORE episodes SET show_id = ? WHERE show_id = ?",
+				"DELETE FROM episodes WHERE show_id = ?",
+				"UPDATE OR IGNORE user_shows SET show_id = ? WHERE show_id = ?",
+				"DELETE FROM user_shows WHERE show_id = ?",
+				"UPDATE OR IGNORE show_progress SET show_id = ? WHERE show_id = ?",
+				"DELETE FROM show_progress WHERE show_id = ?",
+			}
+			// The first of each move/delete pair takes (canonical, d); deletes take (d).
+			if _, err := tx.Exec(stmts[0], canonical, d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[1], d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[2], canonical, d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[3], d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[4], canonical, d); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(stmts[5], d); err != nil {
+				return err
+			}
+			tx.Exec("UPDATE list_items SET entity_id = ? WHERE entity_type = 'series' AND entity_id = ?", canonical, d)
+			tx.Exec("DELETE FROM season_episodes WHERE show_id = ?", d)
+			tx.Exec("DELETE FROM episode_details WHERE show_id = ?", d)
+			tx.Exec("DELETE FROM upcoming_cache WHERE show_id = ?", d)
+			if _, err := tx.Exec("DELETE FROM shows WHERE id = ?", d); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// migrateV16 creates the staging tables used by the viewing-history import
+// (Netflix, etc.): a batch per upload and one row per proposed watched-date
+// change, so the user can review, edit and confirm changes over time.
+func migrateV16(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS import_batches (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			source TEXT NOT NULL DEFAULT 'netflix',
+			filename TEXT,
+			status TEXT NOT NULL DEFAULT 'pending',
+			entries INTEGER NOT NULL DEFAULT 0,
+			series_matched INTEGER NOT NULL DEFAULT 0,
+			unmatched_series TEXT,
+			created_at TEXT NOT NULL,
+			applied_at TEXT,
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`
+		CREATE TABLE IF NOT EXISTS import_changes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			batch_id INTEGER NOT NULL,
+			type TEXT NOT NULL,
+			target_id INTEGER NOT NULL,
+			title TEXT NOT NULL DEFAULT '',
+			season INTEGER NOT NULL DEFAULT 0,
+			episode INTEGER NOT NULL DEFAULT 0,
+			netflix_title TEXT NOT NULL DEFAULT '',
+			current_date TEXT NOT NULL DEFAULT '',
+			new_date TEXT NOT NULL DEFAULT '',
+			selected INTEGER NOT NULL DEFAULT 1,
+			applied INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(batch_id) REFERENCES import_batches(id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_import_changes_batch ON import_changes(batch_id)`)
+	return err
+}
+
+// migrateV17 stores the individual Netflix entries whose series/movie was not
+// found in the library, so the user can later reconcile them against TMDB and
+// apply their watched dates.
+func migrateV17(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS import_unmatched (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			batch_id INTEGER NOT NULL,
+			kind TEXT NOT NULL DEFAULT 'series',
+			netflix_name TEXT NOT NULL,
+			season INTEGER NOT NULL DEFAULT 0,
+			netflix_episode TEXT NOT NULL DEFAULT '',
+			watched_date TEXT NOT NULL DEFAULT '',
+			resolved INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(batch_id) REFERENCES import_batches(id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_import_unmatched_batch ON import_unmatched(batch_id)`)
+	return err
+}
+
+// migrateV18 drops the lists and list_items tables. The Lists feature was
+// removed from the app; the tables are no longer read or written.
+func migrateV18(tx *sql.Tx) error {
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS list_items`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS lists`); err != nil {
+		return err
 	}
 	return nil
 }

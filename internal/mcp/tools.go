@@ -211,7 +211,7 @@ func (s *Server) toolMarkEpisode(ctx context.Context, req *mcp.CallToolRequest, 
 	}
 	userID := getUserID(ctx)
 	s.db.MarkEpisodeWatched(userID, args.ShowID, args.Season, args.Episode)
-	s.db.IncrementWatchStats(userID, 1)
+	s.db.SyncWatchStatsFromDB(userID)
 	s.db.UnsnoozeShow(userID, args.ShowID)
 	s.db.AutoArchiveIfComplete(userID, args.ShowID)
 	return &mcp.CallToolResult{
@@ -240,7 +240,7 @@ func (s *Server) toolMarkSeason(ctx context.Context, req *mcp.CallToolRequest, a
 	userID := getUserID(ctx)
 	marked, _ := s.db.MarkSeasonWatched(userID, args.ShowID, args.Season, args.Episodes)
 	if marked > 0 {
-		s.db.IncrementWatchStats(userID, marked)
+		s.db.SyncWatchStatsFromDB(userID)
 	}
 	s.db.AutoArchiveIfComplete(userID, args.ShowID)
 	return &mcp.CallToolResult{
@@ -459,6 +459,7 @@ func (s *Server) toolMarkMovieWatched(ctx context.Context, req *mcp.CallToolRequ
 	}
 	userID := getUserID(ctx)
 	s.db.MarkMovieWatched(userID, args.MovieID, time.Now())
+	s.db.SyncWatchStatsFromDB(userID)
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: "Movie marked as watched"}},
 	}, nil, nil

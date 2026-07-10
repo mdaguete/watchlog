@@ -1,0 +1,53 @@
+{{define "history_import.html"}}
+{{template "head" .}}
+<div class="space-y-10">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-4xl">{{T .Lang "history.title"}}</h1>
+        <p class="text-xs text-wl-gray mt-2">{{T .Lang "history.subtitle"}}</p>
+    </div>
+
+    {{if .Error}}
+    <div class="border border-red-300 bg-red-50 text-red-700 px-4 py-3 text-sm">{{.Error}}</div>
+    {{end}}
+
+    <!-- Upload -->
+    <form method="POST" action="/import/history" enctype="multipart/form-data" class="space-y-6 max-w-lg">
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "history.source"}}</label>
+            <select name="source" class="border border-wl-border px-3 py-2 text-sm bg-white">
+                <option value="netflix">Netflix</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-xs uppercase tracking-widest text-wl-gray block mb-3">{{T .Lang "history.select_file"}}</label>
+            <input type="file" name="csvfile" accept=".csv" required
+                class="block w-full text-sm text-wl-gray file:mr-4 file:py-2 file:px-4 file:border file:border-black file:text-xs file:uppercase file:tracking-widest file:bg-white file:text-black hover:file:bg-black hover:file:text-white file:transition-colors file:cursor-pointer">
+            <p class="text-xs text-wl-gray mt-2">{{T .Lang "history.netflix_hint"}}</p>
+        </div>
+        <button type="submit" class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+            {{T .Lang "history.analyze"}}
+        </button>
+    </form>
+
+    {{if .Batches}}
+    <div class="space-y-3">
+        <h2 class="text-xs uppercase tracking-widest text-wl-gray">{{T .Lang "history.batches"}}</h2>
+        <div class="border border-wl-border divide-y divide-wl-border">
+            {{range .Batches}}
+            <a href="/import/history/{{.ID}}" class="flex items-center justify-between px-4 py-3 hover:bg-wl-light">
+                <div class="min-w-0">
+                    <div class="text-sm truncate">{{if .Filename}}{{.Filename}}{{else}}{{.Source}}{{end}}</div>
+                    <div class="text-xs text-wl-gray">{{.CreatedAt}}</div>
+                </div>
+                <div class="text-xs text-wl-gray whitespace-nowrap ml-4">
+                    {{.TotalChanges}} {{T $.Lang "history.changes"}}
+                    {{if eq .Status "applied"}}&middot; <span class="text-green-700">{{T $.Lang "history.status_applied"}}</span>{{else}}&middot; {{T $.Lang "history.status_pending"}}{{end}}
+                </div>
+            </a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+</div>
+{{template "foot" .}}
+{{end}}

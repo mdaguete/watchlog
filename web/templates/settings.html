@@ -56,13 +56,15 @@
         </button>
     </form>
 
-    {{if .IsAdmin}}
-    <div class="border-t border-wl-border pt-8 mt-12">
-        <a href="/admin" class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
-            {{T .Lang "settings.admin_link"}} →
+    <!-- Import data -->
+    <div class="border-t border-wl-border pt-8 mt-12 space-y-3">
+        <a href="/import" class="block text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+            {{T .Lang "import.link"}} →
+        </a>
+        <a href="/import/history" class="block text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors">
+            {{T .Lang "history.link"}} →
         </a>
     </div>
-    {{end}}
 
     <!-- API Keys -->
     <div class="border-t border-wl-border pt-8 mt-12">
@@ -105,10 +107,6 @@
                     <label class="flex items-center gap-1.5 cursor-pointer">
                         <input type="checkbox" name="scopes" value="write" class="accent-black dark:accent-white">
                         <span class="text-sm">write</span>
-                    </label>
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                        <input type="checkbox" name="scopes" value="lists" class="accent-black dark:accent-white">
-                        <span class="text-sm">lists</span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer">
                         <input type="checkbox" name="scopes" value="admin" class="accent-black dark:accent-white">

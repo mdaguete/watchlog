@@ -36,3 +36,7 @@ dist/
 .direnv/
 cache/
 .kiro/
+tmp/
+/watchdog
+/server
+/importer

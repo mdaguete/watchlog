@@ -1,0 +1,111 @@
+{{define "history_change_row"}}
+{{$b := .Batch}}
+<div id="change-{{.Change.ID}}" class="flex items-center gap-4 px-4 py-3 {{if .Change.Applied}}opacity-50{{end}}">
+    <input type="checkbox" class="chg shrink-0"
+        {{if .Change.Selected}}checked{{end}} {{if .Change.Applied}}disabled{{end}}
+        hx-post="/import/history/{{$b.ID}}/change/{{.Change.ID}}/toggle"
+        hx-trigger="change"
+        hx-vals='js:{selected: event.target.checked}'
+        hx-swap="none">
+    <div class="flex-1 min-w-0">
+        <div class="text-sm truncate">
+            <span class="font-medium">{{.Change.Title}}</span>
+            {{if eq .Change.Type "episode"}}<span class="text-wl-gray"> &middot; T{{.Change.Season}}E{{.Change.Episode}}</span>{{else}}<span class="text-wl-gray"> &middot; {{T .Lang "history.movie"}}</span>{{end}}
+        </div>
+        <div class="text-xs text-wl-gray truncate">{{T .Lang "history.netflix_title"}}: {{.Change.NetflixTitle}}</div>
+    </div>
+    <div class="text-xs whitespace-nowrap flex items-center gap-2">
+        <span class="text-wl-gray line-through">{{.Change.CurrentDate}}</span>
+        <span>&rarr;</span>
+        {{if .Change.Applied}}
+        <span class="font-medium">{{.Change.NewDate}}</span>
+        {{else}}
+        <form hx-post="/import/history/{{$b.ID}}/change/{{.Change.ID}}/date"
+              hx-target="#change-{{.Change.ID}}" hx-swap="outerHTML" class="inline">
+            <input type="date" name="new_date" value="{{.Change.NewDate}}"
+                   onchange="this.form.requestSubmit()"
+                   class="border border-wl-border px-2 py-1 text-xs bg-white">
+        </form>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{define "history_batch.html"}}
+{{template "head" .}}
+{{$b := .Batch}}
+<div class="space-y-8">
+    <div class="border-b border-wl-border pb-6">
+        <h1 class="font-serif text-3xl">{{T .Lang "history.review_title"}}</h1>
+        <p class="text-xs text-wl-gray mt-2">
+            {{$b.Filename}} &middot;
+            {{$b.Entries}} {{T .Lang "history.entries"}} &middot;
+            {{$b.TotalChanges}} {{T .Lang "history.changes"}}
+            {{if eq $b.Status "applied"}}&middot; <span class="text-green-700">{{T .Lang "history.status_applied"}}</span>{{end}}
+        </p>
+    </div>
+
+    {{if .Error}}<div class="border border-red-300 bg-red-50 text-red-700 px-4 py-3 text-sm">{{.Error}}</div>{{end}}
+
+    {{if eq $b.Status "applied"}}
+    <div class="border border-green-300 bg-green-50 text-green-800 px-4 py-3 text-sm">
+        {{T .Lang "history.applied"}}: {{$b.AppliedChanges}}
+    </div>
+    {{end}}
+
+    {{if .Changes}}
+    <div class="flex items-center justify-between border-b border-wl-border pb-3">
+        <div class="flex items-center gap-3">
+            <input type="checkbox" id="selectAll" checked onclick="toggleAll(this.checked)">
+            <label for="selectAll" class="text-xs uppercase tracking-widest cursor-pointer">{{T .Lang "history.select_all"}}</label>
+        </div>
+        <span class="text-xs text-wl-gray">{{$b.SelectedChanges}}/{{$b.TotalChanges}} {{T .Lang "history.selected"}}</span>
+    </div>
+
+    <div class="border border-wl-border divide-y divide-wl-border">
+        {{range .Changes}}
+        {{template "history_change_row" (dict "Lang" $.Lang "Batch" $b "Change" .)}}
+        {{end}}
+    </div>
+
+    {{if gt .TotalPages 1}}
+    <div class="flex items-center justify-between text-xs">
+        {{if .HasPrev}}<a href="/import/history/{{$b.ID}}?page={{.PrevPage}}" class="uppercase tracking-widest underline">&larr; {{T .Lang "history.prev"}}</a>{{else}}<span></span>{{end}}
+        <span class="text-wl-gray">{{.Page}} / {{.TotalPages}}</span>
+        {{if .HasNext}}<a href="/import/history/{{$b.ID}}?page={{.NextPage}}" class="uppercase tracking-widest underline">{{T .Lang "history.next"}} &rarr;</a>{{else}}<span></span>{{end}}
+    </div>
+    {{end}}
+
+    <div class="flex items-center gap-4 border-t border-wl-border pt-6">
+        {{if ne $b.Status "applied"}}
+        <form method="POST" action="/import/history/{{$b.ID}}/apply">
+            <button type="submit" class="px-6 py-3 text-xs uppercase tracking-widest bg-black text-white hover:bg-wl-dark transition-colors">
+                {{T .Lang "history.apply_selected"}}
+            </button>
+        </form>
+        {{end}}
+        <form method="POST" action="/import/history/{{$b.ID}}/delete" onsubmit="return confirm('{{T .Lang "history.confirm_delete"}}')">
+            <button type="submit" class="px-6 py-3 text-xs uppercase tracking-widest border border-wl-border text-wl-gray hover:text-black transition-colors">
+                {{T .Lang "history.discard"}}
+            </button>
+        </form>
+    </div>
+    <p class="text-xs text-wl-gray">{{T .Lang "history.backup_note"}}</p>
+    {{else}}
+    <p class="text-sm text-wl-gray">{{T .Lang "history.no_changes"}}</p>
+    {{end}}
+
+    {{template "history_unmatched_section" (dict "Lang" .Lang "Batch" $b "UnmatchedGroups" .UnmatchedGroups "TMDBEnabled" .TMDBEnabled)}}
+
+    <a href="/import/history" class="inline-block text-xs uppercase tracking-widest text-wl-gray hover:text-black">&larr; {{T .Lang "history.all_batches"}}</a>
+</div>
+<script>
+function toggleAll(checked) {
+    document.querySelectorAll('.chg').forEach(function(c) {
+        if (c.disabled) return;
+        if (c.checked !== checked) { c.checked = checked; c.dispatchEvent(new Event('change')); }
+    });
+}
+</script>
+{{template "foot" .}}
+{{end}}

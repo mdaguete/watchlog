@@ -1,0 +1,402 @@
+package db
+
+import (
+	"strconv"
+	"strings"
+	"time"
+)
+
+// ImportBatch is one viewing-history upload pending review/application.
+type ImportBatch struct {
+	ID              int64
+	UserID          int64
+	Source          string
+	Filename        string
+	Status          string // pending | applied | discarded
+	Entries         int
+	SeriesMatched   int
+	UnmatchedSeries []string
+	CreatedAt       string
+	AppliedAt       string
+	// Computed counts:
+	TotalChanges    int
+	SelectedChanges int
+	AppliedChanges  int
+}
+
+// ImportChange is a single proposed watched-date change within a batch.
+type ImportChange struct {
+	ID           int64
+	BatchID      int64
+	Type         string // episode | movie
+	TargetID     int64  // show id or movie id
+	Title        string // WatchLog display name
+	Season       int
+	Episode      int
+	NetflixTitle string
+	CurrentDate  string
+	NewDate      string
+	Selected     bool
+	Applied      bool
+}
+
+// CreateImportBatch inserts a new batch and returns its id.
+func (db *DB) CreateImportBatch(userID int64, source, filename string, entries, seriesMatched int, unmatched []string) (int64, error) {
+	res, err := db.conn.Exec(
+		`INSERT INTO import_batches (user_id, source, filename, status, entries, series_matched, unmatched_series, created_at)
+		 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)`,
+		userID, source, filename, entries, seriesMatched, strings.Join(unmatched, "\n"), time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// AddImportChanges bulk-inserts the proposed changes for a batch.
+func (db *DB) AddImportChanges(batchID int64, changes []ImportChange) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(
+		`INSERT INTO import_changes (batch_id, type, target_id, title, season, episode, netflix_title, current_date, new_date, selected, applied)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, c := range changes {
+		if _, err := stmt.Exec(batchID, c.Type, c.TargetID, c.Title, c.Season, c.Episode, c.NetflixTitle, c.CurrentDate, c.NewDate); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// AddImportChangesApplied bulk-inserts changes already applied (selected+applied).
+func (db *DB) AddImportChangesApplied(batchID int64, changes []ImportChange) error {
+	if len(changes) == 0 {
+		return nil
+	}
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(
+		`INSERT INTO import_changes (batch_id, type, target_id, title, season, episode, netflix_title, current_date, new_date, selected, applied)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, c := range changes {
+		if _, err := stmt.Exec(batchID, c.Type, c.TargetID, c.Title, c.Season, c.Episode, c.NetflixTitle, c.CurrentDate, c.NewDate); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func scanBatchCounts(db *DB, b *ImportBatch) {
+	db.conn.QueryRow(`SELECT
+		COUNT(*),
+		COALESCE(SUM(selected), 0),
+		COALESCE(SUM(applied), 0)
+		FROM import_changes WHERE batch_id = ?`, b.ID).Scan(&b.TotalChanges, &b.SelectedChanges, &b.AppliedChanges)
+}
+
+// GetImportBatchForUser returns a batch only if it belongs to the user.
+func (db *DB) GetImportBatchForUser(id, userID int64) (ImportBatch, error) {
+	var b ImportBatch
+	var unmatched, filename, appliedAt *string
+	err := db.conn.QueryRow(
+		`SELECT id, user_id, source, filename, status, entries, series_matched, unmatched_series, created_at, applied_at
+		 FROM import_batches WHERE id = ? AND user_id = ?`, id, userID).
+		Scan(&b.ID, &b.UserID, &b.Source, &filename, &b.Status, &b.Entries, &b.SeriesMatched, &unmatched, &b.CreatedAt, &appliedAt)
+	if err != nil {
+		return b, err
+	}
+	if filename != nil {
+		b.Filename = *filename
+	}
+	if appliedAt != nil {
+		b.AppliedAt = *appliedAt
+	}
+	if unmatched != nil && *unmatched != "" {
+		b.UnmatchedSeries = strings.Split(*unmatched, "\n")
+	}
+	scanBatchCounts(db, &b)
+	return b, nil
+}
+
+// ListImportBatches returns the user's batches, most recent first.
+func (db *DB) ListImportBatches(userID int64) ([]ImportBatch, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, source, filename, status, entries, series_matched, created_at, applied_at
+		 FROM import_batches WHERE user_id = ? ORDER BY id DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	var out []ImportBatch
+	for rows.Next() {
+		var b ImportBatch
+		var filename, appliedAt *string
+		b.UserID = userID
+		if err := rows.Scan(&b.ID, &b.Source, &filename, &b.Status, &b.Entries, &b.SeriesMatched, &b.CreatedAt, &appliedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if filename != nil {
+			b.Filename = *filename
+		}
+		if appliedAt != nil {
+			b.AppliedAt = *appliedAt
+		}
+		out = append(out, b)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	// Counts run as separate queries; the rows cursor above must be closed
+	// first because the pool is limited to a single connection (nested queries
+	// while iterating would deadlock).
+	for i := range out {
+		scanBatchCounts(db, &out[i])
+	}
+	return out, nil
+}
+
+// ListImportChanges returns the changes of a batch, paginated (limit<=0 = all).
+func (db *DB) ListImportChanges(batchID int64, limit, offset int) ([]ImportChange, error) {
+	q := `SELECT id, batch_id, type, target_id, title, season, episode, netflix_title, current_date, new_date, selected, applied
+		 FROM import_changes WHERE batch_id = ? ORDER BY id ASC`
+	args := []any{batchID}
+	if limit > 0 {
+		q += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+	rows, err := db.conn.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ImportChange
+	for rows.Next() {
+		var c ImportChange
+		var sel, app int
+		if err := rows.Scan(&c.ID, &c.BatchID, &c.Type, &c.TargetID, &c.Title, &c.Season, &c.Episode, &c.NetflixTitle, &c.CurrentDate, &c.NewDate, &sel, &app); err != nil {
+			return nil, err
+		}
+		c.Selected = sel == 1
+		c.Applied = app == 1
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// GetImportChange returns a single change scoped to its batch.
+func (db *DB) GetImportChange(batchID, changeID int64) (ImportChange, error) {
+	var c ImportChange
+	var sel, app int
+	err := db.conn.QueryRow(
+		`SELECT id, batch_id, type, target_id, title, season, episode, netflix_title, current_date, new_date, selected, applied
+		 FROM import_changes WHERE id = ? AND batch_id = ?`, changeID, batchID).
+		Scan(&c.ID, &c.BatchID, &c.Type, &c.TargetID, &c.Title, &c.Season, &c.Episode, &c.NetflixTitle, &c.CurrentDate, &c.NewDate, &sel, &app)
+	c.Selected = sel == 1
+	c.Applied = app == 1
+	return c, err
+}
+
+// SetImportChangeSelected toggles a change's selected flag (scoped to batch).
+func (db *DB) SetImportChangeSelected(batchID, changeID int64, selected bool) error {
+	v := 0
+	if selected {
+		v = 1
+	}
+	_, err := db.conn.Exec(`UPDATE import_changes SET selected = ? WHERE id = ? AND batch_id = ?`, v, changeID, batchID)
+	return err
+}
+
+// UpdateImportChangeDate sets a change's new_date (scoped to batch).
+func (db *DB) UpdateImportChangeDate(batchID, changeID int64, newDate string) error {
+	_, err := db.conn.Exec(`UPDATE import_changes SET new_date = ? WHERE id = ? AND batch_id = ?`, newDate, changeID, batchID)
+	return err
+}
+
+// MarkImportChangeApplied flags a change as applied.
+func (db *DB) MarkImportChangeApplied(batchID, changeID int64) error {
+	_, err := db.conn.Exec(`UPDATE import_changes SET applied = 1 WHERE id = ? AND batch_id = ?`, changeID, batchID)
+	return err
+}
+
+// SetImportBatchStatus updates a batch status (and applied_at when applied).
+func (db *DB) SetImportBatchStatus(id int64, status string) error {
+	if status == "applied" {
+		_, err := db.conn.Exec(`UPDATE import_batches SET status = ?, applied_at = ? WHERE id = ?`,
+			status, time.Now().UTC().Format(time.RFC3339), id)
+		return err
+	}
+	_, err := db.conn.Exec(`UPDATE import_batches SET status = ? WHERE id = ?`, status, id)
+	return err
+}
+
+// DeleteImportBatch removes a batch and its changes (FK cascade).
+func (db *DB) DeleteImportBatch(id, userID int64) error {
+	_, err := db.conn.Exec(`DELETE FROM import_batches WHERE id = ? AND user_id = ?`, id, userID)
+	return err
+}
+
+// UnmatchedEntry is one Netflix row whose series/movie is not in the library.
+type UnmatchedEntry struct {
+	ID          int64
+	BatchID     int64
+	Kind        string // series | movie
+	NetflixName string
+	Season      int
+	NetflixEp   string
+	WatchedDate string // YYYY-MM-DD
+}
+
+// UnmatchedGroup aggregates unresolved entries by Netflix name.
+type UnmatchedGroup struct {
+	Name         string
+	Kind         string
+	Count        int
+	MinSeason    int
+	MaxSeason    int
+	SeasonsLabel string
+	FirstDate    string
+	LastDate     string
+	Sample       string // a few example Netflix episode titles
+}
+
+// AddImportUnmatched bulk-inserts unmatched Netflix entries for a batch.
+func (db *DB) AddImportUnmatched(batchID int64, entries []UnmatchedEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(
+		`INSERT INTO import_unmatched (batch_id, kind, netflix_name, season, netflix_episode, watched_date, resolved)
+		 VALUES (?, ?, ?, ?, ?, ?, 0)`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entries {
+		if _, err := stmt.Exec(batchID, e.Kind, e.NetflixName, e.Season, e.NetflixEp, e.WatchedDate); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ListUnmatchedGroups returns distinct unresolved names for a batch, enriched
+// with aggregated data from the viewing history to aid TMDB search.
+func (db *DB) ListUnmatchedGroups(batchID int64) ([]UnmatchedGroup, error) {
+	rows, err := db.conn.Query(
+		`SELECT netflix_name, kind, COUNT(*),
+		        COALESCE(MIN(CASE WHEN season > 0 THEN season END), 0),
+		        COALESCE(MAX(season), 0),
+		        COALESCE(MIN(NULLIF(watched_date,'')), ''),
+		        COALESCE(MAX(watched_date), ''),
+		        COALESCE(GROUP_CONCAT(netflix_episode, '|'), '')
+		 FROM import_unmatched
+		 WHERE batch_id = ? AND resolved = 0
+		 GROUP BY netflix_name, kind ORDER BY netflix_name ASC`, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UnmatchedGroup
+	for rows.Next() {
+		var g UnmatchedGroup
+		var eps string
+		if err := rows.Scan(&g.Name, &g.Kind, &g.Count, &g.MinSeason, &g.MaxSeason, &g.FirstDate, &g.LastDate, &eps); err != nil {
+			return nil, err
+		}
+		g.SeasonsLabel = seasonsLabel(g.MinSeason, g.MaxSeason)
+		g.Sample = sampleTitles(eps, 3)
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// seasonsLabel formats a season range like "T1" or "T1–T3" (empty if none).
+func seasonsLabel(min, max int) string {
+	if min <= 0 && max <= 0 {
+		return ""
+	}
+	if min <= 0 {
+		min = max
+	}
+	if min == max {
+		return "T" + strconv.Itoa(min)
+	}
+	return "T" + strconv.Itoa(min) + "–T" + strconv.Itoa(max)
+}
+
+// sampleTitles returns up to n distinct non-empty titles from a '|'-joined list.
+func sampleTitles(joined string, n int) string {
+	if joined == "" {
+		return ""
+	}
+	seen := map[string]bool{}
+	var picked []string
+	for _, t := range strings.Split(joined, "|") {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		picked = append(picked, t)
+		if len(picked) >= n {
+			break
+		}
+	}
+	return strings.Join(picked, ", ")
+}
+
+// ListUnmatchedEntries returns the unresolved entries for a batch+name.
+func (db *DB) ListUnmatchedEntries(batchID int64, name string) ([]UnmatchedEntry, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, batch_id, kind, netflix_name, season, netflix_episode, watched_date
+		 FROM import_unmatched WHERE batch_id = ? AND netflix_name = ? AND resolved = 0 ORDER BY id ASC`, batchID, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UnmatchedEntry
+	for rows.Next() {
+		var e UnmatchedEntry
+		if err := rows.Scan(&e.ID, &e.BatchID, &e.Kind, &e.NetflixName, &e.Season, &e.NetflixEp, &e.WatchedDate); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// MarkUnmatchedResolved flags all entries of a batch+name as resolved.
+func (db *DB) MarkUnmatchedResolved(batchID int64, name string) error {
+	_, err := db.conn.Exec(`UPDATE import_unmatched SET resolved = 1 WHERE batch_id = ? AND netflix_name = ?`, batchID, name)
+	return err
+}
+
+// CountUnmatchedGroups returns the number of distinct unresolved names.
+func (db *DB) CountUnmatchedGroups(batchID int64) int {
+	var n int
+	db.conn.QueryRow(`SELECT COUNT(DISTINCT netflix_name) FROM import_unmatched WHERE batch_id = ? AND resolved = 0`, batchID).Scan(&n)
+	return n
+}

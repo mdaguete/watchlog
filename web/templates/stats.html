@@ -1,8 +1,12 @@
 {{define "stats.html"}}
 {{template "head" .}}
 <div class="space-y-16">
-    <div class="border-b border-wl-border pb-6">
-        <h1 class="font-serif text-4xl">{{T .Lang "stats.title"}}</h1>
+    <div>
+        <h1 class="font-serif text-4xl mb-4">{{T .Lang "timeline.title"}}</h1>
+        <nav class="flex gap-6 border-b border-wl-border">
+            <a href="/timeline" class="pb-3 border-b-2 border-transparent text-wl-gray hover:text-black text-xs uppercase tracking-widest transition-colors">{{T .Lang "nav.timeline"}}</a>
+            <a href="/stats" class="pb-3 border-b-2 border-black text-black text-xs uppercase tracking-widest">{{T .Lang "nav.stats"}}</a>
+        </nav>
     </div>
 
     <!-- Summary -->
@@ -28,7 +32,7 @@
     <!-- Calendar Heatmap -->
     <div>
         <h2 class="text-xs uppercase tracking-widest text-wl-gray mb-6">{{T .Lang "stats.calendar"}}</h2>
-        <div id="calendar-heatmap"></div>
+        <div id="calendar-heatmap" class="overflow-x-auto"></div>
         <div class="flex items-center justify-end gap-2 mt-4">
             <span class="text-xs text-wl-gray">{{T .Lang "stats.less"}}</span>
             <div class="w-3 h-3 cal-0"></div>
@@ -56,6 +60,7 @@ const months = stats
         const parts = s.period.split('-');
         return {year: parseInt(parts[1]), month: parseInt(parts[2]), count: s.count, runtime: s.runtime};
     })
+    .filter(m => Number.isInteger(m.year) && m.month >= 1 && m.month <= 12)
     .sort((a, b) => a.year === b.year ? a.month - b.month : a.year - b.year);
 
 // Group by year
@@ -83,7 +88,7 @@ const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 
 const calendarEl = document.getElementById('calendar-heatmap');
 const sortedYears = Object.keys(years).sort();
 
-let calHTML = '<div class="space-y-4 flex flex-col items-center">';
+let calHTML = '<div class="flex flex-col gap-4 min-w-max">';
 
 // Month labels + Total header
 calHTML += '<div class="flex items-center gap-1 ml-12">';
@@ -106,9 +111,10 @@ sortedYears.forEach(year => {
         const count = data ? data.count : 0;
         const intensity = getIntensity(count);
         const title = `${monthNames[m]} ${year}: ${count} episodios`;
-        calHTML += `<div class="w-8 h-8 ${intensity} flex items-center justify-center cursor-default" title="${title}">`;
+        const ym = `${year}-${String(m).padStart(2, '0')}`;
+        calHTML += `<a href="/calendar?month=${ym}" class="w-8 h-8 ${intensity} flex items-center justify-center hover:ring-1 hover:ring-black transition-shadow" title="${title}">`;
         if (count > 0) calHTML += `<span class="text-xs cal-text">${count}</span>`;
-        calHTML += `</div>`;
+        calHTML += `</a>`;
     }
     calHTML += '</div>';
     calHTML += `<span class="w-14 text-center text-xs font-medium ml-2">${totalEps}</span>`;

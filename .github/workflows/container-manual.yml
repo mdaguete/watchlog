@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout ${{ inputs.ref }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
 
@@ -41,8 +41,11 @@ jobs:
           fi
           # Sanitize to a valid Docker tag (replace anything not [A-Za-z0-9._-] with -)
           safe="$(printf '%s' "$raw" | sed 's#[^A-Za-z0-9._-]#-#g' | cut -c1-128)"
+          short="$(git rev-parse --short HEAD)"
           echo "value=$safe" >> "$GITHUB_OUTPUT"
-          echo "Building image tag: $safe"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "immutable=${safe}-${short}" >> "$GITHUB_OUTPUT"
+          echo "Building image tags: $safe and ${safe}-${short}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -58,14 +61,16 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          # Tag with the sanitized ref/override and the short commit SHA.
-          # Deliberately does NOT touch 'latest' — that's reserved for releases.
+          # Tag with the sanitized ref/override, an immutable <ref>-<shortsha>,
+          # and the short commit SHA. Deliberately does NOT touch 'latest' —
+          # that's reserved for releases.
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.immutable }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
@@ -75,4 +80,5 @@ jobs:
         run: |
           echo "### Image pushed" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.immutable }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"

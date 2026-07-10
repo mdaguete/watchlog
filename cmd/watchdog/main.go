@@ -35,6 +35,11 @@ Commands:
   db-info                   Show database info (version, size, users)
   db-vacuum                 Compact the database (VACUUM)
 
+  netflix-dates <csv> [uid] Adjust episode watched dates from Netflix history
+                            (dry-run by default; add --apply to write)
+  sync-stats [uid]          Recalculate watch stats from the DB (all users if
+                            no id); use after importing viewing history
+
 Examples:
   watchdog --datadir /data users
   watchdog --datadir /data user-create admin mypassword
@@ -122,6 +127,27 @@ func main() {
 		cmdDBInfo(database, dbPath)
 	case "db-vacuum":
 		cmdDBVacuum(database)
+	case "netflix-dates":
+		requireArgs(args, 1, "netflix-dates <csv-path> [user-id] [--apply]")
+		csvPath := args[0]
+		uid := int64(1)
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			} else if n, err := strconv.ParseInt(a, 10, 64); err == nil {
+				uid = n
+			}
+		}
+		cmdNetflixDates(database, csvPath, uid, apply)
+	case "sync-stats":
+		uid := int64(0) // 0 = all users
+		if len(args) > 0 {
+			if n, err := strconv.ParseInt(args[0], 10, 64); err == nil {
+				uid = n
+			}
+		}
+		cmdSyncStats(database, uid)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
 		fmt.Print(usage)

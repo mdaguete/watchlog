@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -148,6 +149,21 @@ func (db *DB) GetShow(id int64) (models.Show, error) {
 	return s, err
 }
 
+// GetShowIDByName returns the id of an existing catalog show with the exact
+// name, or 0. Used during import to attach episodes to the already-imported
+// show instead of creating a duplicate per episode.
+func (db *DB) GetShowIDByName(name string) int64 {
+	var id int64
+	db.conn.QueryRow("SELECT id FROM shows WHERE name = ? ORDER BY id LIMIT 1", name).Scan(&id)
+	return id
+}
+
+// RawQuery executes a raw SQL query and returns the rows. The caller must close
+// the rows when done. For use by CLI tools that need flexible reads.
+func (db *DB) RawQuery(query string, args ...any) (*sql.Rows, error) {
+	return db.conn.Query(query, args...)
+}
+
 func (db *DB) GetShowByTMDBID(tmdbID int, id *int64) {
 	db.conn.QueryRow("SELECT id FROM shows WHERE tmdb_id = ?", tmdbID).Scan(id)
 }
@@ -237,11 +253,17 @@ func (db *DB) GetUserShowsFiltered(userID int64, sort, filter string) ([]models.
 	}
 
 	var filterClause string
+	// available = total episodes known from TMDB (season_episodes, real seasons).
+	const available = `COALESCE((SELECT SUM(se.episode_count) FROM season_episodes se WHERE se.show_id = s.id AND se.season_number > 0), 0)`
 	switch filter {
 	case "favorites":
 		filterClause = "AND us.is_favorited = 1"
 	case "archived":
 		filterClause = "AND us.is_archived = 1"
+	case "watching": // episodes still left to watch (or unknown episode count)
+		filterClause = "AND us.is_archived = 0 AND (" + available + " = 0 OR us.episodes_seen < " + available + ")"
+	case "completed": // caught up: watched all available episodes
+		filterClause = "AND us.is_archived = 0 AND " + available + " > 0 AND us.episodes_seen >= " + available
 	default:
 		filterClause = "AND us.is_archived = 0" // hide archived by default
 	}
@@ -435,11 +457,48 @@ func (db *DB) GetFollowedShowsWithTMDB(userID int64) ([]models.UserShow, error) 
 
 // --- Episodes (per-user) ---
 
+// WatchedAtLayout is the canonical SQLite datetime text format (ISO-8601,
+// no timezone). Storing watched_at in this layout keeps it sortable and usable
+// with SQLite's native date/time functions (date/datetime/strftime), unlike
+// Go's time.String() format which SQLite cannot parse.
+const WatchedAtLayout = "2006-01-02 15:04:05"
+
+// watchedText formats a time for watched_at storage; zero times become "".
+func watchedText(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(WatchedAtLayout)
+}
+
+// parseDBTime parses a watched_at value read as text. The SQLite driver does not
+// reliably auto-convert every stored layout to time.Time, so read it as a string
+// and parse tolerantly (canonical ISO, RFC3339, or legacy Go time.String()).
+func parseDBTime(s string) time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}
+	}
+	for _, l := range []string{
+		WatchedAtLayout,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+	} {
+		if t, err := time.Parse(l, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
 func (db *DB) InsertEpisode(e models.Episode) error {
 	_, err := db.conn.Exec(`
 		INSERT OR IGNORE INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.UserID, e.ExternalID, e.ShowID, e.SeasonNumber, e.EpisodeNumber, e.Watched, e.WatchedAt, e.Runtime)
+		e.UserID, e.ExternalID, e.ShowID, e.SeasonNumber, e.EpisodeNumber, e.Watched, watchedText(e.WatchedAt), e.Runtime)
 	return err
 }
 
@@ -452,9 +511,11 @@ func (db *DB) GetEpisodesByShow(userID, showID int64) ([]models.Episode, error) 
 	var eps []models.Episode
 	for rows.Next() {
 		var e models.Episode
-		if err := rows.Scan(&e.ID, &e.UserID, &e.ExternalID, &e.ShowID, &e.SeasonNumber, &e.EpisodeNumber, &e.Watched, &e.WatchedAt, &e.Runtime); err != nil {
+		var wa string
+		if err := rows.Scan(&e.ID, &e.UserID, &e.ExternalID, &e.ShowID, &e.SeasonNumber, &e.EpisodeNumber, &e.Watched, &wa, &e.Runtime); err != nil {
 			return nil, err
 		}
+		e.WatchedAt = parseDBTime(wa)
 		eps = append(eps, e)
 	}
 	return eps, nil
@@ -466,11 +527,23 @@ func (db *DB) MarkEpisodeWatched(userID, showID int64, season, episode int) erro
 		INSERT INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
 		VALUES (?, 0, ?, ?, ?, 1, ?, 0)
 		ON CONFLICT(user_id, show_id, season_number, episode_number) DO NOTHING`,
-		userID, showID, season, episode, now)
+		userID, showID, season, episode, watchedText(now))
 	if err != nil {
 		return err
 	}
 	_, err = db.conn.Exec("UPDATE user_shows SET episodes_seen = episodes_seen + 1, updated_at = ? WHERE user_id = ? AND show_id = ?", now, userID, showID)
+	return err
+}
+
+// MarkEpisodeWatchedAt marks an episode watched with a specific date, inserting
+// it if absent or updating the date if already present. Used by the viewing
+// history import when adding a newly-reconciled show.
+func (db *DB) MarkEpisodeWatchedAt(userID, showID int64, season, episode int, at time.Time) error {
+	_, err := db.conn.Exec(`
+		INSERT INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
+		VALUES (?, 0, ?, ?, ?, 1, ?, 0)
+		ON CONFLICT(user_id, show_id, season_number, episode_number) DO UPDATE SET watched_at = excluded.watched_at, watched = 1`,
+		userID, showID, season, episode, watchedText(at))
 	return err
 }
 
@@ -495,7 +568,7 @@ func (db *DB) MarkSeasonWatched(userID, showID int64, season, totalEpisodes int)
 		res, err := db.conn.Exec(`
 			INSERT OR IGNORE INTO episodes (user_id, external_id, show_id, season_number, episode_number, watched, watched_at, runtime)
 			VALUES (?, 0, ?, ?, ?, 1, ?, 0)`,
-			userID, showID, season, ep, now)
+			userID, showID, season, ep, watchedText(now))
 		if err != nil {
 			continue
 		}
@@ -542,13 +615,14 @@ func (db *DB) GetShowProgress(userID, showID int64) (models.ShowProgress, error)
 
 func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 	_, err := db.conn.Exec(`
-		INSERT INTO movies (external_id, name, tmdb_id, poster_url, overview, genres, runtime)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO movies (external_id, name, tmdb_id, poster_url, overview, genres, runtime, release_date)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(external_id) DO UPDATE SET
 			name=COALESCE(NULLIF(excluded.name, ''), movies.name),
 			tmdb_id=MAX(movies.tmdb_id, excluded.tmdb_id),
-			poster_url=COALESCE(NULLIF(excluded.poster_url, ''), movies.poster_url)`,
-		m.ExternalID, m.Name, m.TMDBID, m.PosterURL, m.Overview, m.Genres, m.Runtime)
+			poster_url=COALESCE(NULLIF(excluded.poster_url, ''), movies.poster_url),
+			release_date=COALESCE(NULLIF(excluded.release_date, ''), movies.release_date)`,
+		m.ExternalID, m.Name, m.TMDBID, m.PosterURL, m.Overview, m.Genres, m.Runtime, m.ReleaseDate)
 	if err != nil {
 		return 0, err
 	}
@@ -570,10 +644,41 @@ func (db *DB) IsMovieWatched(userID, movieID int64) bool {
 	return watchedAt != nil
 }
 
+// GetMovieWatchedAt returns the watched time of a movie for the user, if any.
+func (db *DB) GetMovieWatchedAt(userID, movieID int64) (time.Time, bool) {
+	var wa sql.NullString
+	err := db.conn.QueryRow("SELECT watched_at FROM user_movies WHERE user_id = ? AND movie_id = ?", userID, movieID).Scan(&wa)
+	if err != nil || !wa.Valid || wa.String == "" {
+		return time.Time{}, false
+	}
+	t := parseDBTime(wa.String)
+	return t, !t.IsZero()
+}
+
 func (db *DB) MarkMovieWatched(userID, movieID int64, watchedAt time.Time) error {
 	_, err := db.conn.Exec(`INSERT INTO user_movies (user_id, movie_id, watched_at) VALUES (?, ?, ?)
-		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedAt)
+		ON CONFLICT(user_id, movie_id) DO UPDATE SET watched_at = excluded.watched_at`, userID, movieID, watchedText(watchedAt))
 	return err
+}
+
+// GetEpisodeWatchedAt returns the watched_at text for a specific episode (empty if not watched).
+func (db *DB) GetEpisodeWatchedAt(userID, showID int64, season, episode int) string {
+	var wa string
+	db.conn.QueryRow(`SELECT COALESCE(watched_at,'') FROM episodes WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,
+		userID, showID, season, episode).Scan(&wa)
+	return wa
+}
+
+// UpdateEpisodeWatchedAt sets the watched date/time of an already-watched
+// episode (scoped to the user). Returns the number of rows affected.
+func (db *DB) UpdateEpisodeWatchedAt(userID, showID int64, season, episode int, at time.Time) (int64, error) {
+	res, err := db.conn.Exec(
+		`UPDATE episodes SET watched_at = ? WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,
+		watchedText(at), userID, showID, season, episode)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (db *DB) AddMovieToLibrary(userID, movieID int64) error {
@@ -625,9 +730,11 @@ func (db *DB) GetUserMoviesSorted(userID int64, sort string) ([]models.UserMovie
 	var movies []models.UserMovie
 	for rows.Next() {
 		var um models.UserMovie
-		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime, &um.WatchedAt); err != nil {
+		var wa string
+		if err := rows.Scan(&um.ID, &um.ExternalID, &um.Name, &um.NameES, &um.NameEN, &um.TMDBID, &um.PosterURL, &um.Overview, &um.OverviewEN, &um.Genres, &um.GenresEN, &um.Runtime, &wa); err != nil {
 			return nil, err
 		}
+		um.WatchedAt = parseDBTime(wa)
 		movies = append(movies, um)
 	}
 	return movies, nil
@@ -650,7 +757,7 @@ func (db *DB) UpdateMovieTMDBNames(id int64, nameES, nameEN string) error {
 }
 
 func (db *DB) GetMoviesWithoutTMDB() ([]models.Movie, error) {
-	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime FROM movies WHERE tmdb_id = 0 ORDER BY name")
+	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime, release_date FROM movies WHERE tmdb_id = 0 ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -658,7 +765,7 @@ func (db *DB) GetMoviesWithoutTMDB() ([]models.Movie, error) {
 	var movies []models.Movie
 	for rows.Next() {
 		var m models.Movie
-		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime); err != nil {
+		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime, &m.ReleaseDate); err != nil {
 			return nil, err
 		}
 		movies = append(movies, m)
@@ -700,103 +807,6 @@ func (db *DB) SearchMovies(query string) ([]models.Movie, error) {
 
 // --- Lists (per-user) ---
 
-func (db *DB) CreateList(userID int64, name string, isPublic bool) (int64, error) {
-	res, err := db.conn.Exec(`INSERT INTO lists (user_id, name, is_public, created_at) VALUES (?, ?, ?, ?)`,
-		userID, name, isPublic, time.Now())
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
-func (db *DB) GetUserLists(userID int64) ([]models.List, error) {
-	rows, err := db.conn.Query("SELECT id, user_id, name, is_public, created_at FROM lists WHERE user_id = ? ORDER BY name", userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var lists []models.List
-	for rows.Next() {
-		var l models.List
-		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.IsPublic, &l.CreatedAt); err != nil {
-			return nil, err
-		}
-		lists = append(lists, l)
-	}
-	return lists, nil
-}
-
-func (db *DB) GetListWithItems(id int64) (models.List, error) {
-	var l models.List
-	err := db.conn.QueryRow("SELECT id, user_id, name, is_public, created_at FROM lists WHERE id = ?", id).
-		Scan(&l.ID, &l.UserID, &l.Name, &l.IsPublic, &l.CreatedAt)
-	if err != nil {
-		return l, err
-	}
-	rows, err := db.conn.Query(`
-		SELECT li.id, li.list_id, li.entity_type, li.entity_id,
-			CASE
-				WHEN li.name != '' THEN li.name
-				WHEN li.entity_type = 'series' THEN COALESCE((SELECT s.name FROM shows s WHERE s.id = li.entity_id), (SELECT s.name FROM shows s WHERE s.external_id = li.entity_id), '')
-				WHEN li.entity_type = 'movie' THEN COALESCE((SELECT m.name FROM movies m WHERE m.id = li.entity_id), '')
-				ELSE ''
-			END as resolved_name,
-			CASE
-				WHEN li.entity_type = 'series' THEN COALESCE((SELECT s.poster_url FROM shows s WHERE s.id = li.entity_id), (SELECT s.poster_url FROM shows s WHERE s.external_id = li.entity_id), '')
-				WHEN li.entity_type = 'movie' THEN COALESCE((SELECT m.poster_url FROM movies m WHERE m.id = li.entity_id), '')
-				ELSE ''
-			END as poster_url
-		FROM list_items li WHERE li.list_id = ?`, id)
-	if err != nil {
-		return l, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var item models.ListItem
-		if err := rows.Scan(&item.ID, &item.ListID, &item.EntityType, &item.EntityID, &item.Name, &item.PosterURL); err != nil {
-			return l, err
-		}
-		l.Items = append(l.Items, item)
-	}
-	return l, nil
-}
-
-func (db *DB) UpdateList(id int64, name string, isPublic bool) error {
-	_, err := db.conn.Exec(`UPDATE lists SET name=?, is_public=? WHERE id=?`, name, isPublic, id)
-	return err
-}
-
-func (db *DB) DeleteList(id int64) error {
-	db.conn.Exec(`DELETE FROM list_items WHERE list_id = ?`, id)
-	_, err := db.conn.Exec(`DELETE FROM lists WHERE id = ?`, id)
-	return err
-}
-
-func (db *DB) AddListItem(item models.ListItem) error {
-	_, err := db.conn.Exec(`INSERT INTO list_items (list_id, entity_type, entity_id, name) VALUES (?, ?, ?, ?)`,
-		item.ListID, item.EntityType, item.EntityID, item.Name)
-	return err
-}
-
-func (db *DB) RemoveListItem(listID, itemID int64) error {
-	_, err := db.conn.Exec(`DELETE FROM list_items WHERE id = ? AND list_id = ?`, itemID, listID)
-	return err
-}
-
-func (db *DB) AddShowToList(listID, showID int64) error {
-	var name string
-	db.conn.QueryRow("SELECT name FROM shows WHERE id = ?", showID).Scan(&name)
-	_, err := db.conn.Exec(`INSERT INTO list_items (list_id, entity_type, entity_id, name) VALUES (?, 'series', ?, ?)`, listID, showID, name)
-	return err
-}
-
-func (db *DB) AddMovieToList(listID, movieID int64) error {
-	var name string
-	db.conn.QueryRow("SELECT name FROM movies WHERE id = ?", movieID).Scan(&name)
-	_, err := db.conn.Exec(`INSERT INTO list_items (list_id, entity_type, entity_id, name) VALUES (?, 'movie', ?, ?)`, listID, movieID, name)
-	return err
-}
-
 // --- Watch Stats (per-user) ---
 
 func (db *DB) UpsertWatchStats(userID int64, s models.WatchStats) error {
@@ -826,7 +836,7 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 		INSERT INTO watch_stats (user_id, period, count, runtime)
 		SELECT ?, 'month-' || substr(watched_at, 1, 7), COUNT(*), COALESCE(SUM(runtime), 0)
 		FROM episodes
-		WHERE user_id = ? AND watched_at IS NOT NULL
+		WHERE user_id = ? AND watched_at IS NOT NULL AND substr(watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
 		GROUP BY substr(watched_at, 1, 7)
 		ON CONFLICT(user_id, period) DO UPDATE SET
 			count = MAX(count, excluded.count),
@@ -847,7 +857,7 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 		SELECT 'month-' || substr(um.watched_at, 1, 7) AS period, COUNT(*) AS cnt, COALESCE(SUM(m.runtime), 0) AS rt
 		FROM user_movies um
 		JOIN movies m ON m.id = um.movie_id
-		WHERE um.user_id = ? AND um.watched_at IS NOT NULL
+		WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
 		GROUP BY substr(um.watched_at, 1, 7)`,
 		userID)
 	if err != nil {
@@ -871,6 +881,62 @@ func (db *DB) RecalcWatchStats(userID int64) error {
 			userID, ms.period, ms.count, ms.runtime, ms.count, ms.runtime)
 	}
 
+	return nil
+}
+
+// SyncWatchStatsFromDB updates watch_stats to include per-month totals derived
+// from the actual episodes and movies in the DB, merging with MAX so existing
+// values (e.g. TVTime CSV aggregates) are never reduced and repeated calls do
+// not double-count. Unlike RecalcWatchStats this is idempotent, so it can be
+// called after incremental operations such as the Netflix history import.
+func (db *DB) SyncWatchStatsFromDB(userID int64) error {
+	// Remove stale/malformed month periods (e.g. "month-" produced by older
+	// imports from empty watched_at values) so they don't show as a NaN year.
+	db.conn.Exec(`DELETE FROM watch_stats WHERE user_id = ? AND period LIKE 'month-%' AND period NOT GLOB 'month-[0-9][0-9][0-9][0-9]-*'`, userID)
+
+	type stat struct {
+		period  string
+		count   int
+		runtime int
+	}
+	rows, err := db.conn.Query(`
+		SELECT period, SUM(c) AS cnt, SUM(rt) AS rt FROM (
+			SELECT 'month-' || substr(watched_at, 1, 7) AS period, COUNT(*) AS c, COALESCE(SUM(runtime), 0) AS rt
+			FROM episodes
+			WHERE user_id = ? AND watched_at IS NOT NULL AND substr(watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
+			GROUP BY substr(watched_at, 1, 7)
+			UNION ALL
+			SELECT 'month-' || substr(um.watched_at, 1, 7) AS period, COUNT(*) AS c, COALESCE(SUM(m.runtime), 0) AS rt
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL AND substr(um.watched_at, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
+			GROUP BY substr(um.watched_at, 1, 7)
+		) GROUP BY period`, userID, userID)
+	if err != nil {
+		return err
+	}
+	var stats []stat
+	for rows.Next() {
+		var s stat
+		if err := rows.Scan(&s.period, &s.count, &s.runtime); err != nil {
+			continue
+		}
+		stats = append(stats, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, s := range stats {
+		if _, err := db.conn.Exec(`
+			INSERT INTO watch_stats (user_id, period, count, runtime)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(user_id, period) DO UPDATE SET
+				count = MAX(count, excluded.count),
+				runtime = MAX(runtime, excluded.runtime)`,
+			userID, s.period, s.count, s.runtime); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -996,7 +1062,7 @@ func (db *DB) GetAllShowsWithTMDB() ([]models.Show, error) {
 }
 
 func (db *DB) GetAllMoviesWithTMDB() ([]models.Movie, error) {
-	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime FROM movies WHERE tmdb_id > 0 ORDER BY name")
+	rows, err := db.conn.Query("SELECT id, external_id, name, tmdb_id, poster_url, overview, genres, runtime, release_date FROM movies WHERE tmdb_id > 0 ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -1004,7 +1070,7 @@ func (db *DB) GetAllMoviesWithTMDB() ([]models.Movie, error) {
 	var movies []models.Movie
 	for rows.Next() {
 		var m models.Movie
-		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime); err != nil {
+		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Name, &m.TMDBID, &m.PosterURL, &m.Overview, &m.Genres, &m.Runtime, &m.ReleaseDate); err != nil {
 			return nil, err
 		}
 		movies = append(movies, m)
@@ -1018,6 +1084,20 @@ func (db *DB) UpsertSeasonEpisodes(showID int64, seasonNumber, episodeCount int)
 	_, err := db.conn.Exec(`INSERT INTO season_episodes (show_id, season_number, episode_count) VALUES (?, ?, ?)
 		ON CONFLICT(show_id, season_number) DO UPDATE SET episode_count = excluded.episode_count`,
 		showID, seasonNumber, episodeCount)
+	return err
+}
+
+// ClearSeasonEpisodes removes all cached season episode counts for a show. Used
+// before re-populating on refresh so seasons that no longer exist (e.g. leftover
+// from a previous wrong TMDB match) are dropped.
+func (db *DB) ClearSeasonEpisodes(showID int64) error {
+	_, err := db.conn.Exec("DELETE FROM season_episodes WHERE show_id = ?", showID)
+	return err
+}
+
+// ClearEpisodeDetails removes all cached episode details for a show (same reason).
+func (db *DB) ClearEpisodeDetails(showID int64) error {
+	_, err := db.conn.Exec("DELETE FROM episode_details WHERE show_id = ?", showID)
 	return err
 }
 
@@ -1137,6 +1217,73 @@ func (db *DB) DeleteMagicLink(token string) error {
 func (db *DB) CleanExpiredMagicLinks() error {
 	_, err := db.conn.Exec(`DELETE FROM magic_links WHERE expires_at <= ?`, time.Now())
 	return err
+}
+
+// --- Invitations ---
+
+// Invitation represents a pending or accepted user invitation.
+type Invitation struct {
+	ID        int64
+	Email     string
+	Token     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	Accepted  bool
+}
+
+func (db *DB) CreateInvitation(email, token string, expiresAt time.Time) (int64, error) {
+	res, err := db.conn.Exec(`INSERT INTO invitations (email, token, expires_at) VALUES (?, ?, ?)`, email, token, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// GetInvitation returns the email for a valid (not accepted, not expired) invitation token.
+func (db *DB) GetInvitation(token string) (string, bool) {
+	var email string
+	err := db.conn.QueryRow(`SELECT email FROM invitations WHERE token = ? AND accepted_at IS NULL AND expires_at > ?`, token, time.Now()).Scan(&email)
+	if err != nil {
+		return "", false
+	}
+	return email, true
+}
+
+// AcceptInvitation marks an invitation as accepted so its token can no longer be used.
+func (db *DB) AcceptInvitation(token string) error {
+	_, err := db.conn.Exec(`UPDATE invitations SET accepted_at = ? WHERE token = ?`, time.Now(), token)
+	return err
+}
+
+// ListPendingInvitations returns invitations that are neither accepted nor expired.
+func (db *DB) ListPendingInvitations() ([]Invitation, error) {
+	rows, err := db.conn.Query(`SELECT id, email, token, created_at, expires_at FROM invitations WHERE accepted_at IS NULL AND expires_at > ? ORDER BY created_at DESC`, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var invs []Invitation
+	for rows.Next() {
+		var inv Invitation
+		if err := rows.Scan(&inv.ID, &inv.Email, &inv.Token, &inv.CreatedAt, &inv.ExpiresAt); err != nil {
+			return nil, err
+		}
+		invs = append(invs, inv)
+	}
+	return invs, nil
+}
+
+// RevokeInvitation deletes an invitation by id.
+func (db *DB) RevokeInvitation(id int64) error {
+	_, err := db.conn.Exec(`DELETE FROM invitations WHERE id = ?`, id)
+	return err
+}
+
+// HasPendingInvitationForEmail reports whether there's an active invitation for the email.
+func (db *DB) HasPendingInvitationForEmail(email string) bool {
+	var n int
+	db.conn.QueryRow(`SELECT COUNT(*) FROM invitations WHERE email = ? AND accepted_at IS NULL AND expires_at > ?`, email, time.Now()).Scan(&n)
+	return n > 0
 }
 
 // --- Episode Details ---
@@ -1444,8 +1591,63 @@ func (db *DB) DeleteAPIKey(userID, keyID int64) error {
 	return err
 }
 
-// --- Timeline ---
+// --- Calendar ---
 
+// CalendarItem is a watched episode or movie for the calendar view.
+type CalendarItem struct {
+	Type          string // "episode" or "movie"
+	ID            int64  // show id or movie id
+	ShowName      string
+	ShowNameES    string
+	ShowNameEN    string
+	SeasonNumber  int
+	EpisodeNumber int
+	EpName        string
+	EpNameEN      string
+	Date          string // YYYY-MM-DD
+	DT            string // YYYY-MM-DDTHH:MM (for datetime-local)
+}
+
+// GetWatchedItemsInRange returns watched episodes and movies whose date falls in
+// [start, end] (inclusive, YYYY-MM-DD), for the calendar view.
+func (db *DB) GetWatchedItemsInRange(userID int64, start, end string) ([]CalendarItem, error) {
+	query := `
+		SELECT type, id, show_name, show_name_es, show_name_en, season_number, episode_number, ep_name, ep_name_en, date, dt FROM (
+			SELECT 'episode' as type, e.show_id as id, s.name as show_name, s.name_es as show_name_es, s.name_en as show_name_en,
+				e.season_number, e.episode_number,
+				COALESCE((SELECT ed.name FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name,
+				COALESCE((SELECT ed.name_en FROM episode_details ed WHERE ed.show_id = e.show_id AND ed.season_number = e.season_number AND ed.episode_number = e.episode_number), '') as ep_name_en,
+				substr(e.watched_at, 1, 10) as date,
+				replace(substr(e.watched_at, 1, 16), ' ', 'T') as dt
+			FROM episodes e JOIN shows s ON s.id = e.show_id
+			WHERE e.user_id = ? AND e.watched_at != ''
+			UNION ALL
+			SELECT 'movie' as type, m.id as id, m.name as show_name, m.name_es as show_name_es, m.name_en as show_name_en,
+				0, 0, '' as ep_name, '' as ep_name_en,
+				substr(um.watched_at, 1, 10) as date,
+				replace(substr(um.watched_at, 1, 16), ' ', 'T') as dt
+			FROM user_movies um JOIN movies m ON m.id = um.movie_id
+			WHERE um.user_id = ? AND um.watched_at IS NOT NULL
+		) items
+		WHERE date >= ? AND date <= ?
+		ORDER BY dt ASC, show_name ASC`
+	rows, err := db.conn.Query(query, userID, userID, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CalendarItem
+	for rows.Next() {
+		var it CalendarItem
+		if err := rows.Scan(&it.Type, &it.ID, &it.ShowName, &it.ShowNameES, &it.ShowNameEN, &it.SeasonNumber, &it.EpisodeNumber, &it.EpName, &it.EpNameEN, &it.Date, &it.DT); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, nil
+}
+
+// --- Timeline ---
 // TimelineItem represents a watched episode or movie in the timeline.
 type TimelineItem struct {
 	Type          string // "episode" or "movie"

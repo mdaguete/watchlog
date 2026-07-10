@@ -49,7 +49,6 @@ func (imp *Importer) ImportAll() error {
 		{"movies (ratings-live-votes)", imp.importMovies},
 		{"show progress (show_seen_episode_latest)", imp.importShowProgress},
 		{"watch stats (tracking-prod-count-by-timeframe)", imp.importWatchStats},
-		{"lists (lists-prod-lists)", imp.importLists},
 	}
 
 	for i, step := range steps {
@@ -377,11 +376,16 @@ func (imp *Importer) importRewatchedEpisodes() error {
 		epNum, _ := strconv.Atoi(getField(record, idx, "episode_number"))
 		watchedAt := parseTime(getField(record, idx, "created_at"))
 
-		// Try to find the show by name - use 0 as external ID since we don't have it here
-		showID, _ := imp.db.UpsertShow(models.Show{
-			ExternalID: epExtID, // use episode ID as temp external to avoid collision
-			Name:       seriesName,
-		})
+		// Attach to the show already imported (by name) to avoid creating a
+		// duplicate show per episode. Only create a fallback show if the series
+		// wasn't imported from user_tv_show_data.
+		showID := imp.db.GetShowIDByName(seriesName)
+		if showID == 0 {
+			showID, _ = imp.db.UpsertShow(models.Show{
+				ExternalID: epExtID,
+				Name:       seriesName,
+			})
+		}
 		if showID == 0 {
 			continue
 		}
@@ -432,10 +436,15 @@ func (imp *Importer) importMovies() error {
 
 			uuid := getField(record, idx, "uuid")
 			watchedAt := parseTime(getField(record, idx, "created_at"))
+			releaseDate := getField(record, idx, "release_date")
+			if len(releaseDate) > 10 {
+				releaseDate = releaseDate[:10]
+			}
 
 			movieID, err := imp.db.UpsertMovie(models.Movie{
-				ExternalID: uuid,
-				Name:       movieName,
+				ExternalID:  uuid,
+				Name:        movieName,
+				ReleaseDate: releaseDate,
 			})
 			if err != nil || movieID == 0 {
 				continue
@@ -587,86 +596,6 @@ func (imp *Importer) importWatchStats() error {
 	}
 	imp.logf("  Recalculated watch stats from DB")
 	return nil
-}
-
-func (imp *Importer) importLists() error {
-	r, f, err := imp.openCSV("lists-prod-lists.csv")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	header, err := r.Read()
-	if err != nil {
-		return err
-	}
-	idx := indexHeader(header)
-
-	count := 0
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			continue
-		}
-
-		name := getField(record, idx, "name")
-		if name == "" {
-			continue
-		}
-
-		isPublic := getField(record, idx, "is_public") == "true"
-
-		listID, err := imp.db.CreateList(imp.userID, name, isPublic)
-		if err != nil || listID == 0 {
-			continue
-		}
-		count++
-
-		// The objects field contains serialized data - extract show IDs
-		objects := getField(record, idx, "objects")
-		if objects != "" {
-			imp.parseListObjects(listID, objects)
-		}
-	}
-	imp.logf("  Imported %d lists", count)
-	return nil
-}
-
-func (imp *Importer) parseListObjects(listID int64, objects string) {
-	// Objects are in format: [map[created_at:... id:417271 type:series uuid:...] ...]
-	// Simple extraction of id and type fields
-	parts := strings.Split(objects, "map[")
-	for _, part := range parts {
-		if !strings.Contains(part, "id:") {
-			continue
-		}
-		var entityType string
-		var entityID int64
-
-		fields := strings.Fields(part)
-		for _, field := range fields {
-			if strings.HasPrefix(field, "type:") {
-				entityType = strings.TrimPrefix(field, "type:")
-				entityType = strings.TrimSuffix(entityType, "]")
-			}
-			if strings.HasPrefix(field, "id:") {
-				idStr := strings.TrimPrefix(field, "id:")
-				idStr = strings.TrimSuffix(idStr, "]")
-				entityID, _ = strconv.ParseInt(idStr, 10, 64)
-			}
-		}
-
-		if entityID > 0 && entityType != "" {
-			imp.db.AddListItem(models.ListItem{
-				ListID:     listID,
-				EntityType: entityType,
-				EntityID:   entityID,
-			})
-		}
-	}
 }
 
 // --- Helpers ---
