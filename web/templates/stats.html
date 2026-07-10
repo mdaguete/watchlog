@@ -5,7 +5,6 @@
         <h1 class="font-serif text-4xl mb-4">{{T .Lang "timeline.title"}}</h1>
         <nav class="flex gap-6 border-b border-wl-border">
             <a href="/timeline" class="pb-3 border-b-2 border-transparent text-wl-gray hover:text-black text-xs uppercase tracking-widest transition-colors">{{T .Lang "nav.timeline"}}</a>
-            <a href="/calendar" class="pb-3 border-b-2 border-transparent text-wl-gray hover:text-black text-xs uppercase tracking-widest transition-colors">{{T .Lang "nav.calendar"}}</a>
             <a href="/stats" class="pb-3 border-b-2 border-black text-black text-xs uppercase tracking-widest">{{T .Lang "nav.stats"}}</a>
         </nav>
     </div>
@@ -112,9 +111,10 @@ sortedYears.forEach(year => {
         const count = data ? data.count : 0;
         const intensity = getIntensity(count);
         const title = `${monthNames[m]} ${year}: ${count} episodios`;
-        calHTML += `<div class="w-8 h-8 ${intensity} flex items-center justify-center cursor-default" title="${title}">`;
+        const ym = `${year}-${String(m).padStart(2, '0')}`;
+        calHTML += `<a href="/calendar?month=${ym}" class="w-8 h-8 ${intensity} flex items-center justify-center hover:ring-1 hover:ring-black transition-shadow" title="${title}">`;
         if (count > 0) calHTML += `<span class="text-xs cal-text">${count}</span>`;
-        calHTML += `</div>`;
+        calHTML += `</a>`;
     }
     calHTML += '</div>';
     calHTML += `<span class="w-14 text-center text-xs font-medium ml-2">${totalEps}</span>`;
