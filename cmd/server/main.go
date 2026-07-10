@@ -295,8 +295,6 @@ func main() {
 	mux.HandleFunc("GET /shows/{id}", h.PageShow)
 	mux.HandleFunc("GET /movies", h.PageMovies)
 	mux.HandleFunc("GET /movies/{id}", h.PageMovie)
-	mux.HandleFunc("GET /lists", h.PageLists)
-	mux.HandleFunc("GET /lists/{id}", h.PageList)
 	mux.HandleFunc("GET /stats", h.PageStats)
 	mux.HandleFunc("GET /timeline", h.PageTimeline)
 	mux.HandleFunc("GET /calendar", h.PageCalendar)
@@ -336,15 +334,6 @@ func main() {
 	mux.HandleFunc("POST /api/movies/{id}/watched", h.APIMarkMovieWatched)
 	mux.HandleFunc("DELETE /api/movies/{id}/watched", h.APIUnmarkMovieWatched)
 	mux.HandleFunc("POST /api/movies/{id}/date", h.APISetMovieDate)
-
-	// API: Lists
-	mux.HandleFunc("GET /api/lists", h.APIGetLists)
-	mux.HandleFunc("GET /api/lists/{id}", h.APIGetList)
-	mux.HandleFunc("POST /api/lists", h.APICreateList)
-	mux.HandleFunc("PUT /api/lists/{id}", h.APIUpdateList)
-	mux.HandleFunc("DELETE /api/lists/{id}", h.APIDeleteList)
-	mux.HandleFunc("POST /api/lists/{id}/items", h.APIAddToList)
-	mux.HandleFunc("DELETE /api/lists/{id}/items/{itemId}", h.APIRemoveFromList)
 
 	// API: Stats
 	mux.HandleFunc("GET /api/stats", h.APIGetStats)
