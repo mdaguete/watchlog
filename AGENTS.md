@@ -43,7 +43,7 @@ WatchLog is a self-hosted replacement for TVTime. Multi-user TV show and movie t
 | `cmd/server/main.go` | Entrypoint, routes, middleware, template loading |
 | `cmd/watchdog/main.go` | Admin CLI (user/config/db management) |
 | `internal/db/db.go` | Schema, migrations, all queries |
-| `internal/db/migrations.go` | Database migrations (v1–v10) |
+| `internal/db/migrations.go` | Database migrations (v1–v18) |
 | `internal/models/models.go` | Domain structs |
 | `internal/handlers/handlers.go` | HTTP handlers (API + pages) |
 | `internal/tmdb/client.go` | TMDB API v3 client |
