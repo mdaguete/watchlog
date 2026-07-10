@@ -67,15 +67,32 @@ HTML + HTMX + Tailwind CSS (CDN). No JS frameworks.
 - **Novedades** section: horizontal scroll of shows with new seasons available
 - **Snooze**: hides a show until next episode is marked (button appears after 10+ days inactive)
 
-### Timeline (/timeline)
+### History (/timeline, /stats, /calendar)
 
-- Infinite scroll of watched activity day by day
-- Day boxes with border, connected to central timeline line via dot
-- Collapsed by default: shows first item + "+N more" expand/collapse toggle
-- Year/month jump filter (click year → months → loads from that point)
-- Today button to return to present
-- Items link to show detail or movie detail
-- Localized titles (show name + episode name)
+The History section has two tabs: **Timeline** and **Stats**.
+
+- **Timeline** (`/timeline`): infinite scroll of watched activity day by day.
+  Day boxes connected to a central line; collapsed by default (first item +
+  "+N more"). Year/month jump filter, Today button. Items link to show/movie
+  detail. Localized titles.
+- **Stats** (`/stats`): summary counters, total watch time, and a monthly
+  **activity heatmap**. Each month cell links to that month's **Calendar**.
+- **Calendar** (`/calendar?month=YYYY-MM`): editable monthly calendar reached
+  by clicking a month in the Stats heatmap; prev/next month navigation.
+
+### Search & Add (/search)
+
+- A single box searches the **local library and TMDB** at once.
+- Local matches link to their pages; TMDB matches not already in the library
+  show an **Add** button (adds show/movie from TMDB). `/add` redirects here.
+
+### Viewing history import (/import/history)
+
+- Upload a Netflix `ViewingHistory.csv`; the analysis is persisted as a batch.
+- Review page: paginated proposed watched-date changes with per-row select and
+  inline date editing (HTMX); Apply writes selected changes after a DB backup.
+- Series/movies not found can be reconciled against TMDB and added with their
+  dates. Linked from the user settings page.
 
 ### Movies
 

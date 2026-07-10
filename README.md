@@ -5,6 +5,7 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 ## Features
 
 - **Import TVTime data** — migrate your full history from the CSV export
+- **Viewing history import** — adjust watched dates from a Netflix export (web + `watchdog` CLI), with TMDB reconciliation of unmatched titles
 - **TV show tracking** — mark episodes/seasons as watched
 - **Continue watching** — dashboard shows next unwatched episode for recent shows
 - **New seasons** — horizontal scroll of shows with new seasons available

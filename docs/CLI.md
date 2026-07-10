@@ -82,6 +82,21 @@ watchdog --datadir /data db-info
 watchdog --datadir /data db-vacuum
 ```
 
+### Viewing History
+
+```bash
+# Adjust episode/movie watched dates from a Netflix ViewingHistory.csv.
+# Dry-run by default (shows what would change); add --apply to write.
+# A database backup is created before the first change when applying.
+watchdog --datadir /data netflix-dates /path/to/NetflixViewingHistory.csv
+watchdog --datadir /data netflix-dates /path/to/NetflixViewingHistory.csv 1 --apply
+
+# Recalculate watch stats from the database (all users, or a single user id).
+# Idempotent; useful after importing viewing history.
+watchdog --datadir /data sync-stats
+watchdog --datadir /data sync-stats 1
+```
+
 ## Docker Usage
 
 ```bash

@@ -18,7 +18,16 @@ SQLite with WAL mode, single `.db` file. Pure Go driver (`modernc.org/sqlite`, n
 - Automatic on startup via `schema_migrations` table
 - Each migration is a Go function that runs in a transaction (rollback on failure)
 - Detects pre-existing databases and bootstraps version without re-running migrations
-- Migration code in `internal/db/migrations.go` (v1–v10)
+- Migration code in `internal/db/migrations.go` (v1–v18)
+
+### Recent migrations
+
+- **v13**: `watched_at` normalized to ISO-8601 text
+- **v14**: `movies.release_date` (year-aware matching)
+- **v15**: merge duplicate catalog shows by name
+- **v16**: viewing-history import staging tables (`import_batches`, `import_changes`)
+- **v17**: viewing-history unmatched entries (`import_unmatched`)
+- **v18**: drop the unused `lists` / `list_items` tables (Lists feature removed)
 
 ## Backup
 
@@ -70,7 +79,7 @@ SQLite with WAL mode, single `.db` file. Pure Go driver (`modernc.org/sqlite`, n
 | File | Responsibility |
 |------|---------------|
 | `internal/db/db.go` | Schema, migrations, all queries |
-| `internal/db/migrations.go` | Database migrations (v1–v10) |
+| `internal/db/migrations.go` | Database migrations (v1–v18) |
 | `internal/models/models.go` | Domain structs |
 | `internal/importer/importer.go` | CSV parsing logic for TVTime export |
 | `internal/auth/auth.go` | Password hashing, sessions, cookies |
