@@ -371,30 +371,7 @@ func TestAPIGetShows_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestAPICreateList(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	body, _ := json.Marshal(map[string]any{"name": "Test List", "is_public": false})
-	req := authedRequest("POST", "/api/lists", token, body)
-	w := httptest.NewRecorder()
-
-	h.APICreateList(w, req)
-
-	if w.Code != http.StatusOK && w.Code != http.StatusCreated {
-		t.Errorf("status = %d, want 200 or 201", w.Code)
-	}
-}
-
 // --- More Page Tests ---
-
-func TestPageLists(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/lists", token, nil)
-	w := httptest.NewRecorder()
-	h.PageLists(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
 
 func TestPageSearch(t *testing.T) {
 	h, _, token := newTestHandler(t)
@@ -453,16 +430,6 @@ func TestAPIGetMovies(t *testing.T) {
 	req := authedRequest("GET", "/api/movies", token, nil)
 	w := httptest.NewRecorder()
 	h.APIGetMovies(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestAPIGetLists(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/api/lists", token, nil)
-	w := httptest.NewRecorder()
-	h.APIGetLists(w, req)
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
@@ -594,21 +561,6 @@ func TestAPIUnmarkSeasonWatched(t *testing.T) {
 	}
 }
 
-func TestAPIDeleteList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	lid, _ := h.DB.CreateList(userID, "ToDelete", false)
-
-	req := authedRequest("DELETE", "/api/lists/1", token, nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIDeleteList(w, req)
-	// Should work since we own the list
-	_ = lid
-	if w.Code != http.StatusOK && w.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want 200 or 204", w.Code)
-	}
-}
-
 func TestAPIGetShow(t *testing.T) {
 	h, userID, token := newTestHandler(t)
 	sid, _ := h.DB.UpsertShow(models.Show{ExternalID: 1, Name: "Show"})
@@ -687,89 +639,6 @@ func TestPageShow_InvalidID(t *testing.T) {
 	h.PageShow(w, req)
 	if w.Code != http.StatusFound {
 		t.Errorf("status = %d, want 302 redirect", w.Code)
-	}
-}
-
-func TestPageList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	lid, _ := h.DB.CreateList(userID, "My List", false)
-
-	req := authedRequest("GET", "/lists/1", token, nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.PageList(w, req)
-	_ = lid
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestPageList_InvalidID(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := authedRequest("GET", "/lists/abc", token, nil)
-	req.SetPathValue("id", "abc")
-	w := httptest.NewRecorder()
-	h.PageList(w, req)
-	if w.Code != http.StatusFound {
-		t.Errorf("status = %d, want 302", w.Code)
-	}
-}
-
-func TestAPIGetList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	h.DB.CreateList(userID, "My List", false)
-
-	req := authedRequest("GET", "/api/lists/1", token, nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIGetList(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestAPIUpdateList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	h.DB.CreateList(userID, "Original", false)
-
-	body, _ := json.Marshal(map[string]any{"name": "Updated", "is_public": true})
-	req := authedRequest("PUT", "/api/lists/1", token, body)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIUpdateList(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestAPIAddToList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	h.DB.CreateList(userID, "L", false)
-	sid, _ := h.DB.UpsertShow(models.Show{ExternalID: 1, Name: "S"})
-
-	body, _ := json.Marshal(map[string]any{"show_id": sid})
-	req := authedRequest("POST", "/api/lists/1/items", token, body)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	h.APIAddToList(w, req)
-	if w.Code != http.StatusOK && w.Code != http.StatusCreated {
-		t.Errorf("status = %d, want 200 or 201", w.Code)
-	}
-}
-
-func TestAPIRemoveFromList(t *testing.T) {
-	h, userID, token := newTestHandler(t)
-	lid, _ := h.DB.CreateList(userID, "L", false)
-	sid, _ := h.DB.UpsertShow(models.Show{ExternalID: 1, Name: "S"})
-	h.DB.AddShowToList(lid, sid)
-
-	req := authedRequest("DELETE", "/api/lists/1/items/1", token, nil)
-	req.SetPathValue("id", "1")
-	req.SetPathValue("itemId", "1")
-	w := httptest.NewRecorder()
-	h.APIRemoveFromList(w, req)
-	if w.Code != http.StatusOK && w.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want 200 or 204", w.Code)
 	}
 }
 

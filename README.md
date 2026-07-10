@@ -15,7 +15,6 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 - **Episode details** — names, synopses, and still images from TMDB
 - **Add new content** — search TMDB and add shows/movies to your library
 - **Upcoming episodes** — see what's airing soon from shows you follow
-- **Custom lists** — create and manage themed lists
 - **Statistics** — monthly activity, total watch time, calendar heatmap
 - **Instant search** — search your library with HTMX
 - **i18n** — Spanish and English, auto-detected or user-selected
@@ -142,17 +141,6 @@ curl -X POST http://localhost:8080/api/tmdb/fetch-all
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/movies` | List movies |
-
-### Lists
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/lists` | List all lists |
-| GET | `/api/lists/:id` | List detail with items |
-| POST | `/api/lists` | Create list `{name, is_public}` |
-| PUT | `/api/lists/:id` | Edit list |
-| DELETE | `/api/lists/:id` | Delete list |
-| POST | `/api/lists/:id/items` | Add item `{show_id}` or `{movie_id}` |
-| DELETE | `/api/lists/:id/items/:itemId` | Remove item |
 
 ### Statistics
 | Method | Endpoint | Description |
