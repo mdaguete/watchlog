@@ -9,20 +9,6 @@ import (
 	"github.com/mdaguete/watchlog/internal/auth"
 )
 
-func TestTimeline_CalendarTabCarriesMonth(t *testing.T) {
-	h, _, token := newTestHandler(t)
-	req := httptest.NewRequest("GET", "/timeline?month=2024-03", nil)
-	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
-	w := httptest.NewRecorder()
-	h.PageTimeline(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), `/calendar?month=2024-03`) {
-		t.Error("timeline Calendar tab should link to the selected month")
-	}
-}
-
 func TestCalendar_HistoryTabCarriesMonth(t *testing.T) {
 	h, _, token := newTestHandler(t)
 	req := httptest.NewRequest("GET", "/calendar?month=2024-03", nil)

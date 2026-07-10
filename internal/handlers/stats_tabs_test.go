@@ -15,9 +15,14 @@ func TestStatsPage_HasHistoryTabs(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{`href="/timeline"`, `href="/calendar"`, `href="/stats"`} {
+	// Tabs are now History + Stats.
+	for _, want := range []string{`href="/timeline"`, `href="/stats"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stats page missing tab link %s", want)
 		}
+	}
+	// The activity heatmap links each month to its calendar.
+	if !strings.Contains(body, `/calendar?month=`) {
+		t.Errorf("stats heatmap missing per-month calendar links")
 	}
 }

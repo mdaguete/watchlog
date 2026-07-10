@@ -80,7 +80,6 @@ var translations = map[string]map[string]string{
 	"watch.edit":            {"es": "Editar fecha", "en": "Edit date"},
 	"calendar.title":        {"es": "Calendario", "en": "Calendar"},
 	"calendar.empty":        {"es": "Nada visto este mes", "en": "Nothing watched this month"},
-	"nav.calendar":          {"es": "Calendario", "en": "Calendar"},
 	"cal.d0":                {"es": "Lun", "en": "Mon"},
 	"cal.d1":                {"es": "Mar", "en": "Tue"},
 	"cal.d2":                {"es": "Mié", "en": "Wed"},
