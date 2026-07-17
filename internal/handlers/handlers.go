@@ -1146,7 +1146,9 @@ func (h *Handler) APIFillAired(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, `<span class="text-xs text-wl-gray">%s</span>`, html.EscapeString(i18n.T(lang, "show.fill_aired_none")))
 			return
 		}
-		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">%s %d</span>`, html.EscapeString(i18n.T(lang, "show.fill_aired_done")), filled)
+		// Reload the page so the watched count and episode checkmarks update.
+		w.Header().Set("HX-Refresh", "true")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "filled": filled})

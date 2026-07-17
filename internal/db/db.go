@@ -667,6 +667,12 @@ func (db *DB) FillAiredEpisodes(userID, showID int64) (int, error) {
 		}
 		filled++
 	}
+	if filled > 0 {
+		// MarkEpisodeWatchedAt doesn't touch the denormalized counter; bump it
+		// by the number of newly-added watched episodes.
+		db.conn.Exec("UPDATE user_shows SET episodes_seen = episodes_seen + ?, updated_at = ? WHERE user_id = ? AND show_id = ?",
+			filled, time.Now(), userID, showID)
+	}
 	return filled, nil
 }
 

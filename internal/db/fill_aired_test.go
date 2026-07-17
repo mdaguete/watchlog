@@ -11,6 +11,7 @@ func TestFillAiredEpisodes_DeriveFromSeason(t *testing.T) {
 	database := providersTestDB(t)
 	uid, _ := database.CreateUser("u", "x")
 	showID, _ := database.UpsertShow(models.Show{ExternalID: 1, Name: "S"})
+	database.FollowShow(uid, showID)
 
 	// Season 1: 5 episodes with air dates; season 2: 3 episodes.
 	for e := 1; e <= 5; e++ {
@@ -51,5 +52,9 @@ func TestFillAiredEpisodes_DeriveFromSeason(t *testing.T) {
 	// Existing watched dates untouched.
 	if got := get(1, 2); got[:10] != "2021-05-02" {
 		t.Errorf("S1E2 real date changed: %q", got)
+	}
+	// episodes_seen counter bumped by the number filled.
+	if us, _ := database.GetUserShow(uid, showID); us.EpisodesSeen != 6 {
+		t.Errorf("episodes_seen = %d, want 6", us.EpisodesSeen)
 	}
 }
