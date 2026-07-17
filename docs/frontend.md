@@ -103,6 +103,9 @@ The History section has two tabs: **Timeline** and **Stats**.
 - Movie detail page: poster, title, genres, runtime, synopsis, watched toggle
 - Show and movie detail pages show an **"Available on"** row of streaming
   provider logos (TMDB watch providers) for the viewing user's region
+- Show detail has a **"Mark aired episodes as watched"** action (fills gaps from
+  season/episode numbering mismatches; backs up the DB first) — the web
+  equivalent of the `watchdog fill-aired` command
 - Movies page has stats header (total count + runtime)
 
 ## Email Templates

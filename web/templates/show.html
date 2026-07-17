@@ -104,6 +104,23 @@
     </div>
     {{end}}
 
+    <!-- Fix aired episodes -->
+    <div class="border-t border-wl-border pt-12">
+        <details>
+            <summary class="text-xs uppercase tracking-widest text-wl-gray hover:text-black transition-colors cursor-pointer">{{T .Lang "show.fill_aired"}}</summary>
+            <p class="text-xs text-wl-gray mt-4 mb-4 max-w-lg">{{T .Lang "show.fill_aired_help"}}</p>
+            <button
+                hx-post="/api/shows/{{.Show.ID}}/fill-aired"
+                hx-confirm="{{T .Lang "show.fill_aired_confirm"}}"
+                hx-target="#fill-aired-result"
+                hx-swap="innerHTML"
+                class="px-4 py-2 text-xs uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors">
+                {{T .Lang "show.fill_aired"}}
+            </button>
+            <span id="fill-aired-result" class="ml-3"></span>
+        </details>
+    </div>
+
     <!-- Rematch TMDB -->
     <div class="border-t border-wl-border pt-12">
         <details>

@@ -327,6 +327,7 @@ func main() {
 	mux.HandleFunc("POST /api/shows/{id}/season/watched", h.APIMarkSeasonWatched)
 	mux.HandleFunc("DELETE /api/shows/{id}/season/watched", h.APIUnmarkSeasonWatched)
 	mux.HandleFunc("POST /api/shows/{id}/episodes/date", h.APISetEpisodeDate)
+	mux.HandleFunc("POST /api/shows/{id}/fill-aired", h.APIFillAired)
 
 	// API: Movies
 	mux.HandleFunc("GET /api/movies", h.APIGetMovies)
