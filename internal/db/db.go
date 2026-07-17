@@ -92,6 +92,22 @@ func (db *DB) SetUserLang(userID int64, lang string) error {
 	return err
 }
 
+// GetUserRegion returns the user's streaming-provider region (ISO 3166-1),
+// defaulting to ES when unset.
+func (db *DB) GetUserRegion(userID int64) string {
+	var region string
+	db.conn.QueryRow("SELECT region FROM users WHERE id = ?", userID).Scan(&region)
+	if region == "" {
+		return "ES"
+	}
+	return region
+}
+
+func (db *DB) SetUserRegion(userID int64, region string) error {
+	_, err := db.conn.Exec("UPDATE users SET region = ? WHERE id = ?", region, userID)
+	return err
+}
+
 func (db *DB) GetUserTheme(userID int64) string {
 	var theme string
 	err := db.conn.QueryRow("SELECT theme FROM users WHERE id = ?", userID).Scan(&theme)
@@ -145,15 +161,13 @@ func (db *DB) UpsertShow(s models.Show) (int64, error) {
 
 func (db *DB) GetShow(id int64) (models.Show, error) {
 	var s models.Show
-	var providers string
-	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons, providers FROM shows WHERE id = ?", id).
-		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons, &providers)
-	s.Providers = parseProviders(providers)
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons FROM shows WHERE id = ?", id).
+		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons)
 	return s, err
 }
 
-// parseProviders decodes the stored JSON provider list (empty-safe).
-func parseProviders(s string) []models.Provider {
+// decodeProviders decodes a stored JSON provider list (empty-safe).
+func decodeProviders(s string) []models.Provider {
 	if s == "" {
 		return nil
 	}
@@ -162,17 +176,27 @@ func parseProviders(s string) []models.Provider {
 	return ps
 }
 
-// UpdateShowProviders stores the streaming providers JSON for a show.
-func (db *DB) UpdateShowProviders(id int64, providers []models.Provider) error {
-	b, _ := json.Marshal(providers)
-	_, err := db.conn.Exec("UPDATE shows SET providers = ? WHERE id = ?", string(b), id)
-	return err
+// GetProviderCache returns the cached providers for a title in a region, the
+// fetch timestamp (RFC3339), and whether a cache row exists.
+func (db *DB) GetProviderCache(mediaType string, tmdbID int, region string) ([]models.Provider, string, bool) {
+	var providers, fetchedAt string
+	err := db.conn.QueryRow(
+		"SELECT providers, fetched_at FROM provider_cache WHERE media_type = ? AND tmdb_id = ? AND region = ?",
+		mediaType, tmdbID, region).Scan(&providers, &fetchedAt)
+	if err != nil {
+		return nil, "", false
+	}
+	return decodeProviders(providers), fetchedAt, true
 }
 
-// UpdateMovieProviders stores the streaming providers JSON for a movie.
-func (db *DB) UpdateMovieProviders(id int64, providers []models.Provider) error {
+// UpsertProviderCache stores the providers for a (media, tmdb_id, region).
+func (db *DB) UpsertProviderCache(mediaType string, tmdbID int, region string, providers []models.Provider) error {
 	b, _ := json.Marshal(providers)
-	_, err := db.conn.Exec("UPDATE movies SET providers = ? WHERE id = ?", string(b), id)
+	_, err := db.conn.Exec(`
+		INSERT INTO provider_cache (media_type, tmdb_id, region, providers, fetched_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(media_type, tmdb_id, region) DO UPDATE SET providers = excluded.providers, fetched_at = excluded.fetched_at`,
+		mediaType, tmdbID, region, string(b), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 
@@ -660,10 +684,8 @@ func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 
 func (db *DB) GetMovie(id int64) (models.Movie, error) {
 	var m models.Movie
-	var providers string
-	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime, providers FROM movies WHERE id = ?", id).
-		Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime, &providers)
-	m.Providers = parseProviders(providers)
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime FROM movies WHERE id = ?", id).
+		Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime)
 	return m, err
 }
 

@@ -12,24 +12,14 @@ import (
 
 var errTMDBDisabled = errors.New("tmdb not configured")
 
-// providerRegion returns the configured TMDB watch-provider region (ISO 3166-1),
-// defaulting to ES.
-func providerRegion(database *db.DB) string {
-	r := strings.TrimSpace(database.GetSetting("tmdb_region"))
-	if r == "" {
-		return "ES"
-	}
-	return strings.ToUpper(r)
-}
-
-// StoreProviders fetches the streaming providers for a title in the configured
-// region and stores them. mediaType is "tv" or "movie". Best-effort: silent on
-// error so it never blocks enrichment.
-func StoreProviders(database *db.DB, client *tmdb.Client, mediaType string, dbID int64, tmdbID int) {
-	if client == nil || !client.Enabled() {
+// CacheProviders fetches the streaming providers for a title in the given
+// region and stores them in the per-region provider cache. mediaType is "tv" or
+// "movie". Best-effort: silent on error so it never blocks enrichment.
+func CacheProviders(database *db.DB, client *tmdb.Client, mediaType string, tmdbID int, region string) {
+	if client == nil || !client.Enabled() || tmdbID == 0 {
 		return
 	}
-	provs, err := client.GetWatchProviders(mediaType, tmdbID, providerRegion(database))
+	provs, err := client.GetWatchProviders(mediaType, tmdbID, region)
 	if err != nil {
 		return
 	}
@@ -37,11 +27,7 @@ func StoreProviders(database *db.DB, client *tmdb.Client, mediaType string, dbID
 	for _, p := range provs {
 		ms = append(ms, models.Provider{Name: p.Name, LogoPath: p.LogoPath})
 	}
-	if mediaType == "tv" {
-		database.UpdateShowProviders(dbID, ms)
-	} else {
-		database.UpdateMovieProviders(dbID, ms)
-	}
+	database.UpsertProviderCache(mediaType, tmdbID, region, ms)
 }
 
 // releaseYear returns the 4-digit year from a "YYYY-..." date string, or "".
@@ -124,7 +110,6 @@ func RefreshShowByTMDB(database *db.DB, client *tmdb.Client, showID int64, tmdbI
 			database.UpsertEpisodeDetail(d)
 		}
 	}
-	StoreProviders(database, client, "tv", showID, tmdbID)
 	return nil
 }
 
@@ -189,7 +174,6 @@ func RunTMDBRefresh(database *db.DB, client *tmdb.Client) (int, int) {
 			database.UpdateMovieTMDBEN(movie.ID, detailEN.Overview, extractGenreNames(detailEN.Genres))
 			database.UpdateMovieTMDBNames(movie.ID, detail.Title, detailEN.Title)
 		}
-		StoreProviders(database, client, "movie", movie.ID, tmdbID)
 		moviesUpdated++
 		log.Printf("TMDB REFRESH movie [%d/%d] ✓ %q", i+1, len(movies), movie.Name)
 	}
