@@ -95,6 +95,13 @@ watchdog --datadir /data netflix-dates /path/to/NetflixViewingHistory.csv 1 --ap
 # Idempotent; useful after importing viewing history.
 watchdog --datadir /data sync-stats
 watchdog --datadir /data sync-stats 1
+
+# Mark a show's already-aired episodes as watched, dated by air date, filling
+# gaps caused by season/episode numbering mismatches (e.g. TMDB parts vs
+# TVTime). Never overwrites episodes already watched. Dry-run by default;
+# --apply backs up the DB and recomputes stats.
+watchdog --datadir /data fill-aired 21
+watchdog --datadir /data fill-aired 21 1 --apply
 ```
 
 ## Docker Usage
