@@ -60,28 +60,21 @@ func cmdFillAired(database *db.DB, showID, userID int64, apply bool) {
 		} else {
 			fmt.Printf("Backup created: %s\n\n", bkp)
 		}
-	}
-
-	applied := 0
-	for _, d := range toFill {
-		air, _ := time.ParseInLocation("2006-01-02", d.AirDate, time.Local)
-		at := time.Date(air.Year(), air.Month(), air.Day(), 12, 0, 0, 0, time.Local)
-		if apply {
-			if err := database.MarkEpisodeWatchedAt(userID, showID, d.SeasonNumber, d.EpisodeNumber, at); err != nil {
-				fmt.Fprintf(os.Stderr, "  ! S%02dE%02d: %v\n", d.SeasonNumber, d.EpisodeNumber, err)
-				continue
-			}
-			applied++
+		for _, d := range toFill {
 			fmt.Printf("  \u2713 S%02dE%02d %q \u2192 %s\n", d.SeasonNumber, d.EpisodeNumber, d.Name, d.AirDate)
-		} else {
-			fmt.Printf("  S%02dE%02d %q \u2192 %s\n", d.SeasonNumber, d.EpisodeNumber, d.Name, d.AirDate)
 		}
+		filled, err := database.FillAiredEpisodes(userID, showID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		database.SyncWatchStatsFromDB(userID)
+		fmt.Printf("\nMarked %d episodes watched and recalculated stats.\n", filled)
+		return
 	}
 
-	if apply {
-		database.SyncWatchStatsFromDB(userID)
-		fmt.Printf("\nMarked %d episodes watched and recalculated stats.\n", applied)
-	} else {
-		fmt.Println("\nRun with --apply to write changes (a backup is created first).")
+	for _, d := range toFill {
+		fmt.Printf("  S%02dE%02d %q \u2192 %s\n", d.SeasonNumber, d.EpisodeNumber, d.Name, d.AirDate)
 	}
+	fmt.Println("\nRun with --apply to write changes (a backup is created first).")
 }

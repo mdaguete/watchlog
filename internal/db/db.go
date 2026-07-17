@@ -598,6 +598,39 @@ func (db *DB) MarkEpisodeWatchedAt(userID, showID int64, season, episode int, at
 	return err
 }
 
+// FillAiredEpisodes marks every already-aired episode of a show (present in
+// episode_details with a past air_date) as watched — dated by its air date —
+// for episodes the user hasn't already got a watched row for. Existing watched
+// episodes are never modified. Returns the number of episodes filled. Repairs
+// shows that appear partially unwatched due to season/episode numbering
+// mismatches (e.g. TMDB "parts" vs TVTime numbering).
+func (db *DB) FillAiredEpisodes(userID, showID int64) (int, error) {
+	details, err := db.GetEpisodeDetails(showID)
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	filled := 0
+	for _, d := range details {
+		if d.AirDate == "" {
+			continue
+		}
+		air, err := time.ParseInLocation("2006-01-02", d.AirDate, time.Local)
+		if err != nil || air.After(now) {
+			continue
+		}
+		if db.GetEpisodeWatchedAt(userID, showID, d.SeasonNumber, d.EpisodeNumber) != "" {
+			continue
+		}
+		at := time.Date(air.Year(), air.Month(), air.Day(), 12, 0, 0, 0, time.Local)
+		if err := db.MarkEpisodeWatchedAt(userID, showID, d.SeasonNumber, d.EpisodeNumber, at); err != nil {
+			return filled, err
+		}
+		filled++
+	}
+	return filled, nil
+}
+
 func (db *DB) UnmarkEpisodeWatched(userID, showID int64, season, episode int) error {
 	res, err := db.conn.Exec(`
 		DELETE FROM episodes WHERE user_id = ? AND show_id = ? AND season_number = ? AND episode_number = ?`,

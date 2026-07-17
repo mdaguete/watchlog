@@ -1103,6 +1103,47 @@ func (h *Handler) APIGetEpisodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, episodes)
 }
 
+// APIFillAired marks all already-aired episodes of a show as watched (dated by
+// air date), filling gaps from season/episode numbering mismatches. Backs up
+// the DB and recalculates stats. Returns an HTMX fragment with the count.
+func (h *Handler) APIFillAired(w http.ResponseWriter, r *http.Request) {
+	userID := h.requireAuth(w, r)
+	if userID == 0 {
+		return
+	}
+	showID, ok := h.parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if _, err := h.DB.GetShow(showID); err != nil {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if _, err := h.DB.Backup("fill-aired"); err != nil {
+		log.Printf("fill-aired: backup error: %v", err)
+		writeError(w, http.StatusInternalServerError, "backup failed")
+		return
+	}
+	filled, err := h.DB.FillAiredEpisodes(userID, showID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "fill failed")
+		return
+	}
+	h.DB.SyncWatchStatsFromDB(userID)
+	log.Printf("ACTION: user=%d fill-aired show=%d filled=%d", userID, showID, filled)
+	if r.Header.Get("HX-Request") == "true" {
+		lang := h.getLang(r, userID)
+		w.Header().Set("Content-Type", "text/html")
+		if filled == 0 {
+			fmt.Fprintf(w, `<span class="text-xs text-wl-gray">%s</span>`, html.EscapeString(i18n.T(lang, "show.fill_aired_none")))
+			return
+		}
+		fmt.Fprintf(w, `<span class="text-xs text-wl-gray">%s %d</span>`, html.EscapeString(i18n.T(lang, "show.fill_aired_done")), filled)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "filled": filled})
+}
+
 func (h *Handler) APIMarkEpisodeWatched(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 {
