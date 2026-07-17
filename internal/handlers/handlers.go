@@ -1115,9 +1115,17 @@ func (h *Handler) APIFillAired(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := h.DB.GetShow(showID); err != nil {
+	show, err := h.DB.GetShow(showID)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "not found")
 		return
+	}
+	// If episode details (with air dates) aren't cached yet, fetch them from
+	// TMDB first so there is something to fill by air date.
+	if details, _ := h.DB.GetEpisodeDetails(showID); len(details) == 0 && show.TMDBID > 0 && h.TMDB != nil && h.TMDB.Enabled() {
+		if err := worker.RefreshShowByTMDB(h.DB, h.TMDB, showID, show.TMDBID); err != nil {
+			log.Printf("fill-aired: refresh show %d error: %v", showID, err)
+		}
 	}
 	if _, err := h.DB.Backup("fill-aired"); err != nil {
 		log.Printf("fill-aired: backup error: %v", err)

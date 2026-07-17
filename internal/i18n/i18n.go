@@ -144,7 +144,7 @@ var translations = map[string]map[string]string{
 	"detail.available_on":  {"es": "Disponible en", "en": "Available on"},
 	"detail.view_on_tmdb":  {"es": "Ver en TMDB", "en": "View on TMDB"},
 	"show.fill_aired":       {"es": "Marcar emitidos como vistos", "en": "Mark aired episodes as watched"},
-	"show.fill_aired_help":  {"es": "Marca los episodios ya emitidos como vistos (con su fecha de emisión) para corregir series que aparecen sin ver por diferencias de numeración. No modifica los que ya tienes vistos; crea una copia de seguridad antes.", "en": "Marks already-aired episodes as watched (by air date) to fix shows that appear unwatched due to numbering mismatches. Won't touch episodes already watched; makes a backup first."},
+	"show.fill_aired_help":  {"es": "Marca los episodios ya emitidos como vistos (con su fecha de emisión) para corregir series que aparecen sin ver por diferencias de numeración. Si faltan los detalles de episodios, se obtienen de TMDB primero. No modifica los que ya tienes vistos; crea una copia de seguridad antes.", "en": "Marks already-aired episodes as watched (by air date) to fix shows that appear unwatched due to numbering mismatches. If episode details are missing, they're fetched from TMDB first. Won't touch episodes already watched; makes a backup first."},
 	"show.fill_aired_confirm": {"es": "¿Marcar los episodios emitidos como vistos?", "en": "Mark aired episodes as watched?"},
 	"show.fill_aired_done":   {"es": "✓ Episodios marcados:", "en": "✓ Episodes marked:"},
 	"show.fill_aired_none":   {"es": "✓ Nada que corregir", "en": "✓ Nothing to fix"},
