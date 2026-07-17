@@ -598,37 +598,83 @@ func (db *DB) MarkEpisodeWatchedAt(userID, showID int64, season, episode int, at
 	return err
 }
 
-// FillAiredEpisodes marks every already-aired episode of a show (present in
-// episode_details with a past air_date) as watched — dated by its air date —
-// for episodes the user hasn't already got a watched row for. Existing watched
-// episodes are never modified. Returns the number of episodes filled. Repairs
-// shows that appear partially unwatched due to season/episode numbering
-// mismatches (e.g. TMDB "parts" vs TVTime numbering).
+// FillAiredEpisodes marks a show's episodes as watched for the gaps the user is
+// missing (episodes present in episode_details with no watched row). The date
+// used is derived from the episodes already watched in the same season — the
+// watched episode nearest by episode number — so filled gaps sit next to the
+// rest of the binge. Only when a season has no watched episode at all does it
+// fall back to the episode's air date (skipping unaired/undated ones). Existing
+// watched episodes are never modified. Returns the number of episodes filled.
 func (db *DB) FillAiredEpisodes(userID, showID int64) (int, error) {
 	details, err := db.GetEpisodeDetails(showID)
 	if err != nil {
 		return 0, err
 	}
+
+	// Watched episodes per season: episode number -> watched time.
+	type watched struct {
+		episode int
+		at      time.Time
+	}
+	seasonWatched := map[int][]watched{}
+	rows, err := db.conn.Query(
+		`SELECT season_number, episode_number, watched_at FROM episodes
+		 WHERE user_id = ? AND show_id = ? AND watched_at IS NOT NULL AND watched_at != ''`, userID, showID)
+	if err != nil {
+		return 0, err
+	}
+	for rows.Next() {
+		var sn, en int
+		var wa string
+		if err := rows.Scan(&sn, &en, &wa); err != nil {
+			continue
+		}
+		if t := parseDBTime(wa); !t.IsZero() {
+			seasonWatched[sn] = append(seasonWatched[sn], watched{en, t})
+		}
+	}
+	rows.Close()
+
 	now := time.Now()
 	filled := 0
 	for _, d := range details {
-		if d.AirDate == "" {
-			continue
-		}
-		air, err := time.ParseInLocation("2006-01-02", d.AirDate, time.Local)
-		if err != nil || air.After(now) {
-			continue
-		}
 		if db.GetEpisodeWatchedAt(userID, showID, d.SeasonNumber, d.EpisodeNumber) != "" {
-			continue
+			continue // already watched — keep its real date
 		}
-		at := time.Date(air.Year(), air.Month(), air.Day(), 12, 0, 0, 0, time.Local)
+		var at time.Time
+		if ws := seasonWatched[d.SeasonNumber]; len(ws) > 0 {
+			// Derive from the nearest watched episode in the season.
+			best := ws[0]
+			for _, w := range ws[1:] {
+				if abs(w.episode-d.EpisodeNumber) < abs(best.episode-d.EpisodeNumber) {
+					best = w
+				}
+			}
+			at = best.at
+		} else {
+			// No episode watched in this season: fall back to air date.
+			if d.AirDate == "" {
+				continue
+			}
+			air, err := time.ParseInLocation("2006-01-02", d.AirDate, time.Local)
+			if err != nil || air.After(now) {
+				continue
+			}
+			at = time.Date(air.Year(), air.Month(), air.Day(), 12, 0, 0, 0, time.Local)
+		}
 		if err := db.MarkEpisodeWatchedAt(userID, showID, d.SeasonNumber, d.EpisodeNumber, at); err != nil {
 			return filled, err
 		}
 		filled++
 	}
 	return filled, nil
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func (db *DB) UnmarkEpisodeWatched(userID, showID int64, season, episode int) error {

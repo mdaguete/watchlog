@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/mdaguete/watchlog/internal/db"
 )
@@ -29,24 +28,18 @@ func cmdFillAired(database *db.DB, showID, userID int64, apply bool) {
 		return
 	}
 
-	today := time.Now()
 	var toFill []db.EpisodeDetail
 	for _, d := range details {
-		if d.AirDate == "" {
-			continue
-		}
-		air, err := time.ParseInLocation("2006-01-02", d.AirDate, time.Local)
-		if err != nil || air.After(today) {
-			continue // unknown or not yet aired
-		}
 		if database.GetEpisodeWatchedAt(userID, showID, d.SeasonNumber, d.EpisodeNumber) != "" {
-			continue // already watched — leave its real date untouched
+			continue // already watched — leave it untouched
 		}
 		toFill = append(toFill, d)
 	}
 
 	fmt.Printf("Show %d: %q (user %d)\n", showID, show.Name, userID)
-	fmt.Printf("%d aired episodes, %d to fill as watched by air date\n\n", len(details), len(toFill))
+	fmt.Printf("%d episodes with details, %d unwatched gaps to fill\n", len(details), len(toFill))
+	fmt.Println("(date derived from watched episodes in the season, else air date)")
+	fmt.Println()
 
 	if len(toFill) == 0 {
 		fmt.Println("Nothing to do.")
@@ -60,21 +53,22 @@ func cmdFillAired(database *db.DB, showID, userID int64, apply bool) {
 		} else {
 			fmt.Printf("Backup created: %s\n\n", bkp)
 		}
-		for _, d := range toFill {
-			fmt.Printf("  \u2713 S%02dE%02d %q \u2192 %s\n", d.SeasonNumber, d.EpisodeNumber, d.Name, d.AirDate)
-		}
 		filled, err := database.FillAiredEpisodes(userID, showID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		database.SyncWatchStatsFromDB(userID)
-		fmt.Printf("\nMarked %d episodes watched and recalculated stats.\n", filled)
+		fmt.Printf("Marked %d episodes watched and recalculated stats.\n", filled)
 		return
 	}
 
 	for _, d := range toFill {
-		fmt.Printf("  S%02dE%02d %q \u2192 %s\n", d.SeasonNumber, d.EpisodeNumber, d.Name, d.AirDate)
+		ref := d.AirDate
+		if ref == "" {
+			ref = "—"
+		}
+		fmt.Printf("  S%02dE%02d %q (air: %s)\n", d.SeasonNumber, d.EpisodeNumber, d.Name, ref)
 	}
 	fmt.Println("\nRun with --apply to write changes (a backup is created first).")
 }
