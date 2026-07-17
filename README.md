@@ -22,7 +22,7 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 - **i18n** — Spanish and English, auto-detected or user-selected
 - **Multi-user** — each user has their own library and preferences
 - **Dark mode** — system, light, or dark theme per user
-- **MCP server** — AI agent integration with 13 tools and API key auth
+- **MCP server** — AI agent integration with 14 tools and API key auth
 - **Email notifications** — styled HTML emails for magic links and password reset
 - **PWA** — installable on iOS and Android, works like a native app
 - **Admin CLI** (`watchdog`) — user management, config, database operations
