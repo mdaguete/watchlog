@@ -13,7 +13,7 @@ Personal TV show and movie tracking app. Self-hosted replacement for TVTime, bui
 - **Movies** — watchlist (pending) + watched collection with detail pages
 - **Timeline** — infinite scroll history with day-by-day activity and year/month jump
 - **TMDB integration** — posters, synopses, genres, airing status and upcoming episodes
-- **Streaming availability** — shows which platform(s) each show/movie streams on (TMDB watch providers; region set in admin, default ES)
+- **Streaming availability** — shows which platform(s) each show/movie streams on (TMDB watch providers; region set per user in settings, default ES)
 - **Episode details** — names, synopses, and still images from TMDB
 - **Add new content** — search TMDB and add shows/movies to your library
 - **Upcoming episodes** — see what's airing soon from shows you follow
