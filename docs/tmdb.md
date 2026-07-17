@@ -62,3 +62,14 @@ TMDB API v3 client for metadata enrichment (posters, synopses, genres, airing st
 | `internal/tmdb/client.go` | HTTP client for TMDB API v3 |
 | `internal/worker/upcoming.go` | Background worker for upcoming episode cache |
 | `internal/worker/refresh.go` | Full TMDB metadata refresh (post-migration hook) |
+
+## Watch Providers (streaming availability)
+
+- `Client.GetWatchProviders(mediaType, id, region)` returns the streaming
+  providers (flatrate/free/ads) a title is available on in a region, ordered by
+  TMDB display priority. Rent/buy-only providers are excluded.
+- The region is the `tmdb_region` setting (admin → TMDB), an ISO 3166-1 country
+  code, defaulting to `ES`.
+- Providers are fetched and stored (as JSON on `shows.providers` /
+  `movies.providers`) during show/movie refresh and when adding from TMDB, and
+  shown as logos ("Available on") on the show and movie detail pages.

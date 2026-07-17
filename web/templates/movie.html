@@ -14,6 +14,14 @@
                 <h1 class="font-serif text-3xl sm:text-4xl md:text-5xl leading-tight">{{LocName .Lang .Movie.Name .Movie.NameES .Movie.NameEN}}</h1>
                 {{if .Movie.Genres}}<p class="mt-3 text-sm text-wl-gray">{{LocGenres .Lang .Movie.Genres .Movie.GenresEN}}</p>{{end}}
                 {{if .Movie.Runtime}}<p class="mt-1 text-xs uppercase tracking-widest text-wl-gray">{{.Movie.Runtime}} min</p>{{end}}
+                {{if .Movie.Providers}}
+                <div class="mt-3">
+                    <p class="text-xs uppercase tracking-widest text-wl-gray mb-1.5">{{T .Lang "detail.available_on"}}</p>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        {{range .Movie.Providers}}<img src="https://image.tmdb.org/t/p/w45{{.LogoPath}}" alt="{{.Name}}" title="{{.Name}}" class="w-8 h-8 rounded">{{end}}
+                    </div>
+                </div>
+                {{end}}
             </div>
 
             {{if .Movie.Overview}}
