@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -91,6 +92,22 @@ func (db *DB) SetUserLang(userID int64, lang string) error {
 	return err
 }
 
+// GetUserRegion returns the user's streaming-provider region (ISO 3166-1),
+// defaulting to ES when unset.
+func (db *DB) GetUserRegion(userID int64) string {
+	var region string
+	db.conn.QueryRow("SELECT region FROM users WHERE id = ?", userID).Scan(&region)
+	if region == "" {
+		return "ES"
+	}
+	return region
+}
+
+func (db *DB) SetUserRegion(userID int64, region string) error {
+	_, err := db.conn.Exec("UPDATE users SET region = ? WHERE id = ?", region, userID)
+	return err
+}
+
 func (db *DB) GetUserTheme(userID int64) string {
 	var theme string
 	err := db.conn.QueryRow("SELECT theme FROM users WHERE id = ?", userID).Scan(&theme)
@@ -147,6 +164,40 @@ func (db *DB) GetShow(id int64) (models.Show, error) {
 	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons FROM shows WHERE id = ?", id).
 		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons)
 	return s, err
+}
+
+// decodeProviders decodes a stored JSON provider list (empty-safe).
+func decodeProviders(s string) []models.Provider {
+	if s == "" {
+		return nil
+	}
+	var ps []models.Provider
+	json.Unmarshal([]byte(s), &ps)
+	return ps
+}
+
+// GetProviderCache returns the cached providers for a title in a region, the
+// fetch timestamp (RFC3339), and whether a cache row exists.
+func (db *DB) GetProviderCache(mediaType string, tmdbID int, region string) ([]models.Provider, string, bool) {
+	var providers, fetchedAt string
+	err := db.conn.QueryRow(
+		"SELECT providers, fetched_at FROM provider_cache WHERE media_type = ? AND tmdb_id = ? AND region = ?",
+		mediaType, tmdbID, region).Scan(&providers, &fetchedAt)
+	if err != nil {
+		return nil, "", false
+	}
+	return decodeProviders(providers), fetchedAt, true
+}
+
+// UpsertProviderCache stores the providers for a (media, tmdb_id, region).
+func (db *DB) UpsertProviderCache(mediaType string, tmdbID int, region string, providers []models.Provider) error {
+	b, _ := json.Marshal(providers)
+	_, err := db.conn.Exec(`
+		INSERT INTO provider_cache (media_type, tmdb_id, region, providers, fetched_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(media_type, tmdb_id, region) DO UPDATE SET providers = excluded.providers, fetched_at = excluded.fetched_at`,
+		mediaType, tmdbID, region, string(b), time.Now().UTC().Format(time.RFC3339))
+	return err
 }
 
 // GetShowIDByName returns the id of an existing catalog show with the exact

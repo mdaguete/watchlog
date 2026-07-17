@@ -6,10 +6,29 @@ import (
 	"strings"
 
 	"github.com/mdaguete/watchlog/internal/db"
+	"github.com/mdaguete/watchlog/internal/models"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 )
 
 var errTMDBDisabled = errors.New("tmdb not configured")
+
+// CacheProviders fetches the streaming providers for a title in the given
+// region and stores them in the per-region provider cache. mediaType is "tv" or
+// "movie". Best-effort: silent on error so it never blocks enrichment.
+func CacheProviders(database *db.DB, client *tmdb.Client, mediaType string, tmdbID int, region string) {
+	if client == nil || !client.Enabled() || tmdbID == 0 {
+		return
+	}
+	provs, err := client.GetWatchProviders(mediaType, tmdbID, region)
+	if err != nil {
+		return
+	}
+	ms := make([]models.Provider, 0, len(provs))
+	for _, p := range provs {
+		ms = append(ms, models.Provider{Name: p.Name, LogoPath: p.LogoPath})
+	}
+	database.UpsertProviderCache(mediaType, tmdbID, region, ms)
+}
 
 // releaseYear returns the 4-digit year from a "YYYY-..." date string, or "".
 func releaseYear(s string) string {

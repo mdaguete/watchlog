@@ -39,6 +39,8 @@ var migrations = []Migration{
 	{Version: 16, Description: "viewing-history import staging tables", Up: migrateV16},
 	{Version: 17, Description: "viewing-history unmatched entries", Up: migrateV17},
 	{Version: 18, Description: "drop unused lists tables", Up: migrateV18},
+	{Version: 19, Description: "streaming providers on shows and movies", Up: migrateV19},
+	{Version: 20, Description: "per-user region + provider cache", Up: migrateV20},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -772,4 +774,33 @@ func migrateV18(tx *sql.Tx) error {
 		return err
 	}
 	return nil
+}
+
+// migrateV19 adds a providers column (JSON array of streaming platforms for the
+// configured region) to shows and movies.
+func migrateV19(tx *sql.Tx) error {
+	for _, table := range []string{"shows", "movies"} {
+		if _, err := tx.Exec("ALTER TABLE " + table + " ADD COLUMN providers TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateV20 adds a per-user region column and a per-region provider cache so
+// streaming availability can be shown for each user's own region.
+func migrateV20(tx *sql.Tx) error {
+	if _, err := tx.Exec("ALTER TABLE users ADD COLUMN region TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS provider_cache (
+			media_type TEXT NOT NULL,
+			tmdb_id INTEGER NOT NULL,
+			region TEXT NOT NULL,
+			providers TEXT NOT NULL DEFAULT '',
+			fetched_at TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (media_type, tmdb_id, region)
+		)`)
+	return err
 }

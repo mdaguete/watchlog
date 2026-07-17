@@ -22,6 +22,7 @@ import (
 	"github.com/mdaguete/watchlog/internal/i18n"
 	"github.com/mdaguete/watchlog/internal/importer"
 	"github.com/mdaguete/watchlog/internal/mail"
+	"github.com/mdaguete/watchlog/internal/models"
 	"github.com/mdaguete/watchlog/internal/ratelimit"
 	"github.com/mdaguete/watchlog/internal/tmdb"
 	"github.com/mdaguete/watchlog/internal/worker"
@@ -637,6 +638,7 @@ func (h *Handler) PageShow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	episodeDetails, _ := h.DB.GetEpisodeDetails(id)
+	show.Providers = h.providersForUser(userID, "tv", show.TMDBID)
 	h.Templates.ExecuteTemplate(w, "show.html", map[string]any{
 		"Lang":           h.getLang(r, userID),
 		"Show":           show,
@@ -670,6 +672,30 @@ func (h *Handler) PageMovies(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// providersForUser returns the streaming providers for a title in the viewing
+// user's region, using the per-region cache and lazily (re)fetching from TMDB
+// when the cache is missing or older than 7 days.
+func (h *Handler) providersForUser(userID int64, mediaType string, tmdbID int) []models.Provider {
+	if tmdbID == 0 {
+		return nil
+	}
+	region := h.DB.GetUserRegion(userID)
+	provs, fetchedAt, ok := h.DB.GetProviderCache(mediaType, tmdbID, region)
+	fresh := false
+	if ok {
+		if t, err := time.Parse(time.RFC3339, fetchedAt); err == nil && time.Since(t) < 7*24*time.Hour {
+			fresh = true
+		}
+	}
+	if !fresh && h.TMDB != nil && h.TMDB.Enabled() {
+		worker.CacheProviders(h.DB, h.TMDB, mediaType, tmdbID, region)
+		if p, _, ok2 := h.DB.GetProviderCache(mediaType, tmdbID, region); ok2 {
+			return p
+		}
+	}
+	return provs
+}
+
 func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 	userID := h.requireAuth(w, r)
 	if userID == 0 {
@@ -687,6 +713,7 @@ func (h *Handler) PageMovie(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := h.getLang(r, userID)
 	watched := h.DB.IsMovieWatched(userID, id)
+	movie.Providers = h.providersForUser(userID, "movie", movie.TMDBID)
 	data := map[string]any{
 		"Lang":    lang,
 		"Movie":   movie,
@@ -1553,6 +1580,7 @@ func (h *Handler) APIAddShowFromTMDB(w http.ResponseWriter, r *http.Request) {
 	genres := extractGenreNames(show.Genres)
 	id, _ := h.DB.AddShowFromTMDB(show.ID, show.Name, tmdb.PosterURL(show.PosterPath, "w342"), tmdb.BackdropURL(show.BackdropPath, "w780"), show.Overview, genres, show.Status, len(show.Seasons))
 	h.DB.FollowShow(userID, id)
+	worker.CacheProviders(h.DB, h.TMDB, "tv", show.ID, h.DB.GetUserRegion(userID))
 	log.Printf("ACTION: user=%d add show %q tmdb_id=%d", userID, show.Name, show.ID)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
@@ -1584,6 +1612,7 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	genres := extractGenreNames(movie.Genres)
 	id, _ := h.DB.AddMovieFromTMDB(movie.ID, movie.Title, tmdb.PosterURL(movie.PosterPath, "w342"), movie.Overview, genres, movie.Runtime)
 	h.DB.AddMovieToLibrary(userID, id)
+	worker.CacheProviders(h.DB, h.TMDB, "movie", movie.ID, h.DB.GetUserRegion(userID))
 	log.Printf("ACTION: user=%d add movie %q tmdb_id=%d", userID, movie.Title, movie.ID)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
@@ -1673,6 +1702,7 @@ func (h *Handler) PageSettings(w http.ResponseWriter, r *http.Request) {
 	h.Templates.ExecuteTemplate(w, "settings.html", map[string]any{
 		"Lang":    lang,
 		"Theme":   theme,
+		"Region":  h.DB.GetUserRegion(userID),
 		"IsAdmin": userID == 1,
 		"Email":   user.Email,
 		"APIKeys": apiKeys,
@@ -1695,6 +1725,9 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		theme = "system"
 	}
 	h.DB.SetUserTheme(userID, theme)
+	if region := strings.ToUpper(strings.TrimSpace(r.FormValue("region"))); len(region) == 2 {
+		h.DB.SetUserRegion(userID, region)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "theme",
 		Value:    theme,

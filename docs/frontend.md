@@ -53,6 +53,7 @@ HTML + HTMX + Tailwind CSS (CDN). No JS frameworks.
 - Translation function `T(lang, key)` registered in template FuncMap
 - Language detection: user DB preference > Accept-Language header
 - User can change language in `/settings`
+- Users also set their streaming-provider **region** (ISO country code) in `/settings`
 - Translations stored in `internal/i18n/i18n.go` as `map[string]map[string]string`
 
 ## Pages
@@ -100,6 +101,8 @@ The History section has two tabs: **Timeline** and **Stats**.
 - Adding a movie = adds to watchlist (pending)
 - Mark as watched from movie detail page
 - Movie detail page: poster, title, genres, runtime, synopsis, watched toggle
+- Show and movie detail pages show an **"Available on"** row of streaming
+  provider logos (TMDB watch providers) for the viewing user's region
 - Movies page has stats header (total count + runtime)
 
 ## Email Templates
