@@ -39,6 +39,8 @@ Commands:
                             (dry-run by default; add --apply to write)
   sync-stats [uid]          Recalculate watch stats from the DB (all users if
                             no id); use after importing viewing history
+  fill-aired <show> [uid]   Mark a show's aired episodes watched by air date
+                            (fills gaps from numbering mismatches; --apply)
 
 Examples:
   watchdog --datadir /data users
@@ -148,6 +150,23 @@ func main() {
 			}
 		}
 		cmdSyncStats(database, uid)
+	case "fill-aired":
+		requireArgs(args, 1, "fill-aired <show-id> [user-id] [--apply]")
+		showID, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid show id: %s\n", args[0])
+			os.Exit(1)
+		}
+		uid := int64(1)
+		apply := false
+		for _, a := range args[1:] {
+			if a == "--apply" {
+				apply = true
+			} else if n, err := strconv.ParseInt(a, 10, 64); err == nil {
+				uid = n
+			}
+		}
+		cmdFillAired(database, showID, uid, apply)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
 		fmt.Print(usage)
