@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -144,9 +145,35 @@ func (db *DB) UpsertShow(s models.Show) (int64, error) {
 
 func (db *DB) GetShow(id int64) (models.Show, error) {
 	var s models.Show
-	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons FROM shows WHERE id = ?", id).
-		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons)
+	var providers string
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, backdrop_url, overview, overview_en, genres, genres_en, status, total_seasons, providers FROM shows WHERE id = ?", id).
+		Scan(&s.ID, &s.ExternalID, &s.Name, &s.NameES, &s.NameEN, &s.TMDBID, &s.PosterURL, &s.BackdropURL, &s.Overview, &s.OverviewEN, &s.Genres, &s.GenresEN, &s.Status, &s.TotalSeasons, &providers)
+	s.Providers = parseProviders(providers)
 	return s, err
+}
+
+// parseProviders decodes the stored JSON provider list (empty-safe).
+func parseProviders(s string) []models.Provider {
+	if s == "" {
+		return nil
+	}
+	var ps []models.Provider
+	json.Unmarshal([]byte(s), &ps)
+	return ps
+}
+
+// UpdateShowProviders stores the streaming providers JSON for a show.
+func (db *DB) UpdateShowProviders(id int64, providers []models.Provider) error {
+	b, _ := json.Marshal(providers)
+	_, err := db.conn.Exec("UPDATE shows SET providers = ? WHERE id = ?", string(b), id)
+	return err
+}
+
+// UpdateMovieProviders stores the streaming providers JSON for a movie.
+func (db *DB) UpdateMovieProviders(id int64, providers []models.Provider) error {
+	b, _ := json.Marshal(providers)
+	_, err := db.conn.Exec("UPDATE movies SET providers = ? WHERE id = ?", string(b), id)
+	return err
 }
 
 // GetShowIDByName returns the id of an existing catalog show with the exact
@@ -633,8 +660,10 @@ func (db *DB) UpsertMovie(m models.Movie) (int64, error) {
 
 func (db *DB) GetMovie(id int64) (models.Movie, error) {
 	var m models.Movie
-	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime FROM movies WHERE id = ?", id).
-		Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime)
+	var providers string
+	err := db.conn.QueryRow("SELECT id, external_id, name, name_es, name_en, tmdb_id, poster_url, overview, overview_en, genres, genres_en, runtime, providers FROM movies WHERE id = ?", id).
+		Scan(&m.ID, &m.ExternalID, &m.Name, &m.NameES, &m.NameEN, &m.TMDBID, &m.PosterURL, &m.Overview, &m.OverviewEN, &m.Genres, &m.GenresEN, &m.Runtime, &providers)
+	m.Providers = parseProviders(providers)
 	return m, err
 }
 

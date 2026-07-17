@@ -1,6 +1,7 @@
 package tmdb
 
 import (
+	"sort"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -321,6 +322,53 @@ func (c *Client) get(path string, params map[string]string, target any) error {
 // Enabled returns true if the client has an API key configured
 func (c *Client) Enabled() bool {
 	return c.apiKey != ""
+}
+
+// WatchProvider is a streaming provider a title is available on in a region.
+type WatchProvider struct {
+	Name            string `json:"provider_name"`
+	LogoPath        string `json:"logo_path"`
+	DisplayPriority int    `json:"display_priority"`
+}
+
+// GetWatchProviders returns the streaming providers (flatrate/free/ads) a title
+// is available on in the given region (ISO 3166-1, e.g. "ES"). mediaType is
+// "tv" or "movie". Results are de-duplicated by name and ordered by TMDB's
+// display priority. Rent/buy-only providers are intentionally excluded.
+func (c *Client) GetWatchProviders(mediaType string, id int, region string) ([]WatchProvider, error) {
+	if mediaType != "tv" && mediaType != "movie" {
+		return nil, fmt.Errorf("invalid media type %q", mediaType)
+	}
+	if region == "" {
+		region = "ES"
+	}
+	var resp struct {
+		Results map[string]struct {
+			Flatrate []WatchProvider `json:"flatrate"`
+			Free     []WatchProvider `json:"free"`
+			Ads      []WatchProvider `json:"ads"`
+		} `json:"results"`
+	}
+	if err := c.get(fmt.Sprintf("/%s/%d/watch/providers", mediaType, id), nil, &resp); err != nil {
+		return nil, err
+	}
+	r, ok := resp.Results[region]
+	if !ok {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	var out []WatchProvider
+	for _, group := range [][]WatchProvider{r.Flatrate, r.Free, r.Ads} {
+		for _, p := range group {
+			if p.Name == "" || seen[p.Name] {
+				continue
+			}
+			seen[p.Name] = true
+			out = append(out, p)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].DisplayPriority < out[j].DisplayPriority })
+	return out, nil
 }
 
 // UpcomingEpisode represents the next airing episode for a show

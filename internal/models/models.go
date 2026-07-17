@@ -26,6 +26,13 @@ type Show struct {
 	GenresEN     string `json:"genres_en"`
 	Status       string `json:"status"`
 	TotalSeasons int    `json:"total_seasons"`
+	Providers    []Provider `json:"providers"`
+}
+
+// Provider is a streaming platform a title is available on.
+type Provider struct {
+	Name     string `json:"name"`
+	LogoPath string `json:"logo_path"`
 }
 
 // UserShow is the per-user relationship to a show
@@ -66,6 +73,7 @@ type Movie struct {
 	GenresEN   string `json:"genres_en"`
 	Runtime    int    `json:"runtime"`
 	ReleaseDate string `json:"release_date"`
+	Providers  []Provider `json:"providers"`
 }
 
 // UserMovie is the per-user watch record

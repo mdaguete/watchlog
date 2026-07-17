@@ -39,6 +39,7 @@ var migrations = []Migration{
 	{Version: 16, Description: "viewing-history import staging tables", Up: migrateV16},
 	{Version: 17, Description: "viewing-history unmatched entries", Up: migrateV17},
 	{Version: 18, Description: "drop unused lists tables", Up: migrateV18},
+	{Version: 19, Description: "streaming providers on shows and movies", Up: migrateV19},
 }
 
 // runMigrations checks the current schema version and applies pending migrations.
@@ -770,6 +771,17 @@ func migrateV18(tx *sql.Tx) error {
 	}
 	if _, err := tx.Exec(`DROP TABLE IF EXISTS lists`); err != nil {
 		return err
+	}
+	return nil
+}
+
+// migrateV19 adds a providers column (JSON array of streaming platforms for the
+// configured region) to shows and movies.
+func migrateV19(tx *sql.Tx) error {
+	for _, table := range []string{"shows", "movies"} {
+		if _, err := tx.Exec("ALTER TABLE " + table + " ADD COLUMN providers TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
 	}
 	return nil
 }

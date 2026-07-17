@@ -1553,6 +1553,7 @@ func (h *Handler) APIAddShowFromTMDB(w http.ResponseWriter, r *http.Request) {
 	genres := extractGenreNames(show.Genres)
 	id, _ := h.DB.AddShowFromTMDB(show.ID, show.Name, tmdb.PosterURL(show.PosterPath, "w342"), tmdb.BackdropURL(show.BackdropPath, "w780"), show.Overview, genres, show.Status, len(show.Seasons))
 	h.DB.FollowShow(userID, id)
+	worker.StoreProviders(h.DB, h.TMDB, "tv", id, show.ID)
 	log.Printf("ACTION: user=%d add show %q tmdb_id=%d", userID, show.Name, show.ID)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
@@ -1584,6 +1585,7 @@ func (h *Handler) APIAddMovieFromTMDB(w http.ResponseWriter, r *http.Request) {
 	genres := extractGenreNames(movie.Genres)
 	id, _ := h.DB.AddMovieFromTMDB(movie.ID, movie.Title, tmdb.PosterURL(movie.PosterPath, "w342"), movie.Overview, genres, movie.Runtime)
 	h.DB.AddMovieToLibrary(userID, id)
+	worker.StoreProviders(h.DB, h.TMDB, "movie", id, movie.ID)
 	log.Printf("ACTION: user=%d add movie %q tmdb_id=%d", userID, movie.Title, movie.ID)
 	if r.Header.Get("HX-Request") == "true" {
 		lang := h.getLang(r, userID)
@@ -1747,6 +1749,11 @@ func (h *Handler) adminData(r *http.Request, userID int64) map[string]any {
 		data["TMDBKeySet"] = true
 		data["TMDBKeyHint"] = "••••" + tmdbKey[len(tmdbKey)-4:]
 	}
+	region := h.DB.GetSetting("tmdb_region")
+	if region == "" {
+		region = "ES"
+	}
+	data["TMDBRegion"] = region
 	smtpURL := h.DB.GetSetting("smtp_url")
 	if smtpURL != "" {
 		if cfg, err := mail.ParseURL(smtpURL); err == nil {
@@ -1780,6 +1787,10 @@ func (h *Handler) SaveAdmin(w http.ResponseWriter, r *http.Request) {
 	if tmdbKey := r.FormValue("tmdb_key"); tmdbKey != "" {
 		h.DB.SetSetting("tmdb_api_key", tmdbKey)
 		h.TMDB = tmdb.NewClient(tmdbKey)
+	}
+	// TMDB watch-provider region (ISO 3166-1, e.g. ES)
+	if region := strings.ToUpper(strings.TrimSpace(r.FormValue("tmdb_region"))); region != "" {
+		h.DB.SetSetting("tmdb_region", region)
 	}
 	// SMTP URL
 	if smtpURL := strings.TrimSpace(r.FormValue("smtp_url")); smtpURL != "" {
