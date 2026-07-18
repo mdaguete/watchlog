@@ -187,14 +187,14 @@ func cmdUsers(database *db.DB) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%-4s %-20s %-30s %-8s\n", "ID", "Username", "Email", "Blocked")
-	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("%-4s %-20s %-30s %-8s %-6s %-7s %-9s\n", "ID", "Username", "Email", "Blocked", "Shows", "Movies", "Episodes")
+	fmt.Println(strings.Repeat("-", 92))
 	for _, u := range users {
 		blocked := ""
 		if u.Blocked {
 			blocked = "YES"
 		}
-		fmt.Printf("%-4d %-20s %-30s %-8s\n", u.ID, u.Username, u.Email, blocked)
+		fmt.Printf("%-4d %-20s %-30s %-8s %-6d %-7d %-9d\n", u.ID, u.Username, u.Email, blocked, u.Shows, u.Movies, u.Episodes)
 	}
 }
 

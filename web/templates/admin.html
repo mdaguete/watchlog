@@ -182,6 +182,9 @@
                         {{if eq .ID 1}}<span class="text-[10px] uppercase tracking-widest text-wl-gray ml-2">{{T $.Lang "admin.users_admin_badge"}}</span>{{end}}
                     </p>
                     <p class="text-xs text-wl-gray truncate">{{if .Email}}{{.Email}}{{else}}—{{end}}</p>
+                    <p class="text-[10px] uppercase tracking-widest text-wl-gray mt-0.5">
+                        {{.Shows}} {{T $.Lang "admin.users_shows"}} · {{.Movies}} {{T $.Lang "admin.users_movies"}} · {{.Episodes}} {{T $.Lang "admin.users_episodes"}}
+                    </p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
                     {{if .Blocked}}

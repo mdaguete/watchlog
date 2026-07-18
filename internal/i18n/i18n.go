@@ -288,6 +288,9 @@ var translations = map[string]map[string]string{
 	"admin.users_no_pending":    {"es": "No hay invitaciones pendientes", "en": "No pending invitations"},
 	"admin.users_revoke":        {"es": "Revocar", "en": "Revoke"},
 	"admin.users_registered":    {"es": "Usuarios registrados", "en": "Registered users"},
+	"admin.users_shows":         {"es": "series", "en": "shows"},
+	"admin.users_movies":        {"es": "películas", "en": "movies"},
+	"admin.users_episodes":      {"es": "episodios", "en": "episodes"},
 
 	// Invitation acceptance page
 	"invite.title":            {"es": "Completa tu cuenta", "en": "Complete your account"},
