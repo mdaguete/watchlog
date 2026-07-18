@@ -2062,10 +2062,18 @@ type CLIUser struct {
 	Username string
 	Email    string
 	Blocked  bool
+	Shows    int // followed shows
+	Movies   int // watched movies
+	Episodes int // watched episodes
 }
 
 func (db *DB) ListAllUsers() ([]CLIUser, error) {
-	rows, err := db.conn.Query("SELECT id, username, email, COALESCE(blocked, 0) FROM users ORDER BY id")
+	rows, err := db.conn.Query(`
+		SELECT u.id, u.username, u.email, COALESCE(u.blocked, 0),
+			(SELECT COUNT(*) FROM user_shows us WHERE us.user_id = u.id AND us.is_followed = 1),
+			(SELECT COUNT(*) FROM user_movies um WHERE um.user_id = u.id AND um.watched_at IS NOT NULL),
+			(SELECT COUNT(*) FROM episodes e WHERE e.user_id = u.id)
+		FROM users u ORDER BY u.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -2074,7 +2082,7 @@ func (db *DB) ListAllUsers() ([]CLIUser, error) {
 	for rows.Next() {
 		var u CLIUser
 		var blocked int
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &blocked); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &blocked, &u.Shows, &u.Movies, &u.Episodes); err != nil {
 			return nil, err
 		}
 		u.Blocked = blocked == 1
